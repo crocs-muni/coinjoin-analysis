@@ -11,6 +11,8 @@ import json
 import sys
 
 WASABIWALLET_DATA_DIR = ""
+LEGACY_API = True
+VERBOSE = True
 
 
 def config_extract(query):
@@ -26,9 +28,10 @@ def wcli(args):
 
     wallet_name = ""
 
-    if args and args[0].startswith("-wallet="):
-        wallet_name = args[0][8:] + "/"
-        args = args[1:]
+    if not LEGACY_API:
+        if args and args[0].startswith("-wallet="):
+            wallet_name = args[0][8:] + "/"
+            args = args[1:]
 
     method = args[0]
     params = args[1:]
@@ -40,15 +43,16 @@ def wcli(args):
         "params": params
     }
     request = json.dumps(request_data)
-
+    request = request.replace("\"", "\\\"")
     curl_command = [
-        "curl", "-s", basic_auth, "--data-binary", repr(request),
-        "-H", repr("content-type: text/plain;"), repr(endpoint + wallet_name), "-v"
+        "curl", "-s", basic_auth, "--data-binary", '\"', request, '\"',
+        "-H", repr("content-type: text/plain;"), repr(endpoint), "-v"
     ]
     curl_command_str = ' '.join(s for s in curl_command)
 
     curl_command_str = curl_command_str.replace('\'', "\"")
-    print(curl_command_str)
+    if VERBOSE:
+        print(curl_command_str)
 
     curl_command_str_getwalletinfo = "curl -u test:pswd --data-binary \"{\"jsonrpc\": \"2.0\", \"id\": \"curltext\", \"method\": \"getwalletinfo\", \"params\": []}\" -H \"content-type: text/plain;\" \"http://127.0.0.1:37128/Wallet1/\" -v"
     #                    curl -u test:pswd --data-binary "{\"jsonrpc\": \"2.0\", \"id\": \"curltext\", \"method\": \"getwalletinfo\", \"params\": []}" -H "content-type: text/plain;" "http://127.0.0.1:37128/Wallet1/" -v
@@ -65,19 +69,36 @@ def wcli(args):
     curl_fail_to_connect_errorcode = 7
 
     rawprint = ["help"]
+    result_json = ""
     if curl_errorcode == curl_fail_to_connect_errorcode:
-        print("It was not possible to get a response. RPC server could be disabled.")
+        if VERBOSE:
+            print("It was not possible to get a response. RPC server could be disabled.")
+        result_json = None
     elif result_error is None:
+        output = json.loads(result_output)
         if method in rawprint:
-            print(json.loads(result_output)["result"])
-        else:
-            result_json = json.loads(result_output)["result"]
-            if isinstance(result_json, list) and len(result_json) > 0:
-                keys = "\t".join(result_json[0].keys())
-                values = "\n".join("\t".join(map(str, item.values())) for item in result_json)
-                print(keys + "\n" + values)
+            if "result" in output.keys():
+                if VERBOSE:
+                    print(output["result"])
             else:
-                print(result_json)
+                if VERBOSE:
+                    print("OK: No result returned, printing whole response json: " + json.dumps(output))
+        else:
+            if "result" not in output.keys():
+                if VERBOSE:
+                    print("OK: No result returned, printing whole response json: " + json.dumps(output))
+            else:
+                result_json = json.loads(result_output)["result"]
+                if isinstance(result_json, list) and len(result_json) > 0:
+                    keys = "\t".join(result_json[0].keys())
+                    values = "\n".join("\t".join(map(str, item.values())) for item in result_json)
+                    if VERBOSE:
+                        print(keys + "\n" + values)
+                else:
+                    if VERBOSE:
+                        print(result_json)
     else:
         print(result_error["message"])
+        result_json = None
 
+    return result_json
