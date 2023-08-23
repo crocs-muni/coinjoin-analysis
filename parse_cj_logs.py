@@ -3,6 +3,7 @@ import subprocess
 import json
 import sys
 import wcli
+from itertools import zip_longest
 
 BTC_CLI_PATH = 'C:\\bitcoin-25.0\\bin\\bitcoin-cli'
 WASABIWALLET_DATA_DIR = 'c:\\Users\\xsvenda\\AppData\\Roaming\\WalletWasabi'
@@ -176,20 +177,35 @@ def extract_tx_info(txid):
     return input_addresses, output_addresses
 
 
-def print_tx_info(input_addresses, output_addresses):
+def print_tx_info(input_addresses, output_addresses, wallets_info):
     """
     Prints mapping between addresses. Unfinished for now
     :param input_addresses:
     :param output_addresses:
+    :param wallets_info: information about wallets including list of addresses
     :return:
     """
-    for input in sorted(input_addresses.keys()):
-        print('<-{}'.format(input_addresses[input]))
-    for output in sorted(output_addresses.keys()):
-        print('->{}'.format(output_addresses[output]))
+    # Build mapping of addresses to wallets names ('unknown' if not mapped)
+    address_wallet_mapping = {input_addresses[addr_index]: 'unknown' for addr_index in input_addresses}
+    for addr in list(input_addresses.values()) + list(output_addresses.values()):
+        for wallet_name in wallets_info.keys():
+            for waddr in wallets_info[wallet_name]:
+                if addr == waddr['address']:
+                    address_wallet_mapping[addr] = wallet_name
+
+    used_wallets = sorted({address_wallet_mapping[addr]: 1 for addr in list(input_addresses.values()) + list(output_addresses.values())}.keys())
+    # print all inputs mapped to their outputs
+    for wallet_name in used_wallets:
+        print('Wallet `{}`'.format(wallet_name))
+        for addr in sorted(list(input_addresses.values())):
+            if address_wallet_mapping[addr] == wallet_name:
+                print('  ({}):{}'.format(wallet_name, addr))
+        for addr in sorted(list(output_addresses.values())):
+            if address_wallet_mapping[addr] == wallet_name:
+                print('  -> ({}):{}'.format(wallet_name, addr))
 
 
-def parse_coinjoin_logs():
+def parse_coinjoin_logs(wallets_info):
     coord_input_file = '{}\\Backend\\Logs_4paralell_1hour.txt'.format(WASABIWALLET_DATA_DIR)
     client_input_file = '{}\\Client\\Logs_4paralell_1hour.txt'.format(WASABIWALLET_DATA_DIR)
     regex_pattern = r"(.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with params: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
@@ -227,17 +243,37 @@ def parse_coinjoin_logs():
 
         print('**************************************')
 
-        #[print(line.rstrip()) for line in sorted_combined_list]
-        print('Address input-output mapping:')
+        print('Address input-output mapping for cjtx: {}'.format(round_cjtx_mapping[round_id]))
         input_addresses, output_addresses = extract_tx_info(round_cjtx_mapping[round_id])
-        print_tx_info(input_addresses, output_addresses)
+        print_tx_info(input_addresses, output_addresses, wallets_info)
 
         print('**************************************')
         print('**************************************')
+
+
+def load_wallets_info():
+    """
+    Loads information about wallets and their addresses using Wasabi RPC
+    :return: dictionary for all loaded wallets with retrieved info
+    """
+    WALLET_NAME_TEMPLATE = 'Wallet'
+    MAX_WALLETS = 6
+    wcli.WASABIWALLET_DATA_DIR = WASABIWALLET_DATA_DIR
+    wcli.VERBOSE = False
+    wallets_info = {}
+    wallet_names = ['{}{}'.format(WALLET_NAME_TEMPLATE, index) for index in range(0, MAX_WALLETS + 1)]
+    for wallet_name in wallet_names:
+        if wcli.wcli(['selectwallet', wallet_name, 'pswd']) is not None:
+            print('Wallet `{}` found.'.format(wallet_name))
+            wcli.wcli(['getwalletinfo'])
+            wallet_addresses = wcli.wcli(['listkeys'])
+            if wallet_addresses is not None:
+                wallets_info[wallet_name] = wallet_addresses
+        else:
+            print('Wallet `{}` not found.'.format(wallet_name))
+    return wallets_info
 
 
 if __name__ == "__main__":
-    #wcli.WASABIWALLET_DATA_DIR = WASABIWALLET_DATA_DIR
-    #wcli.wcli(['getstatus'])
-    #wcli(['-wallet=Wallet1', 'getwalletinfo'])
-    parse_coinjoin_logs()
+    wallets_info = load_wallets_info()
+    parse_coinjoin_logs(wallets_info)
