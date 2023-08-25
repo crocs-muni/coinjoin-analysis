@@ -5,8 +5,8 @@ import sys
 
 class InitializationConstants():
     url = "http://127.0.0.1:37128/"
-    backend_folder_path = "D:\wasabi_devel\WalletWasabi\WalletWasabi.Backend"
-    client_folder_path = "D:\wasabi_devel\WalletWasabi\WalletWasabi.Fluent.Desktop"
+    backend_folder_path = ""
+    client_folder_path = ""
     distributor_wallet_name = "DistributorWallet"
 
 
