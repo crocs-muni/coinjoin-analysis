@@ -3,6 +3,7 @@ import rpc_commands
 import subprocess
 import sys
 
+
 class InitializationConstants():
     url = "http://127.0.0.1:37128/"
     backend_folder_path = ""
@@ -12,6 +13,7 @@ class InitializationConstants():
 
 INIT_REGTEST_CONSTANTS = InitializationConstants()
 
+
 def clean_subprocesses(backend : subprocess.Popen, client : subprocess.Popen):
     if client is not None:
         client.kill()
@@ -19,13 +21,11 @@ def clean_subprocesses(backend : subprocess.Popen, client : subprocess.Popen):
         backend.kill()
     
 
-
 if __name__ == "__main__":
 
     block_count = 0
     process_backend = None
     process_client = None
-
 
     try:
         block_count = regtest_control.get_block_count()
@@ -41,7 +41,6 @@ if __name__ == "__main__":
     except Exception as e:
         print("An error occurred when asking BTC core for block count:", e)
         sys.exit(1)
-
 
     # 3. Create Distributor wallet
 
@@ -81,8 +80,6 @@ if __name__ == "__main__":
         clean_subprocesses(process_backend, process_client)
         sys.exit(1)
         
-        
-    
     # 3.b Run client
     try:
         process_client = subprocess.Popen("dotnet run " + "--project " +  INIT_REGTEST_CONSTANTS.client_folder_path, 
@@ -94,7 +91,7 @@ if __name__ == "__main__":
             if output == '' and process_client.poll() is not None:
                 break
 
-            # uncoment this two lines if you want to see backend output
+            # uncomment this two lines if you want to see backend output
             #if output:
             #    print(output)
 
@@ -107,7 +104,6 @@ if __name__ == "__main__":
         print("An error occured during opening or reading of client output.", e)
         clean_subprocesses(process_backend, process_client)
         sys.exit(1)
-
 
     # 3.c Create Distributor wallet if not existing
     try:
@@ -145,16 +141,14 @@ if __name__ == "__main__":
                 regtest_control.send_to_address_btc_core(distiributor_address, 45)
                 regtest_control.mine_block_regtest()
             else:
-                print("Wallet has already enaught BTC")
-
+                print("Wallet has already enough BTC")
 
     except Exception as e:
         print("An error occured during creation of distributor wallet or during the sending funds to it.", e)
         clean_subprocesses(process_backend, process_client)
         sys.exit(1)
 
- 
-    # 5. Cleanup - kill both running processes
+     # 5. Cleanup - kill both running processes
     clean_subprocesses(process_backend, process_client)
 
 

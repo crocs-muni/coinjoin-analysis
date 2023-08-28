@@ -7,6 +7,7 @@ class RPCCommandsConstants():
 
 RPC_COMMANDS_CONSTANTS = RPCCommandsConstants()
 
+
 def select(walletName, verbose : bool = True):
     select_content = "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"selectwallet\", \"params\" : [\"" + walletName + "\", \"pswd\"]}"
     response = requests.post(RPC_COMMANDS_CONSTANTS.client_url, data = select_content)
