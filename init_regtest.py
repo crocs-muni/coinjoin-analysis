@@ -79,7 +79,7 @@ if __name__ == "__main__":
         print("An error occured during opening or reading output of the backend subprocess.", e)
         clean_subprocesses(process_backend, process_client)
         sys.exit(1)
-        
+
     # 3.b Run client
     try:
         process_client = subprocess.Popen("dotnet run " + "--project " +  INIT_REGTEST_CONSTANTS.client_folder_path, 
