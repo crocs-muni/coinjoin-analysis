@@ -1,22 +1,44 @@
 import requests
 import time
+import json
 
 
 class RPCCommandsConstants():
     client_url = "http://127.0.0.1:37128/"
+    wasabi_wallet_data = ""
+    rpc_user = ""
+    rpc_pswd = ""
+
+    def __init__(self):
+        self.config_path = "{}/Client/Config.json".format(self.wasabi_wallet_data)
+        with open(self.config_path, "rb") as f:
+            loaded_config = json.load(f)
+            self.rpc_user = loaded_config["JsonRpcUser"]
+            self.rpc_pswd = loaded_config["JsonRpcPassword"]
+
 
 RPC_COMMANDS_CONSTANTS = RPCCommandsConstants()
 
 
-def select(walletName, verbose : bool = True):
+def send_post(data):
+    if RPC_COMMANDS_CONSTANTS.rpc_pswd != "" and RPC_COMMANDS_CONSTANTS.rpc_user != "":
+        print("Sending with credentials")
+        response = requests.post(RPC_COMMANDS_CONSTANTS.client_url, data = data, auth=(RPC_COMMANDS_CONSTANTS.rpc_user,
+                                                                                       RPC_COMMANDS_CONSTANTS.rpc_pswd))
+    else:
+        response = requests.post(RPC_COMMANDS_CONSTANTS.client_url, data = data)
+    return response
+
+
+def select(walletName, verbose: bool = True):
     select_content = "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"selectwallet\", \"params\" : [\"" + walletName + "\", \"pswd\"]}"
-    response = requests.post(RPC_COMMANDS_CONSTANTS.client_url, data = select_content)
+    response = send_post(select_content)
     if verbose:
         print(response.json())
     return response.json()
 
 
-def start_coinjoin(verbose : bool = True):
+def start_coinjoin(verbose: bool = True):
     """
     Sends request for starting coinjoin in currently selected wallet.
     :param verbose: specifies if response should be printed
@@ -24,12 +46,12 @@ def start_coinjoin(verbose : bool = True):
     """
 
     content_start_coinjoin = "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"startcoinjoin\", \"params\":[\"pswd\", true, true]}"
-    response = requests.post(RPC_COMMANDS_CONSTANTS.client_url, data = content_start_coinjoin)
+    response = send_post(content_start_coinjoin)
     if verbose:
-        print(response.json()) 
+        print(response.json())
 
 
-def stop_coinjoin(verbose : bool = True):
+def stop_coinjoin(verbose: bool = True):
     """
     Sends request for stoping coinjoin in currently selected wallet.
     :param verbose: specifies if response should be printed
@@ -37,12 +59,12 @@ def stop_coinjoin(verbose : bool = True):
     """
 
     content_stop_coinjoin = "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"stopcoinjoin\"}"
-    response = requests.post(RPC_COMMANDS_CONSTANTS.client_url, data = content_stop_coinjoin)
+    response = send_post(content_stop_coinjoin)
     if verbose:
-        print(response.json()) 
+        print(response.json())
 
 
-def get_wallet_info(verbose : bool = True):
+def get_wallet_info(verbose: bool = True):
     """
     Sends request for getting information about currently selected wallet.
     :param verbose: specifies if response should be printed
@@ -50,13 +72,13 @@ def get_wallet_info(verbose : bool = True):
     """
 
     content_get_info = "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"getwalletinfo\"}"
-    response = requests.post(RPC_COMMANDS_CONSTANTS.client_url, content_get_info)
+    response = send_post(content_get_info)
     if verbose:
         print(response)
     return response
 
 
-def get_address(label : str = "redistribution", verbose : bool = True):
+def get_address(label: str = "redistribution", verbose: bool = True):
     """
     Sends request for getting fresh address of currently selected wallet.
     :param label: label to be added to address
@@ -65,16 +87,17 @@ def get_address(label : str = "redistribution", verbose : bool = True):
     """
 
     content_get_address = '{"jsonrpc":"2.0","id":"1","method":"getnewaddress","params":["' + label + '"]}'
-    response = requests.post(RPC_COMMANDS_CONSTANTS.client_url, data = content_get_address)
-    
+    response = send_post(content_get_address)
+
     resp_json = response.json()
     print(resp_json)
     address = resp_json["result"]['address']
     if verbose:
-        print(response.json()) 
+        print(response.json())
     return address
 
-def list_unspent(verbose : bool = True):
+
+def list_unspent(verbose: bool = True):
     """
     Sends request for getting all unspent coins of currently selected wallet.
     :param verbose: specifies if response should be printed
@@ -82,12 +105,13 @@ def list_unspent(verbose : bool = True):
     """
 
     list_content = '{"jsonrpc":"2.0","id":"1","method":"listunspentcoins"}'
-    response = requests.post(RPC_COMMANDS_CONSTANTS.client_url, data = list_content)
+    response = send_post(list_content)
     if verbose:
-        print(response.json()) 
+        print(response.json())
     return response.json()
 
-def create_wallet(name : str, pswd : str = "pswd", verbose : bool = True):
+
+def create_wallet(name: str, pswd: str = "pswd", verbose: bool = True):
     """
     Sends request for creating new wallet. If succesfull, wallet is also connected and selected. Be careful, seed words are currently
     not stored anywhere, if verbose option is turned off and you don't print the response, you will loose the words!
@@ -96,14 +120,15 @@ def create_wallet(name : str, pswd : str = "pswd", verbose : bool = True):
     :param verbose: specifies if response should be printed
     :return: Response to creating new wallet
     """
-        
+
     create_content = '{"jsonrpc":"2.0","id":"1","method":"createwallet","params":["' + name + '", "' + pswd + '"]}'
-    response = requests.post(RPC_COMMANDS_CONSTANTS.client_url, data = create_content)
+    response = send_post(create_content)
     if verbose:
         print(response.json())
     return response.json()
 
-def confirmed_select(wallet_name : str):
+
+def confirmed_select(wallet_name: str):
     """
     Sends request for selecting specified wallet. After sending command, blocks until wallet is really selected and loaded.
     :param wallet_name: name of wallet to be loaded
@@ -136,21 +161,19 @@ def get_amount_of_coins():
     return amount
 
 
-
-
 # in process of creation if needed, not working yet
-def send_to(address, label, verbose : bool = True):
+def send_to(address, label, verbose: bool = True):
     send_content = '''{"jsonrpc":"2.0","id":"1","method":"send","params": { "payments":[{"sendto": "''' + address + '''", "amount": 8000, "label": "''' + label + '''" }], coins":[{"transactionid":"5637a716d321a08f74227f714d50d4f9ceb70e99a7a17a68146300d3efca8570", "index":1}],"feeTarget":2, "password": "pswd" }}'''
 
-    send_content ='''
-    {"jsonrpc":"2.0","id":"1","method":"send", "params": 
-    { "payments":[ 
+    send_content = '''
+    {"jsonrpc":"2.0","id":"1","method":"send", "params":
+    { "payments":[
         {"sendto": "''' + "asdfasdasd" + '''", "amount": 2000, "label": "test" }
-        ], 
-    "coins":[{"transactionid":"5637a716d321a08f74227f714d50d4f9ceb70e99a7a17a68146300d3efca8570", "index":1}], 
+        ],
+    "coins":[{"transactionid":"5637a716d321a08f74227f714d50d4f9ceb70e99a7a17a68146300d3efca8570", "index":1}],
     "feeTarget":2, "password": "pswd" }}
     '''
 
-    response = requests.post(RPC_COMMANDS_CONSTANTS.client_url, data = send_content)
+    response = send_post(data = send_content)
     if verbose:
-        print(response.json()) 
+        print(response.json())
