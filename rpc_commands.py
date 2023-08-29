@@ -22,7 +22,6 @@ RPC_COMMANDS_CONSTANTS = RPCCommandsConstants()
 
 def send_post(data):
     if RPC_COMMANDS_CONSTANTS.rpc_pswd != "" and RPC_COMMANDS_CONSTANTS.rpc_user != "":
-        print("Sending with credentials")
         response = requests.post(RPC_COMMANDS_CONSTANTS.client_url, data = data, auth=(RPC_COMMANDS_CONSTANTS.rpc_user,
                                                                                        RPC_COMMANDS_CONSTANTS.rpc_pswd))
     else:
