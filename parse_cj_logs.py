@@ -4,9 +4,18 @@ import json
 import sys
 import wcli
 from itertools import zip_longest
+import graphviz
+from graphviz import Digraph
+
 
 BTC_CLI_PATH = 'C:\\bitcoin-25.0\\bin\\bitcoin-cli'
 WASABIWALLET_DATA_DIR = 'c:\\Users\\xsvenda\\AppData\\Roaming\\WalletWasabi'
+TX_AD_CUT_LEN = 10  # length of displayed address or txid
+WALLET_COLORS = {}
+
+# colors used for different wallet clusters. Avoid following colors : 'red' (used for cjtx)
+COLORS = ['darkorange', 'green', 'lightblue', 'gray', 'aquamarine', 'darkorchid1', 'cornsilk', 'chocolate',
+   'deeppink1', 'cadetblue', 'darkgreen', 'black']
 
 
 def read_lines_for_round(filename, round_id):
@@ -177,7 +186,64 @@ def extract_tx_info(txid):
     return input_addresses, output_addresses
 
 
-def print_tx_info(input_addresses, output_addresses, wallets_info):
+def graphviz_insert_wallet(wallet_name, graphdot):
+    graphdot.attr('node', shape='diamond')
+    graphdot.attr('node', fillcolor='green')
+    graphdot.attr('node', color=WALLET_COLORS[wallet_name])
+    graphdot.attr('node', style='filled')
+    graphdot.attr('node', fontsize='20')
+    graphdot.node(wallet_name)
+
+
+def graphviz_insert_address(addr, fill_color, graphdot):
+    if TX_AD_CUT_LEN > 0:
+        addr = addr[:TX_AD_CUT_LEN] + '...'
+
+    graphdot.attr('node', shape='ellipse')
+    graphdot.attr('node', fillcolor=fill_color)
+    graphdot.attr('node', color='gray')
+    graphdot.attr('node', style='filled')
+    graphdot.attr('node', fontsize='20')
+    graphdot.attr('node', id=addr)
+    graphdot.attr('node', label='{}'.format(addr))
+    graphdot.node(addr)
+
+
+def graphviz_insert_cjtxid(cjtxid, graphdot):
+    if TX_AD_CUT_LEN > 0:
+        cjtxid = cjtxid[:TX_AD_CUT_LEN] + '...'
+
+    graphdot.attr('node', shape='box')
+    graphdot.attr('node', fillcolor='red')
+    graphdot.attr('node', color='black')
+    graphdot.attr('node', style='filled')
+    graphdot.attr('node', fontsize='20')
+    graphdot.attr('node', id=cjtxid)
+    graphdot.attr('node', label='cjtxid:\n{}'.format(cjtxid))
+    graphdot.node(cjtxid)
+
+
+def graphviz_insert_wallet_address_mapping(wallet_name, addr, graphdot):
+    if TX_AD_CUT_LEN > 0:
+        addr = addr[:TX_AD_CUT_LEN] + '...'
+    graphdot.edge(wallet_name, addr, color=WALLET_COLORS[wallet_name], style='dotted', dir='none')
+
+
+def graphviz_insert_address_cjtx_mapping(addr, coinjoin_txid, edge_color, graphdot):
+    if TX_AD_CUT_LEN > 0:
+        addr = addr[:TX_AD_CUT_LEN] + '...'
+        coinjoin_txid = coinjoin_txid[:TX_AD_CUT_LEN] + '...'
+    graphdot.edge(addr, coinjoin_txid, color=edge_color, style='dashed')
+
+
+def graphviz_insert_cjtx_address_mapping(coinjoin_txid, addr, edge_color, graphdot):
+    if TX_AD_CUT_LEN > 0:
+        addr = addr[:TX_AD_CUT_LEN] + '...'
+        coinjoin_txid = coinjoin_txid[:TX_AD_CUT_LEN] + '...'
+    graphdot.edge(coinjoin_txid, addr, color=edge_color, style='solid')
+
+
+def print_tx_info(input_addresses, output_addresses, wallets_info, coinjoin_txid, graphdot):
     """
     Prints mapping between addresses. Unfinished for now
     :param input_addresses:
@@ -197,17 +263,27 @@ def print_tx_info(input_addresses, output_addresses, wallets_info):
     # print all inputs mapped to their outputs
     for wallet_name in used_wallets:
         print('Wallet `{}`'.format(wallet_name))
+
         for addr in sorted(list(input_addresses.values())):
             if address_wallet_mapping[addr] == wallet_name:
                 print('  ({}):{}'.format(wallet_name, addr))
+                graphviz_insert_address(addr, WALLET_COLORS[wallet_name], graphdot)
+                graphviz_insert_wallet_address_mapping(wallet_name, addr, graphdot)  # wallet to address
+                graphviz_insert_address_cjtx_mapping(addr, coinjoin_txid, WALLET_COLORS[wallet_name], graphdot)  # address to coinjoin txid
+
         for addr in sorted(list(output_addresses.values())):
             if address_wallet_mapping[addr] == wallet_name:
                 print('  -> ({}):{}'.format(wallet_name, addr))
+                graphviz_insert_address(addr, WALLET_COLORS[wallet_name], graphdot)
+                graphviz_insert_wallet_address_mapping(wallet_name, addr, graphdot)  # wallet to address
+                graphviz_insert_cjtx_address_mapping(coinjoin_txid, addr, WALLET_COLORS[wallet_name], graphdot)  # coinjoin to addr
 
 
-def parse_coinjoin_logs(wallets_info):
+def parse_coinjoin_logs(wallets_info, graphdot):
     coord_input_file = '{}\\Backend\\Logs_4paralell_1hour.txt'.format(WASABIWALLET_DATA_DIR)
     client_input_file = '{}\\Client\\Logs_4paralell_1hour.txt'.format(WASABIWALLET_DATA_DIR)
+    # coord_input_file = '{}\\Backend\\Logs_4paralell_1hour_debug.txt'.format(WASABIWALLET_DATA_DIR)
+    # client_input_file = '{}\\Client\\Logs_4paralell_1hour_debug.txt'.format(WASABIWALLET_DATA_DIR)
     regex_pattern = r"(.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with params: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
     start_round_ids = find_round_ids(coord_input_file, regex_pattern, 'round_id')
     regex_pattern = r"(.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Successfully broadcast the coinjoin: (?P<cj_tx_id>[0-9a-f]*)\.?"
@@ -234,18 +310,19 @@ def parse_coinjoin_logs(wallets_info):
 
         sorted_combined_list = sorted(coord_round_logs + client_round_logs)
         for line in sorted_combined_list:
+            line = line.replace(" INFO", " INFO ")
             if line in client_round_logs:
-                line = line.replace(" INFO", " INFO ")
                 print("  " + line.rstrip())
             else:
-                line = line.replace(" INFO", " INFO ")
                 print(line.rstrip())
 
         print('**************************************')
 
+        graphviz_insert_cjtxid(round_cjtx_mapping[round_id], graphdot)
+
         print('Address input-output mapping for cjtx: {}'.format(round_cjtx_mapping[round_id]))
         input_addresses, output_addresses = extract_tx_info(round_cjtx_mapping[round_id])
-        print_tx_info(input_addresses, output_addresses, wallets_info)
+        print_tx_info(input_addresses, output_addresses, wallets_info, round_cjtx_mapping[round_id], graphdot)
 
         print('**************************************')
         print('**************************************')
@@ -275,5 +352,25 @@ def load_wallets_info():
 
 
 if __name__ == "__main__":
+    # Load wallets info
     wallets_info = load_wallets_info()
-    parse_coinjoin_logs(wallets_info)
+
+    # Prepare Graph
+    dot2 = Digraph(comment='CoinJoin={}'.format("XX"))
+    graph_label = ''
+    graph_label += 'Coinjoin visualization\n.'
+    dot2.attr(rankdir='LR', size='8,5')
+    dot2.attr(size='30,20')
+
+    color_ctr = 0
+    for wallet_name in wallets_info.keys():
+        WALLET_COLORS[wallet_name] = COLORS[color_ctr]
+        graphviz_insert_wallet(wallet_name, dot2)
+        color_ctr = color_ctr + 1
+
+    # Parse and visualize conjoin
+    parse_coinjoin_logs(wallets_info, dot2)
+
+    # render resulting graphviz
+    dot2.render('coinjoin_{}'.format('FIXME'), view=True)
+
