@@ -6,15 +6,22 @@ import wcli
 from itertools import zip_longest
 import graphviz
 from graphviz import Digraph
+import numpy as np
+import matplotlib.pyplot as plt
+from collections import Counter
 
 
 BTC_CLI_PATH = 'C:\\bitcoin-25.0\\bin\\bitcoin-cli'
 WASABIWALLET_DATA_DIR = 'c:\\Users\\xsvenda\\AppData\\Roaming\\WalletWasabi'
 TX_AD_CUT_LEN = 10  # length of displayed address or txid
 WALLET_COLORS = {}
+UNKNOWN_WALLET_STRING = 'UNKNOWN'
+PRINT_COLLATED_COORD_CLIENT_LOGS = False
+INSERT_WALLET_NODES = False
+
 
 # colors used for different wallet clusters. Avoid following colors : 'red' (used for cjtx)
-COLORS = ['darkorange', 'green', 'lightblue', 'gray', 'aquamarine', 'darkorchid1', 'cornsilk', 'chocolate',
+COLORS = ['darkorange', 'green', 'lightblue', 'gray', 'aquamarine', 'darkorchid1', 'cornsilk3', 'chocolate',
    'deeppink1', 'cadetblue', 'darkgreen', 'black']
 
 
@@ -144,7 +151,7 @@ def get_input_address(txid, txid_in_out):
         outputs = parsed_data['vout']
         for output in outputs:
             if output['n'] == txid_in_out:
-                return output['scriptPubKey']['address']
+                return output['scriptPubKey']['address'], parsed_data
 
     except json.JSONDecodeError as e:
         print("Error decoding JSON:", e)
@@ -162,17 +169,27 @@ def extract_tx_info(txid):
         '{} -regtest getrawtransaction {} true'.format(BTC_CLI_PATH, txid), False)
     tx_info = result.stdout
 
+    tx_record = {}
     input_addresses = {}
+    input_txids = {}
     output_addresses = {}
     try:
         parsed_data = json.loads(tx_info)
+        tx_record = {}
+
+        tx_record['txid'] = txid
+        #tx_record['raw_tx_json'] = parsed_data
+        tx_record['inputs'] = {}
+        tx_record['outputs'] = {}
 
         inputs = parsed_data['vin']
         index = 0
         for input in inputs:
-            txid_in = input['txid']
-            txid_in_out = input['vout']
-            in_address = get_input_address(txid_in, txid_in_out)  # we need to read and parse previous transaction to obtain address
+            in_address, in_full_info = get_input_address(input['txid'], input['vout'])  # we need to read and parse previous transaction to obtain address
+            tx_record['inputs'][index] = {}
+            #tx_record['inputs'][index]['full_info'] = in_full_info
+            tx_record['inputs'][index]['address'] = in_address
+            tx_record['inputs'][index]['txid'] = input['txid']
             input_addresses[index] = in_address  # store address to index of the input
             index = index + 1
 
@@ -180,19 +197,24 @@ def extract_tx_info(txid):
         for output in outputs:
             output_addresses[output['n']] = output['scriptPubKey']['address']
 
+            tx_record['outputs'][output['n']] = {}
+            #tx_record['outputs'][output['n']]['full_info'] = output
+            tx_record['outputs'][output['n']]['address'] = output['scriptPubKey']['address']
+
     except json.JSONDecodeError as e:
         print("Error decoding JSON:", e)
 
-    return input_addresses, output_addresses
+    return tx_record, input_addresses, output_addresses
 
 
 def graphviz_insert_wallet(wallet_name, graphdot):
-    graphdot.attr('node', shape='diamond')
-    graphdot.attr('node', fillcolor='green')
-    graphdot.attr('node', color=WALLET_COLORS[wallet_name])
-    graphdot.attr('node', style='filled')
-    graphdot.attr('node', fontsize='20')
-    graphdot.node(wallet_name)
+    if INSERT_WALLET_NODES:
+        graphdot.attr('node', shape='diamond')
+        graphdot.attr('node', fillcolor='green')
+        graphdot.attr('node', color=WALLET_COLORS[wallet_name])
+        graphdot.attr('node', style='filled')
+        graphdot.attr('node', fontsize='20')
+        graphdot.node(wallet_name)
 
 
 def graphviz_insert_address(addr, fill_color, graphdot):
@@ -224,9 +246,10 @@ def graphviz_insert_cjtxid(cjtxid, graphdot):
 
 
 def graphviz_insert_wallet_address_mapping(wallet_name, addr, graphdot):
-    if TX_AD_CUT_LEN > 0:
-        addr = addr[:TX_AD_CUT_LEN] + '...'
-    graphdot.edge(wallet_name, addr, color=WALLET_COLORS[wallet_name], style='dotted', dir='none')
+    if INSERT_WALLET_NODES:
+        if TX_AD_CUT_LEN > 0:
+            addr = addr[:TX_AD_CUT_LEN] + '...'
+        graphdot.edge(wallet_name, addr, color=WALLET_COLORS[wallet_name], style='dotted', dir='none')
 
 
 def graphviz_insert_address_cjtx_mapping(addr, coinjoin_txid, edge_color, graphdot):
@@ -243,35 +266,39 @@ def graphviz_insert_cjtx_address_mapping(coinjoin_txid, addr, edge_color, graphd
     graphdot.edge(coinjoin_txid, addr, color=edge_color, style='solid')
 
 
-def print_tx_info(input_addresses, output_addresses, wallets_info, coinjoin_txid, graphdot):
+def print_tx_info(cjtx, address_wallet_mapping, coinjoin_txid, graphdot):
     """
-    Prints mapping between addresses. Unfinished for now
-    :param input_addresses:
-    :param output_addresses:
-    :param wallets_info: information about wallets including list of addresses
+    Prints mapping between addresses in given coinjoin transaction.
+    :param input_addresses: input addresses to cjtx
+    :param output_addresses: output addresses from cjtx
+    :param address_wallet_mapping: mapping between address and controlling wallet
+    :param coinjoin_txid: transaction id of coinjoin transaction
+    :param graphdot: graphviz engine
     :return:
     """
-    # Build mapping of addresses to wallets names ('unknown' if not mapped)
-    address_wallet_mapping = {input_addresses[addr_index]: 'unknown' for addr_index in input_addresses}
-    for addr in list(input_addresses.values()) + list(output_addresses.values()):
-        for wallet_name in wallets_info.keys():
-            for waddr in wallets_info[wallet_name]:
-                if addr == waddr['address']:
-                    address_wallet_mapping[addr] = wallet_name
 
-    used_wallets = sorted({address_wallet_mapping[addr]: 1 for addr in list(input_addresses.values()) + list(output_addresses.values())}.keys())
+    used_wallets = {}
+    input_addresses = [cjtx['inputs'][index]['address'] for index in cjtx['inputs'].keys()]
+    output_addresses = [cjtx['outputs'][index]['address'] for index in cjtx['outputs'].keys()]
+    for addr in input_addresses + output_addresses:
+        if addr in address_wallet_mapping.keys():
+            used_wallets[address_wallet_mapping[addr]] = 1
+        else:
+            print('Missing wallet mapping for {}'.format(addr))
+
+    used_wallets = sorted(used_wallets.keys())
     # print all inputs mapped to their outputs
     for wallet_name in used_wallets:
         print('Wallet `{}`'.format(wallet_name))
 
-        for addr in sorted(list(input_addresses.values())):
+        for addr in input_addresses:
             if address_wallet_mapping[addr] == wallet_name:
                 print('  ({}):{}'.format(wallet_name, addr))
                 graphviz_insert_address(addr, WALLET_COLORS[wallet_name], graphdot)
                 graphviz_insert_wallet_address_mapping(wallet_name, addr, graphdot)  # wallet to address
                 graphviz_insert_address_cjtx_mapping(addr, coinjoin_txid, WALLET_COLORS[wallet_name], graphdot)  # address to coinjoin txid
 
-        for addr in sorted(list(output_addresses.values())):
+        for addr in output_addresses:
             if address_wallet_mapping[addr] == wallet_name:
                 print('  -> ({}):{}'.format(wallet_name, addr))
                 graphviz_insert_address(addr, WALLET_COLORS[wallet_name], graphdot)
@@ -279,11 +306,92 @@ def print_tx_info(input_addresses, output_addresses, wallets_info, coinjoin_txid
                 graphviz_insert_cjtx_address_mapping(coinjoin_txid, addr, WALLET_COLORS[wallet_name], graphdot)  # coinjoin to addr
 
 
+def analyze_coinjoin_stats(cjtx_stats, address_wallet_mapping, wallets_info):
+    """
+    Analyze coinjoin transactions statistics
+    :param cjtx_stats:
+    :param address_wallet_mapping:
+    :return:
+    """
+
+    #
+    # Number of distinct wallets in coinjoins
+    #
+    cjtx_wallet_frequencies = {}
+    for cjtx in cjtx_stats.keys():
+        cjtx_wallet_frequencies[cjtx] = {}
+        used_wallets = []
+        for input_index in cjtx_stats[cjtx]['inputs'].keys():  # iterate over input addresses
+            addr = cjtx_stats[cjtx]['inputs'][input_index]['address']
+            if addr in address_wallet_mapping.keys():
+                used_wallets.append(address_wallet_mapping[addr])
+            else:
+                print('Missing wallet mapping for {}'.format(addr))
+
+        for wallet in sorted(wallets_info.keys()):
+            cjtx_wallet_frequencies[cjtx][wallet] = used_wallets.count(wallet)
+
+    # Distribution of number of inputs from different wallets
+    for cjtx in cjtx_wallet_frequencies.keys():
+        cjtx_stats[cjtx]['num_wallets_involved'] = sum(1 for value in cjtx_wallet_frequencies[cjtx].values() if value != 0)
+
+    wallets_in_stats = [cjtx_stats[value]['num_wallets_involved'] for value in cjtx_stats.keys()]
+    wallets_in_frequency = Counter(wallets_in_stats)
+    wallets_in_frequency_all = {}
+    for wallet_num in range(0, max(wallets_in_stats) + 1):
+        if wallet_num in wallets_in_frequency.keys():
+            wallets_in_frequency_all[wallet_num] = wallets_in_frequency[wallet_num]
+        else:
+            wallets_in_frequency_all[wallet_num] = 0
+    wallets_in_frequency_all_ordered = [wallets_in_frequency_all[key] for key in sorted(wallets_in_frequency_all.keys())]
+    plt.bar(range(0, len(wallets_in_frequency_all_ordered)), wallets_in_frequency_all_ordered)
+    plt.xticks(range(0, len(wallets_in_frequency_all_ordered)), range(0, len(wallets_in_frequency_all_ordered)))
+    plt.xlabel('Number of distinct wallets')
+    plt.ylabel('Number of coinjoins')
+    plt.title('Number of separate wallets participating in coinjoin tx')
+    plt.savefig('num_wallets_in_round.png')
+    plt.close()
+
+    #
+    # How many times given wallet participated in coinjoin?
+    #
+
+    #
+    # Number of distinct wallets in coinjoins in time
+    #
+
+
 def parse_coinjoin_logs(wallets_info, graphdot):
-    coord_input_file = '{}\\Backend\\Logs_4paralell_1hour.txt'.format(WASABIWALLET_DATA_DIR)
-    client_input_file = '{}\\Client\\Logs_4paralell_1hour.txt'.format(WASABIWALLET_DATA_DIR)
-    # coord_input_file = '{}\\Backend\\Logs_4paralell_1hour_debug.txt'.format(WASABIWALLET_DATA_DIR)
-    # client_input_file = '{}\\Client\\Logs_4paralell_1hour_debug.txt'.format(WASABIWALLET_DATA_DIR)
+    #WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\20230901_5minRound_3parallel_max10inputs\\'
+    #coord_input_file = '{}\\Backend\\Logs_4paralell_1hour.txt'.format(WASABIWALLET_DATA_DIR)
+    #client_input_file = '{}\\Client\\Logs_4paralell_1hour.txt'.format(WASABIWALLET_DATA_DIR)
+
+    #WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\20230822_90secRound_4parallel_1hour\\'
+    #coord_input_file = '{}\\Backend\\Logs_4paralell_1hour_debug.txt'.format(WASABIWALLET_DATA_DIR)
+    #client_input_file = '{}\\Client\\Logs_4paralell_1hour_debug.txt'.format(WASABIWALLET_DATA_DIR)
+
+    #WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol1\\20230830_5minRound_3parallel_overnight'
+    #WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol1\\20230901_5minRound_3parallel_max10inputs'
+    #coord_input_file = '{}\\Backend\\Logs.txt'.format(WASABIWALLET_DATA_DIR)
+    #client_input_file = '{}\\Client\\Logs.txt'.format(WASABIWALLET_DATA_DIR)
+    # coord_input_file = '{}\\Backend\\Logs_debug.txt'.format(WASABIWALLET_DATA_DIR)
+    # client_input_file = '{}\\Client\\Logs_debug.txt'.format(WASABIWALLET_DATA_DIR)
+    # coord_input_file = '{}\\Backend\\Logs_20230829_5minRound_3parallel_overnight.txt'.format(WASABIWALLET_DATA_DIR)
+    # client_input_file = '{}\\Client\\Logs_20230829_5minRound_3parallel_overnight.txt'.format(WASABIWALLET_DATA_DIR)
+
+    # coord_input_file = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\20230830_5minRound_3parallel_overnight\\Logs_backend_20230830_5minRound_3parallel_overnight.txt'
+    # client_input_file = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\20230830_5minRound_3parallel_overnight\\Logs_client_20230830_5minRound_3parallel_overnight.txt'
+    # coord_input_file = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\20230830_5minRound_3parallel_overnight\\Logs_backend_20230829_5minRound_3parallel_overnight.txt'
+    # client_input_file = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\20230830_5minRound_3parallel_overnight\\Logs_client_20230829_5minRound_3parallel_overnight.txt'
+
+    WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\debug\\WalletWasabi'
+
+
+
+    coord_input_file = '{}\\Backend\\Logs.txt'.format(WASABIWALLET_DATA_DIR)
+    client_input_file = '{}\\Client\\Logs.txt'.format(WASABIWALLET_DATA_DIR)
+
+
     regex_pattern = r"(.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with params: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
     start_round_ids = find_round_ids(coord_input_file, regex_pattern, 'round_id')
     regex_pattern = r"(.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Successfully broadcast the coinjoin: (?P<cj_tx_id>[0-9a-f]*)\.?"
@@ -293,6 +401,20 @@ def parse_coinjoin_logs(wallets_info, graphdot):
     # find all ids which have complete log from round creation (Created round with params)
     # to cj tx broadcast (Successfully broadcast the coinjoin)
     full_round_ids = [id for id in success_coinjoin_round_ids if id in start_round_ids]
+
+    cjtx_stats = {}
+    for round_id in full_round_ids:
+        # Find coinjoin transaction id and create record if not already
+        cjtxid = round_cjtx_mapping[round_id]
+        if cjtxid not in cjtx_stats.keys():
+            cjtx_stats[cjtxid] = {}
+
+        # extract input and output addreses
+        tx_record, input_addresses, output_addresses = extract_tx_info(round_cjtx_mapping[round_id])
+        tx_record['round_id'] = round_id
+        cjtx_stats[cjtxid] = tx_record
+        #cjtx_stats[cjtxid]['inputs'] = input_addresses
+        #cjtx_stats[cjtxid]['outputs'] = output_addresses
 
     # print only logs with full rounds
     #[print_round_logs(coord_input_file, id) for id in full_round_ids]
@@ -304,28 +426,62 @@ def parse_coinjoin_logs(wallets_info, graphdot):
     # 2023-08-22 11:06:51.466 [10] INFO	AliceClient.RegisterInputAsync (105)	Round (5f3425c1f2e0cc81c9a74a213abf1ea3f128247d6be78ecd259158a5e1f9b66c), Alice (94687969-bf26-1dfd-af98-2365e708b893): Registered 80b9c8615226e03d2474d8ad481c2db7505cb2715b10d83ee9c95106aaa3dcfd-0.
     #regex_pattern = r"(.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Successfully broadcast the coinjoin: (?P<cj_tx_id>[0-9a-f]*)\.?"
 
+    #cjtx_stats = {}
+    address_wallet_mapping = {}
     for round_id in full_round_ids:
-        coord_round_logs = read_lines_for_round(coord_input_file, round_id)
-        client_round_logs = read_lines_for_round(client_input_file, round_id)
+        cjtxid = round_cjtx_mapping[round_id]
+        #input_addresses = cjtx_stats[cjtxid]['inputs']
+        #output_addresses = cjtx_stats[cjtxid]['outputs']
+        # Build mapping of addresses to wallets names ('unknown' if not mapped)
+        address_wallet_mapping.update(
+            {cjtx_stats[cjtxid]['inputs'][addr_index]['address']: UNKNOWN_WALLET_STRING for addr_index in cjtx_stats[cjtxid]['inputs'].keys()})
+        address_wallet_mapping.update(
+            {cjtx_stats[cjtxid]['outputs'][addr_index]['address']: UNKNOWN_WALLET_STRING for addr_index in cjtx_stats[cjtxid]['outputs'].keys()})
 
-        sorted_combined_list = sorted(coord_round_logs + client_round_logs)
-        for line in sorted_combined_list:
-            line = line.replace(" INFO", " INFO ")
-            if line in client_round_logs:
-                print("  " + line.rstrip())
-            else:
-                print(line.rstrip())
+        for index in cjtx_stats[cjtxid]['inputs'].keys():
+            addr = cjtx_stats[cjtxid]['inputs'][index]['address']
+            for wallet_name in wallets_info.keys():
+                for waddr in wallets_info[wallet_name]:
+                    if addr == waddr['address']:
+                        address_wallet_mapping[addr] = wallet_name
+                        cjtx_stats[cjtxid]['inputs'][index]['wallet_name'] = wallet_name
 
+        for index in cjtx_stats[cjtxid]['outputs'].keys():
+            addr = cjtx_stats[cjtxid]['outputs'][index]['address']
+            for wallet_name in wallets_info.keys():
+                for waddr in wallets_info[wallet_name]:
+                    if addr == waddr['address']:
+                        address_wallet_mapping[addr] = wallet_name
+                        cjtx_stats[cjtxid]['outputs'][index]['wallet_name'] = wallet_name
+
+        #
+        # Print collated round logs from coordinator and client for a given round
+        #
+        if PRINT_COLLATED_COORD_CLIENT_LOGS:
+            coord_round_logs = read_lines_for_round(coord_input_file, round_id)
+            client_round_logs = read_lines_for_round(client_input_file, round_id)
+
+            sorted_combined_list = sorted(coord_round_logs + client_round_logs)
+            for line in sorted_combined_list:
+                line = line.replace(" INFO", " INFO ")
+                if line in client_round_logs:
+                    print("  " + line.rstrip())
+                else:
+                    print(line.rstrip())
+
+        #
+        # Print and visualize inputs and outputs for given coinjoin transaction
+        #
         print('**************************************')
-
-        graphviz_insert_cjtxid(round_cjtx_mapping[round_id], graphdot)
-
         print('Address input-output mapping for cjtx: {}'.format(round_cjtx_mapping[round_id]))
-        input_addresses, output_addresses = extract_tx_info(round_cjtx_mapping[round_id])
-        print_tx_info(input_addresses, output_addresses, wallets_info, round_cjtx_mapping[round_id], graphdot)
+        graphviz_insert_cjtxid(round_cjtx_mapping[round_id], graphdot)
+        print_tx_info(cjtx_stats[cjtxid], address_wallet_mapping, round_cjtx_mapping[round_id], graphdot)
+        print('**************************************')
+        print('**************************************')
 
-        print('**************************************')
-        print('**************************************')
+    analyze_coinjoin_stats(cjtx_stats, address_wallet_mapping, wallets_info)
+
+    return cjtx_stats
 
 
 def load_wallets_info():
@@ -334,11 +490,11 @@ def load_wallets_info():
     :return: dictionary for all loaded wallets with retrieved info
     """
     WALLET_NAME_TEMPLATE = 'Wallet'
-    MAX_WALLETS = 6
+    MAX_WALLETS = 10
     wcli.WASABIWALLET_DATA_DIR = WASABIWALLET_DATA_DIR
     wcli.VERBOSE = False
     wallets_info = {}
-    wallet_names = ['{}{}'.format(WALLET_NAME_TEMPLATE, index) for index in range(0, MAX_WALLETS + 1)]
+    wallet_names = ['{}{}'.format(WALLET_NAME_TEMPLATE, index) for index in range(1, MAX_WALLETS + 1)]
     for wallet_name in wallet_names:
         if wcli.wcli(['selectwallet', wallet_name, 'pswd']) is not None:
             print('Wallet `{}` found.'.format(wallet_name))
@@ -352,25 +508,62 @@ def load_wallets_info():
 
 
 if __name__ == "__main__":
-    # Load wallets info
-    wallets_info = load_wallets_info()
+    WALLET_INFO_VIA_RPC = False
+    if WALLET_INFO_VIA_RPC:
+        print("Loading current wallets info from WasabiWallet RPC")
+        # Load wallets info via WasabiWallet RPC
+        wallets_info = load_wallets_info()
+        # Save wallets info into json
+        print("Saving current wallets into wallets_info.json")
+        with open("wallets_info.json", "w") as file:
+            file.write(json.dumps(dict(sorted(wallets_info.items())), indent=4))
+    else:
+        print("Loading current wallets info from wallets_info.json")
+        print("WARNING: wallets info may be outdated, if wallets were active after information retrieval via RPC "
+              "(watch for {} wallet name string in results).".format(UNKNOWN_WALLET_STRING))
+        with open("wallets_info.json", "r") as file:
+            wallets_info = json.load(file)
+
+    print("Wallets info loaded.")
 
     # Prepare Graph
     dot2 = Digraph(comment='CoinJoin={}'.format("XX"))
     graph_label = ''
     graph_label += 'Coinjoin visualization\n.'
     dot2.attr(rankdir='LR', size='8,5')
-    dot2.attr(size='30,20')
+    dot2.attr(size='120,80')
 
     color_ctr = 0
     for wallet_name in wallets_info.keys():
         WALLET_COLORS[wallet_name] = COLORS[color_ctr]
         graphviz_insert_wallet(wallet_name, dot2)
         color_ctr = color_ctr + 1
+    # add special color for 'unknown' wallet
+    #WALLET_COLORS[UNKNOWN_WALLET_STRING] = 'olivedrab4'
+    WALLET_COLORS[UNKNOWN_WALLET_STRING] = 'red'
+    graphviz_insert_wallet(UNKNOWN_WALLET_STRING, dot2)
 
     # Parse and visualize conjoin
-    parse_coinjoin_logs(wallets_info, dot2)
+    cjtx_stats = parse_coinjoin_logs(wallets_info, dot2)
+    #Save coinjoin transactions info into json
+    with open("coinjoin_tx_info.json", "w") as file:
+        file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
     # render resulting graphviz
-    dot2.render('coinjoin_{}'.format('FIXME'), view=True)
+    dot2.render('coinjoin_{}'.format(""), view=True)
 
+
+
+# problems
+
+# NOT_ENOUGH_PARTICIPANTS 2023-09-02 09:50:18.482 [50] INFO	Arena.StepInputRegistrationPhaseAsync (159)	Round (ad2a5479a5e335436bbad21c3ccfce91ec155475c7014e86592f886b3edd0ed4): Not enough inputs (0) in InputRegistration phase. The minimum is (5). MaxSuggestedAmount was '43000.00000000' BTC.
+# WRONG_PHASE 2023-09-02 10:09:06.983 [59] WARNING	IdempotencyRequestCache.GetCachedResponseAsync (79)	WalletWasabi.WabiSabi.Backend.Models.WrongPhaseException: Round (1244dd436283015f2b6ac8d5b258421a6092d651c9316f1a2f9579257bef932e): Wrong phase (ConnectionConfirmation).
+# ??? 2023-09-02 10:17:45.038 [48] INFO	LateResponseLoggerFilter.OnException (18)	Request 'ConfirmConnection' missing the phase 'InputRegistration,ConnectionConfirmation' ('00:00:00' timeout) by '738764.08:16:45.0188191'. Round id '85bcc20df3cecd986072e5041e0260c635b1d404dc942da0affb127c28159904'.
+# NOT_ENOUGH_FUNDS 2023-09-02 10:18:48.814 [47] WARNING	IdempotencyRequestCache.GetCachedResponseAsync (79)	WalletWasabi.WabiSabi.Backend.Models.WabiSabiProtocolException: Not enough funds
+# SIGNING_PHASE_TIMOUT 2023-09-02 10:31:13.421 [41] WARNING	Arena.StepTransactionSigningPhaseAsync (341)	Round (bfc40253b8e3d918d901fdd0326a7ade327e6139b3dbf19c263889c5bb51f2aa): Signing phase failed with timed out after 60 seconds.
+# ALICE_REMOVED 2023-09-02 10:31:13.433 [41] INFO	Arena.FailTransactionSigningPhaseAsync (393)	Round (bfc40253b8e3d918d901fdd0326a7ade327e6139b3dbf19c263889c5bb51f2aa): Removed 1 alices, because they didn't sign. Remainig: 6
+# INPUT BANNED 2023-09-02 21:01:59.661 [44] WARNING	IdempotencyRequestCache.GetCachedResponseAsync (79)	WalletWasabi.WabiSabi.Backend.Models.WabiSabiProtocolException: Input banned
+# ALL_ALICES_REMOVED 2023-09-02 21:05:38.366 [38] INFO	Arena.FailTransactionSigningPhaseAsync (393)	Round (05e9b2acc8200109b5a2ceb4290193be27d2c1576ce41c9f83f3ac82a25bf66d): Removed 10 alices, because they didn't sign. Remainig: 0
+# FILLED_SOME_ADDITIONAL_INPUTS 2023-09-02 21:57:33.400 [66] WARNING	Arena.TryAddBlameScriptAsync (584)	Round (91a14faef01faaad7aa05ab20e06ee29b11ffcd9a25c5db290c5c63ecdc93a90): Filled up the outputs to build a reasonable transaction because some alice failed to provide its output. Added amount: '12.39780793'.
+
+# RequestTimeStatista.Display (60)	Response times for the last 60 minutes:
