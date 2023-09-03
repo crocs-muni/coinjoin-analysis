@@ -9,6 +9,7 @@ from graphviz import Digraph
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import Counter
+from datetime import datetime, timedelta
 
 
 BTC_CLI_PATH = 'C:\\bitcoin-25.0\\bin\\bitcoin-cli'
@@ -47,31 +48,35 @@ def read_lines_for_round(filename, round_id):
     return lines_with_round
 
 
-def find_round_ids(filename, regex_pattern, group_name):
+def find_round_ids(filename, regex_pattern, group_names):
     """
     Extracts all round_ids which from provided file which match regexec pattern and its specified part given by group_name.
     Function is more generic as any group_name from regex_pattern can be specified, not only round_id
     :param filename: name of file with logs
     :param regex_pattern: regex pattern which is matched to every line
     :param group_name: name of item specified in regex pattern, which is extracted
-    :return: list of unique values found for 'group_name' matches
+    :return: list of dictionaries for all specified group_names
     """
-    round_ids = {}
+    hits = {}
 
     try:
         with open(filename, 'r') as file:
             for line in file:
                 for match in re.finditer(regex_pattern, line):
-                    if group_name in match.groupdict():
-                        round_id = match.group(group_name).strip()
-                        round_ids[round_id] = 1
+                    hit_group = {}
+                    for group_name in group_names:  # extract all provided group names
+                        if group_name in match.groupdict():
+                            hit_group[group_name] = match.group(group_name).strip()
+                    # insert into dictionary with key equal to value of first hit group
+                    key_name = match.group(group_names[0]).strip()
+                    hits[key_name] = hit_group
 
     except FileNotFoundError:
         print(f"File '{filename}' not found.")
     except Exception as e:
         print(f"An error occurred: {e}")
 
-    return round_ids.keys()
+    return hits
 
 
 def find_round_cjtx_mapping(filename, regex_pattern, round_id, cjtx):
@@ -200,11 +205,12 @@ def extract_tx_info(txid):
             tx_record['outputs'][output['n']] = {}
             #tx_record['outputs'][output['n']]['full_info'] = output
             tx_record['outputs'][output['n']]['address'] = output['scriptPubKey']['address']
+            tx_record['outputs'][output['n']]['value'] = output['value']
 
     except json.JSONDecodeError as e:
         print("Error decoding JSON:", e)
 
-    return tx_record, input_addresses, output_addresses
+    return tx_record
 
 
 def graphviz_insert_wallet(wallet_name, graphdot):
@@ -231,7 +237,8 @@ def graphviz_insert_address(addr, fill_color, graphdot):
     graphdot.node(addr)
 
 
-def graphviz_insert_cjtxid(cjtxid, graphdot):
+def graphviz_insert_cjtxid(coinjoin_tx, graphdot):
+    cjtxid = coinjoin_tx['txid']
     if TX_AD_CUT_LEN > 0:
         cjtxid = cjtxid[:TX_AD_CUT_LEN] + '...'
 
@@ -241,7 +248,7 @@ def graphviz_insert_cjtxid(cjtxid, graphdot):
     graphdot.attr('node', style='filled')
     graphdot.attr('node', fontsize='20')
     graphdot.attr('node', id=cjtxid)
-    graphdot.attr('node', label='cjtxid:\n{}'.format(cjtxid))
+    graphdot.attr('node', label='cjtxid:\n{}\n{}\n{}'.format(cjtxid, coinjoin_tx['round_start_time'], coinjoin_tx['broadcast_time']))
     graphdot.node(cjtxid)
 
 
@@ -259,14 +266,27 @@ def graphviz_insert_address_cjtx_mapping(addr, coinjoin_txid, edge_color, graphd
     graphdot.edge(addr, coinjoin_txid, color=edge_color, style='dashed')
 
 
-def graphviz_insert_cjtx_address_mapping(coinjoin_txid, addr, edge_color, graphdot):
+def graphviz_insert_cjtx_address_mapping(coinjoin_txid, addr, value_size, edge_color, graphdot):
     if TX_AD_CUT_LEN > 0:
         addr = addr[:TX_AD_CUT_LEN] + '...'
         coinjoin_txid = coinjoin_txid[:TX_AD_CUT_LEN] + '...'
-    graphdot.edge(coinjoin_txid, addr, color=edge_color, style='solid')
+    if value_size < 1:
+        width = '1'
+    elif value_size < 5:
+        width = '3'
+    elif value_size < 10:
+        width = '5'
+    elif value_size < 15:
+        width = '7'
+    elif value_size < 20:
+        width = '9'
+    else:
+        width = '11'
+
+    graphdot.edge(coinjoin_txid, addr, color=edge_color, style='solid', label="{}₿".format(value_size), penwidth=width)
 
 
-def print_tx_info(cjtx, address_wallet_mapping, coinjoin_txid, graphdot):
+def print_tx_info(cjtx, address_wallet_mapping, graphdot):
     """
     Prints mapping between addresses in given coinjoin transaction.
     :param input_addresses: input addresses to cjtx
@@ -286,24 +306,28 @@ def print_tx_info(cjtx, address_wallet_mapping, coinjoin_txid, graphdot):
         else:
             print('Missing wallet mapping for {}'.format(addr))
 
+    cjtxid = cjtx['txid']
     used_wallets = sorted(used_wallets.keys())
     # print all inputs mapped to their outputs
     for wallet_name in used_wallets:
         print('Wallet `{}`'.format(wallet_name))
 
-        for addr in input_addresses:
+        for index in cjtx['inputs'].keys():
+            addr = cjtx['inputs'][index]['address']
             if address_wallet_mapping[addr] == wallet_name:
                 print('  ({}):{}'.format(wallet_name, addr))
                 graphviz_insert_address(addr, WALLET_COLORS[wallet_name], graphdot)
                 graphviz_insert_wallet_address_mapping(wallet_name, addr, graphdot)  # wallet to address
-                graphviz_insert_address_cjtx_mapping(addr, coinjoin_txid, WALLET_COLORS[wallet_name], graphdot)  # address to coinjoin txid
+                graphviz_insert_address_cjtx_mapping(addr, cjtxid, WALLET_COLORS[wallet_name], graphdot)  # address to coinjoin txid
 
-        for addr in output_addresses:
+        #with graphdot.subgraph() as group:
+        for index in cjtx['outputs'].keys():
+            addr = cjtx['outputs'][index]['address']
             if address_wallet_mapping[addr] == wallet_name:
                 print('  -> ({}):{}'.format(wallet_name, addr))
                 graphviz_insert_address(addr, WALLET_COLORS[wallet_name], graphdot)
                 graphviz_insert_wallet_address_mapping(wallet_name, addr, graphdot)  # wallet to address
-                graphviz_insert_cjtx_address_mapping(coinjoin_txid, addr, WALLET_COLORS[wallet_name], graphdot)  # coinjoin to addr
+                graphviz_insert_cjtx_address_mapping(cjtxid, addr, cjtx['outputs'][index]['value'], WALLET_COLORS[wallet_name], graphdot)  # coinjoin to addr
 
 
 def analyze_coinjoin_stats(cjtx_stats, address_wallet_mapping, wallets_info):
@@ -355,10 +379,53 @@ def analyze_coinjoin_stats(cjtx_stats, address_wallet_mapping, wallets_info):
     #
     # How many times given wallet participated in coinjoin?
     #
+    wallets_used = []
+    for wallet_name in wallets_info.keys():
+        wallet_times_used = 0
+        for cjtx in cjtx_stats.keys():  # go over all coinjoin transactions
+            wallet_times_used_in_cjtx = 0
+            for index in cjtx_stats[cjtx]['inputs']:
+                if cjtx_stats[cjtx]['inputs'][index]['wallet_name'] == wallet_name:
+                    wallet_times_used_in_cjtx = wallet_times_used_in_cjtx + 1
+            wallet_times_used = wallet_times_used + wallet_times_used_in_cjtx
+        wallets_used.append(wallet_times_used)
+
+    plt.bar(wallets_info.keys(), wallets_used)
+    plt.xlabel('Wallet name')
+    plt.xticks(rotation=45)
+    plt.ylabel('Number of participations')
+    plt.title('Number of times given wallet was participating in coinjoin')
+    plt.savefig('num_times_wallet_used.png')
+    plt.close()
 
     #
     # Number of distinct wallets in coinjoins in time
     #
+    SLOT_WIDTH_SECONDS = 3600
+    experiment_start_time = datetime.strptime(cjtx_stats[list(cjtx_stats.keys())[0]]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")
+    slot_start_time = experiment_start_time
+    slot_last_time = datetime.strptime(cjtx_stats[list(cjtx_stats.keys())[-1]]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")
+    diff_seconds = (slot_last_time - slot_start_time).total_seconds()
+    num_slots = int(diff_seconds // SLOT_WIDTH_SECONDS)
+    cjtx_in_hours = {hour: [] for hour in range(0, num_slots + 1)}
+    for cjtx in cjtx_stats.keys():  # go over all coinjoin transactions
+        timestamp = datetime.strptime(cjtx_stats[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")
+        cjtx_hour = int((timestamp - slot_start_time).total_seconds() // SLOT_WIDTH_SECONDS)
+        cjtx_in_hours[cjtx_hour].append(cjtx)
+
+    plt.plot([len(cjtx_in_hours[cjtx_hour]) for cjtx_hour in cjtx_in_hours.keys()])
+    x_ticks = []
+    for slot in cjtx_in_hours.keys():
+        x_ticks.append((experiment_start_time + slot * timedelta(seconds=SLOT_WIDTH_SECONDS)).strftime("%Y-%m-%d %H:%M:%S"))
+
+    plt.xticks(range(0, len(x_ticks)), x_ticks)
+    plt.xticks(rotation=45, fontsize=6)
+    plt.ylim(0)
+    plt.subplots_adjust(bottom=0.2)
+    plt.ylabel('Number of coinjoin transactions')
+    plt.title('Number of coinjoin transactions in given time period')
+    plt.savefig('num_coinjoins_in_time.png')
+    plt.close()
 
 
 def parse_coinjoin_logs(wallets_info, graphdot):
@@ -384,7 +451,7 @@ def parse_coinjoin_logs(wallets_info, graphdot):
     # coord_input_file = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\20230830_5minRound_3parallel_overnight\\Logs_backend_20230829_5minRound_3parallel_overnight.txt'
     # client_input_file = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\20230830_5minRound_3parallel_overnight\\Logs_client_20230829_5minRound_3parallel_overnight.txt'
 
-    WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\debug\\WalletWasabi'
+    #WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\debug\\WalletWasabi'
 
 
 
@@ -392,15 +459,15 @@ def parse_coinjoin_logs(wallets_info, graphdot):
     client_input_file = '{}\\Client\\Logs.txt'.format(WASABIWALLET_DATA_DIR)
 
 
-    regex_pattern = r"(.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with params: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
-    start_round_ids = find_round_ids(coord_input_file, regex_pattern, 'round_id')
-    regex_pattern = r"(.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Successfully broadcast the coinjoin: (?P<cj_tx_id>[0-9a-f]*)\.?"
-    success_coinjoin_round_ids = find_round_ids(coord_input_file, regex_pattern, 'round_id')
+    regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with params: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
+    start_round_ids = find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp'])
+    regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Successfully broadcast the coinjoin: (?P<cj_tx_id>[0-9a-f]*)\.?"
+    success_coinjoin_round_ids = find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp'])
     round_cjtx_mapping = find_round_cjtx_mapping(coord_input_file, regex_pattern, 'round_id', 'cj_tx_id')
 
     # find all ids which have complete log from round creation (Created round with params)
     # to cj tx broadcast (Successfully broadcast the coinjoin)
-    full_round_ids = [id for id in success_coinjoin_round_ids if id in start_round_ids]
+    full_round_ids = [key_value for key_value in success_coinjoin_round_ids.keys() if key_value in start_round_ids.keys()]
 
     cjtx_stats = {}
     for round_id in full_round_ids:
@@ -410,11 +477,11 @@ def parse_coinjoin_logs(wallets_info, graphdot):
             cjtx_stats[cjtxid] = {}
 
         # extract input and output addreses
-        tx_record, input_addresses, output_addresses = extract_tx_info(round_cjtx_mapping[round_id])
+        tx_record = extract_tx_info(round_cjtx_mapping[round_id])
         tx_record['round_id'] = round_id
+        tx_record['round_start_time'] = start_round_ids[round_id]['timestamp']
+        tx_record['broadcast_time'] = success_coinjoin_round_ids[round_id]['timestamp']
         cjtx_stats[cjtxid] = tx_record
-        #cjtx_stats[cjtxid]['inputs'] = input_addresses
-        #cjtx_stats[cjtxid]['outputs'] = output_addresses
 
     # print only logs with full rounds
     #[print_round_logs(coord_input_file, id) for id in full_round_ids]
@@ -474,8 +541,8 @@ def parse_coinjoin_logs(wallets_info, graphdot):
         #
         print('**************************************')
         print('Address input-output mapping for cjtx: {}'.format(round_cjtx_mapping[round_id]))
-        graphviz_insert_cjtxid(round_cjtx_mapping[round_id], graphdot)
-        print_tx_info(cjtx_stats[cjtxid], address_wallet_mapping, round_cjtx_mapping[round_id], graphdot)
+        graphviz_insert_cjtxid(cjtx_stats[cjtxid], graphdot)
+        print_tx_info(cjtx_stats[cjtxid], address_wallet_mapping, graphdot)
         print('**************************************')
         print('**************************************')
 
@@ -508,7 +575,9 @@ def load_wallets_info():
 
 
 if __name__ == "__main__":
-    WALLET_INFO_VIA_RPC = False
+    cjtx_stats = {}
+
+    WALLET_INFO_VIA_RPC = True
     if WALLET_INFO_VIA_RPC:
         print("Loading current wallets info from WasabiWallet RPC")
         # Load wallets info via WasabiWallet RPC
@@ -525,6 +594,7 @@ if __name__ == "__main__":
             wallets_info = json.load(file)
 
     print("Wallets info loaded.")
+    cjtx_stats['wallets_info'] = wallets_info
 
     # Prepare Graph
     dot2 = Digraph(comment='CoinJoin={}'.format("XX"))
@@ -539,12 +609,11 @@ if __name__ == "__main__":
         graphviz_insert_wallet(wallet_name, dot2)
         color_ctr = color_ctr + 1
     # add special color for 'unknown' wallet
-    #WALLET_COLORS[UNKNOWN_WALLET_STRING] = 'olivedrab4'
     WALLET_COLORS[UNKNOWN_WALLET_STRING] = 'red'
     graphviz_insert_wallet(UNKNOWN_WALLET_STRING, dot2)
 
     # Parse and visualize conjoin
-    cjtx_stats = parse_coinjoin_logs(wallets_info, dot2)
+    cjtx_stats['coinjoins'] = parse_coinjoin_logs(wallets_info, dot2)
     #Save coinjoin transactions info into json
     with open("coinjoin_tx_info.json", "w") as file:
         file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
