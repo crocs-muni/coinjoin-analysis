@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 import os.path
 
 BTC_CLI_PATH = 'C:\\bitcoin-25.0\\bin\\bitcoin-cli'
-WASABIWALLET_DATA_DIR = 'c:\\Users\\xsvenda\\AppData\\Roaming\\WalletWasabi'
+WASABIWALLET_DATA_DIR = 'c:\\Users\\xsvenda\\AppData\\Roaming'
 TX_AD_CUT_LEN = 10  # length of displayed address or txid
 WALLET_COLORS = {}
 UNKNOWN_WALLET_STRING = 'UNKNOWN'
@@ -209,6 +209,7 @@ def extract_tx_info(txid):
 
     except json.JSONDecodeError as e:
         print("Error decoding JSON:", e)
+        return None
 
     return tx_record
 
@@ -383,7 +384,7 @@ def analyze_coinjoin_stats(cjtx_stats, address_wallet_mapping, wallets_info, bas
     ax1.set_xticklabels(range(0, len(wallets_in_frequency_all_ordered)))
     ax1.set_xlabel('Number of distinct wallets')
     ax1.set_ylabel('Number of coinjoins')
-    ax1.set_title('Number of separate wallets participating in coinjoin tx')
+    ax1.set_title('Number of coinjoins with specific number of distinct wallets')
 
     #
     # How many times given wallet participated in coinjoin?
@@ -404,10 +405,10 @@ def analyze_coinjoin_stats(cjtx_stats, address_wallet_mapping, wallets_info, bas
     x_ticks = list(wallets_info.keys())
     ax2.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
     ax2.set_ylabel('Number of participations')
-    ax2.set_title('Number of times given wallet was participating in coinjoin')
+    ax2.set_title('Number of inputs given wallet provided to coinjoin txs')
 
     #
-    # Number of distinct wallets in coinjoins in time
+    # Number of distinct wallets in coinjoins in time period
     #
     SLOT_WIDTH_SECONDS = 3600
     experiment_start_time = datetime.strptime(cjtx_stats[list(cjtx_stats.keys())[0]]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")
@@ -485,17 +486,20 @@ def parse_coinjoin_logs(base_directory):
     print('Parsing separate coinjoin transactions ', end='')
     cjtx_stats = {}
     for round_id in full_round_ids:
-        # Find coinjoin transaction id and create record if not already
-        cjtxid = round_cjtx_mapping[round_id]
-        if cjtxid not in cjtx_stats.keys():
-            cjtx_stats[cjtxid] = {}
-
-        # extract input and output addreses
+        # extract input and output addresses
         tx_record = extract_tx_info(round_cjtx_mapping[round_id])
-        tx_record['round_id'] = round_id
-        tx_record['round_start_time'] = start_round_ids[round_id]['timestamp']
-        tx_record['broadcast_time'] = success_coinjoin_round_ids[round_id]['timestamp']
-        cjtx_stats[cjtxid] = tx_record
+        if tx_record is not None:
+            # Find coinjoin transaction id and create record if not already
+            cjtxid = round_cjtx_mapping[round_id]
+            if cjtxid not in cjtx_stats.keys():
+                cjtx_stats[cjtxid] = {}
+
+            tx_record['round_id'] = round_id
+            tx_record['round_start_time'] = start_round_ids[round_id]['timestamp']
+            tx_record['broadcast_time'] = success_coinjoin_round_ids[round_id]['timestamp']
+            cjtx_stats[cjtxid] = tx_record
+        else:
+            print('ERROR: decoding transaction for tx={} (round id={})'.format(round_cjtx_mapping[round_id], round_id))
         print('.', end='')
 
     # print only logs with full rounds
@@ -613,34 +617,35 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc):
 
 
 if __name__ == "__main__":
-    cjtx_stats = {}
-
-    #WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol1\\20230830_5minRound_3parallel_overnight'
-    #WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol1\\20230901_5minRound_3parallel_max10inputs'
     #WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\20230903_5minRound_3parallel_max20inputs_fromFresh30btx\\'
     #WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\20230903_5minRound_1parallel_max10inputs_fromFresh30btx\\'
-    WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\20230903_5minRound_3parallel_max20inputs_fromFresh30btx'
-    #
-    # Load wallets info
-    cjtx_stats['wallets_info'] = obtain_wallets_info(WASABIWALLET_DATA_DIR, False)
+    #WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\20230903_5minRound_3parallel_max20inputs_fromFresh30btx'
+    #WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\20230902_5minRound_3parallel_max10inputs_fromFresh30btx_samererun'
+    #WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\20230902_5minRound_3parallel_max10inputs_fromFresh30btx'
 
-    # Parse conjoins from logs
-    cjtx_stats['coinjoins'] = parse_coinjoin_logs(WASABIWALLET_DATA_DIR)
+    LOAD_TXINFO_FROM_FILE = False
+    save_file = os.path.join(WASABIWALLET_DATA_DIR, "coinjoin_tx_info.json")
+    if LOAD_TXINFO_FROM_FILE:
+        # Load parsed coinjoin transactions again
+        with open(save_file, "r") as file:
+            cjtx_stats = json.load(file)
+    else:
+        # Load wallets info
+        cjtx_stats = {}
+        cjtx_stats['wallets_info'] = obtain_wallets_info(WASABIWALLET_DATA_DIR, False)
 
-    # Build mapping between address and controlling wallet
-    cjtx_stats['address_wallet_mapping'] = build_address_wallet_mapping(cjtx_stats)
+        # Parse conjoins from logs
+        cjtx_stats['coinjoins'] = parse_coinjoin_logs(WASABIWALLET_DATA_DIR)
+
+        # Build mapping between address and controlling wallet
+        cjtx_stats['address_wallet_mapping'] = build_address_wallet_mapping(cjtx_stats)
+
+        # Save parsed coinjoin transactions info into json
+        with open(save_file, "w") as file:
+            file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
     # Analyze various coinjoins statistics
     analyze_coinjoin_stats(cjtx_stats['coinjoins'], cjtx_stats['address_wallet_mapping'], cjtx_stats['wallets_info'], WASABIWALLET_DATA_DIR)
-
-    # Save parsed coinjoin transactions info into json
-    save_file = os.path.join(WASABIWALLET_DATA_DIR, "coinjoin_tx_info.json")
-    with open(save_file, "w") as file:
-        file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
-
-    # Load parsed coinjoin transactions again
-    with open(save_file, "r") as file:
-        cjtx_stats = json.load(file)
 
     # Visualize coinjoins
     # to_visualize = dict(list(cjtx_stats['coinjoins'].items())[120:])
