@@ -5,7 +5,7 @@
 # Copyright (c) 2023 zkSNACKs, Petr Svenda (@petrs)
 #
 # MIT license.
-
+import os.path
 import subprocess
 import json
 import sys
@@ -16,7 +16,7 @@ VERBOSE = True
 
 
 def config_extract(query):
-    config_path = "{}/client/Config.json".format(WASABIWALLET_DATA_DIR)
+    config_path = os.path.join(WASABIWALLET_DATA_DIR, "Client", "Config.json")
     result = subprocess.run(["jq", "-r", query, config_path], capture_output=True, text=True, shell=True)
     return result.stdout.strip()
 
@@ -54,7 +54,7 @@ def wcli(args):
     if VERBOSE:
         print(curl_command_str)
 
-    curl_command_str_getwalletinfo = "curl -u test:pswd --data-binary \"{\"jsonrpc\": \"2.0\", \"id\": \"curltext\", \"method\": \"getwalletinfo\", \"params\": []}\" -H \"content-type: text/plain;\" \"http://127.0.0.1:37128/Wallet1/\" -v"
+    #curl_command_str_getwalletinfo = "curl -u test:pswd --data-binary \"{\"jsonrpc\": \"2.0\", \"id\": \"curltext\", \"method\": \"getwalletinfo\", \"params\": []}\" -H \"content-type: text/plain;\" \"http://127.0.0.1:37128/Wallet1/\" -v"
     #                    curl -u test:pswd --data-binary "{\"jsonrpc\": \"2.0\", \"id\": \"curltext\", \"method\": \"getwalletinfo\", \"params\": []}" -H "content-type: text/plain;" "http://127.0.0.1:37128/Wallet1/" -v
     #curl_command_str2 = "curl -u test:pswd --data-binary \"{\"jsonrpc\": \"2.0\", \"id\": \"curltext\", \"method\": \"getwalletinfo\", \"params\": []}\" -H \"content-type: text/plain;\" \"http://127.0.0.1:37128/Wallet1/\" -v"
     #print(curl_command_str2)
