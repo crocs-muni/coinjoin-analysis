@@ -796,7 +796,7 @@ def load_wallets_info():
     """
     WALLET_NAME_TEMPLATE = 'Wallet'
     MAX_WALLETS = 10
-    wcli.WASABIWALLET_DATA_DIR = WASABIWALLET_DATA_DIR
+    wcli.WASABIWALLET_DATA_DIR = os.path.join(WASABIWALLET_DATA_DIR, "WalletWasabi")
     wcli.VERBOSE = False
     wallets_info = {}
     wallet_names = ['{}{}'.format(WALLET_NAME_TEMPLATE, index) for index in range(1, MAX_WALLETS + 1)]
@@ -887,10 +887,10 @@ def process_experiment(base_path):
 
     WASABIWALLET_DATA_DIR = base_path
 
-    LOAD_TXINFO_FROM_FILE = True   # If True, existence of coinjoin_tx_info.json is assumed and all data are read from it. Bitcoin Core/Wallet RPC is not required
+    LOAD_TXINFO_FROM_FILE = False   # If True, existence of coinjoin_tx_info.json is assumed and all data are read from it. Bitcoin Core/Wallet RPC is not required
     LOAD_WALLETS_INFO_VIA_RPC = False  # If False, existance of wallets_info.json with wallet information is assumed and loaded from
     GENERATE_COINJOIN_GRAPH = False
-    PARSE_ERRORS = False
+    PARSE_ERRORS = True
     save_file = os.path.join(WASABIWALLET_DATA_DIR, "coinjoin_tx_info.json")
     if LOAD_TXINFO_FROM_FILE:
         # Load parsed coinjoin transactions again
@@ -930,23 +930,31 @@ def process_experiment(base_path):
     print('All done.')
 
 
-if __name__ == "__main__":
-    BASE_PATH = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\'
-    #BASE_PATH = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\debug\\'
+def process_multiple_experiments(base_path):
     files = []
-    if os.path.exists(BASE_PATH):
-        files = os.listdir(BASE_PATH)
+    if os.path.exists(base_path):
+        files = os.listdir(base_path)
     else:
-        print('Path {} does not exists'.format(BASE_PATH))
+        print('Path {} does not exists'.format(base_path))
 
     for file in files:
-        target_base_path = os.path.join(BASE_PATH, file)
+        target_base_path = os.path.join(base_path, file)
         if os.path.isdir(target_base_path):
             test_path = os.path.join(target_base_path, 'WalletWasabi')
             if os.path.exists(test_path):
                 print('****************************')
                 print('Analyzing experiment {}'.format(target_base_path))
                 process_experiment(target_base_path)
+
+
+if __name__ == "__main__":
+    target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\20230914_3minRound_3parallel_max10inputs_fromFresh30btx'
+    process_experiment(target_base_path)
+
+
+    #BASE_PATH = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\debug\\'
+    #process_multiple_experiments(BASE_PATH)
 
 
 # Count number of unique / same inputs
