@@ -47,4 +47,13 @@ def send_to_address_btc_core(address : str, amount : float):
     print(response.json())
 
 
+def get_btc_balance():
+    request = "{\"jsonrpc\": \"2.0\",\"method\": \"getbalance\",\"params\": []}"
+    response = requests.post(REGTEST_CONTROL_CONSTANTS.bitcoin_regtest_rpc_url, data = request, auth=(REGTEST_CONTROL_CONSTANTS.btc_core_username, 
+                                                                                          REGTEST_CONTROL_CONSTANTS.btc_core_pswd))
+    response = response.json()
+    result = response["result"]
+    return result
+    
+
  
