@@ -849,7 +849,7 @@ def load_wallets_info():
     """
     WALLET_NAME_TEMPLATE = 'Wallet'
     WALLET_NAME_TEMPLATE = 'SimplePassiveWallet'
-    MAX_WALLETS = 16
+    MAX_WALLETS = 20
     wcli.WASABIWALLET_DATA_DIR = os.path.join(WASABIWALLET_DATA_DIR, "WalletWasabi")
     wcli.VERBOSE = False
     wallets_info = {}
