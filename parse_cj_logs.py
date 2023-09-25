@@ -223,12 +223,12 @@ def extract_tx_info(txid):
         index = 0
         for input in inputs:
             in_address, in_full_info = get_input_address(input['txid'], input[
-                'vout'])  # we need to read and parse previous transaction to obtain address
+                'vout'])  # we need to read and parse previous transaction to obtain address and other information
             tx_record['inputs'][index] = {}
             # tx_record['inputs'][index]['full_info'] = in_full_info
             tx_record['inputs'][index]['address'] = in_address
             tx_record['inputs'][index]['txid'] = input['txid']
-            tx_record['inputs'][index]['value'] = input['value']
+            tx_record['inputs'][index]['value'] = in_full_info['vout'][input['vout']]['value']
             input_addresses[index] = in_address  # store address to index of the input
             index = index + 1
 
