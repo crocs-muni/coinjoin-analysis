@@ -12,6 +12,9 @@ from collections import Counter
 from datetime import datetime, timedelta
 import os.path
 from enum import Enum
+sys.path.append('../../boltzmann-master/boltzmann/')
+import ludwig
+
 
 BTC_CLI_PATH = 'C:\\bitcoin-25.0\\bin\\bitcoin-cli'
 WASABIWALLET_DATA_DIR = 'c:\\Users\\xsvenda\\AppData\\Roaming'
@@ -23,7 +26,6 @@ PRINT_COLLATED_COORD_CLIENT_LOGS = False
 INSERT_WALLET_NODES = False
 ASSUME_COORDINATOR_WALLET = True
 VERBOSE = False
-
 
 
 class CJ_LOG_TYPES(Enum):
@@ -423,13 +425,15 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     rounds = cjtx_stats['rounds']
 
     # Create a larger figure
-    fig = plt.figure(figsize=(12, 8))
+    fig = plt.figure(figsize=(24, 16))
 
     # Create four subplots with their own axes
-    ax1 = fig.add_subplot(2, 2, 1)
-    ax2 = fig.add_subplot(2, 2, 2)
-    ax3 = fig.add_subplot(2, 2, 3)
-    ax4 = fig.add_subplot(2, 2, 4)
+    ax1 = fig.add_subplot(2, 3, 1)
+    ax2 = fig.add_subplot(2, 3, 2)
+    ax3 = fig.add_subplot(2, 3, 3)
+    ax4 = fig.add_subplot(2, 3, 4)
+    ax5 = fig.add_subplot(2, 3, 5)
+    ax6 = fig.add_subplot(2, 3, 6)
 
     #
     # Number of coinjoins per given time interval (e.g., hour)
@@ -594,6 +598,14 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax4.set_ylabel('Number of participations')
     ax4.set_title('Number of inputs given wallet provided to coinjoin txs')
 
+    # Transaction entropy analysis
+    tx_entropy = [coinjoins[cjtxid]['analysis']['processed']['tx_entropy'] for cjtxid in coinjoins.keys()]
+    efficiency = [coinjoins[cjtxid]['analysis']['processed']['efficiency'] for cjtxid in coinjoins.keys()]
+    #num_deterministic_links = [coinjoins[cjtxid]['analysis']['processed']['num_deterministic_links'] for cjtxid in coinjoins.keys()]
+    ax5.plot(efficiency, label='Efficiency')
+    ax5.plot(tx_entropy, label='Tx entropy')
+    ax5.legend()
+
     experiment_name = os.path.basename(base_path)
     plt.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
     plt.subplots_adjust(bottom=0.1, wspace=0.5, hspace=0.5)
@@ -601,6 +613,9 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     plt.savefig(save_file, dpi=300)
     plt.close()
     print('Basic coinjoins statistics saved into {}'.format(save_file))
+
+
+    #print(sum([1 for cjtxid in result.keys() if result[cjtxid]['processed']['successfully_analyzed'] ]))
 
 
 def build_address_wallet_mapping(cjtx_stats):
@@ -1008,11 +1023,18 @@ def process_experiment(base_path):
         with open(save_file, "w") as file:
             file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
+    # Compute coinjoin stats
+    result = ludwig.analyze_txs(list(cjtx_stats['coinjoins'].keys()))
+    for cjtxid in result.keys():
+        cjtx_stats['coinjoins'][cjtxid]['analysis'] = result[cjtxid]
+    # with open(save_file, "w") as file:
+    #     file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
+
     # Analyze various coinjoins statistics
     analyze_coinjoin_stats(cjtx_stats, WASABIWALLET_DATA_DIR)
 
     # Visualize coinjoins
-    to_visualize = dict(list(cjtx_stats['coinjoins'].items())[:10])
+    to_visualize = dict(list(cjtx_stats['coinjoins'].items())[:21])
     cjtx_stats['coinjoins'] = to_visualize
     if GENERATE_COINJOIN_GRAPH:
         visualize_coinjoins(cjtx_stats, WASABIWALLET_DATA_DIR)
@@ -1055,8 +1077,8 @@ if __name__ == "__main__":
     GENERATE_COINJOIN_GRAPH = True
 
     target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol3\\20230922_2000Round_3parallel_max10inputs_10wallets_1btc'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol3\\20230920_1000Round_3parallel_max10inputs_10wallets_1btc'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol3\\20230922_2000Round_3parallel_max10inputs_10wallets_1btc'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol3\\20230924_2000Round_1parallel_max10inputs_10wallets_0.2btc'
     process_experiment(target_base_path)
 
     # BASE_PATH = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\debug\\'
