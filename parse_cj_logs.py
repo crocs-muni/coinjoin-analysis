@@ -943,21 +943,6 @@ def visualize_coinjoins(cjtx_stats, base_path):
     graphviz_insert_wallet(COORDINATOR_WALLET_STRING, dot2)
 
     for cjtxid in cjtx_stats['coinjoins'].keys():
-        #
-        # Print collated round logs from coordinator and client for a given round
-        #
-        if PRINT_COLLATED_COORD_CLIENT_LOGS:
-            coord_round_logs = read_lines_for_round(coord_input_file, round_id)
-            client_round_logs = read_lines_for_round(client_input_file, round_id)
-
-            sorted_combined_list = sorted(coord_round_logs + client_round_logs)
-            for line in sorted_combined_list:
-                line = line.replace(" INFO", " INFO ")
-                if line in client_round_logs:
-                    print("  " + line.rstrip())
-                else:
-                    print(line.rstrip())
-
         # Visualize into large connected graph
         visualize_cjtx_graph(cjtx_stats['coinjoins'], cjtxid, address_wallet_mapping, dot2)
 
