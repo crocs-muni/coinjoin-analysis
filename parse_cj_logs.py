@@ -14,6 +14,8 @@ import os.path
 from enum import Enum
 sys.path.append('boltzmann/boltzmann/')
 import ludwig
+from cProfile import Profile
+from pstats import SortKey, Stats
 
 
 BTC_CLI_PATH = 'C:\\bitcoin-25.0\\bin\\bitcoin-cli'
@@ -1098,12 +1100,13 @@ def process_multiple_experiments(base_path):
 
 
 if __name__ == "__main__":
-    FRESH_COINJOIN = False
+    PROFILE_PERFORMANCE = False
+    FRESH_COINJOIN = True
     if FRESH_COINJOIN:
         # Extract all info from running wallet and fullnode
         LOAD_TXINFO_FROM_FILE = False  # If True, existence of coinjoin_tx_info.json is assumed and all data are read from it. Bitcoin Core/Wallet RPC is not required
         LOAD_WALLETS_INFO_VIA_RPC = True  # If False, existance of wallets_info.json with wallet information is assumed and loaded from
-        GENERATE_COINJOIN_GRAPH = False
+        GENERATE_COINJOIN_GRAPH = True
         PARSE_ERRORS = True
         COMPUTE_COINJOIN_STATS = True
     else:
@@ -1114,7 +1117,7 @@ if __name__ == "__main__":
         PARSE_ERRORS = False
         COMPUTE_COINJOIN_STATS = False
 
-    GENERATE_COINJOIN_GRAPH = True
+    #GENERATE_COINJOIN_GRAPH = True
     #COMPUTE_COINJOIN_STATS = True
 
     target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
@@ -1122,9 +1125,14 @@ if __name__ == "__main__":
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol3\\20230924_2000Round_1parallel_max10inputs_10wallets_0.2btc'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\20230903_5minRound_3parallel_max20inputs_fromFresh30btx'
 
-    process_experiment(target_base_path)
+    if PROFILE_PERFORMANCE:
+        with Profile() as profile:
+            process_experiment(target_base_path)
+            Stats(profile).strip_dirs().sort_stats(SortKey.TIME).print_stats()
+    else:
+        process_experiment(target_base_path)
 
     # BASE_PATH = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\debug\\'
     # process_multiple_experiments(BASE_PATH)
 
-# Count number of unique / same inputs
+
