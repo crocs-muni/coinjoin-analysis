@@ -901,13 +901,12 @@ def load_wallets_info():
     Loads information about wallets and their addresses using Wasabi RPC
     :return: dictionary for all loaded wallets with retrieved info
     """
-    WALLET_NAME_TEMPLATE = 'Wallet'
-    #WALLET_NAME_TEMPLATE = 'SimplePassiveWallet'
     MAX_WALLETS = 20
     wcli.WASABIWALLET_DATA_DIR = os.path.join(WASABIWALLET_DATA_DIR, "WalletWasabi")
     wcli.VERBOSE = False
     wallets_info = {}
-    wallet_names = ['{}{}'.format(WALLET_NAME_TEMPLATE, index) for index in range(1, MAX_WALLETS + 1)]
+    wallet_names = ['{}{}'.format('SimplePassiveWallet', index) for index in range(1, MAX_WALLETS + 1)]
+    wallet_names.extend(['{}{}'.format('Wallet', index) for index in range(1, MAX_WALLETS + 1)])
     wallet_names.append('DistributorWallet')
     for wallet_name in wallet_names:
         if wcli.wcli(['selectwallet', wallet_name, 'pswd']) is not None:
