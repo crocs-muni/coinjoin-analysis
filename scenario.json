@@ -24,9 +24,9 @@
             "PlebsDontPayThreshold": 1000000
         },
         "AllowP2wpkhInputs": true,
-        "AllowP2trInputs": true,
+        "AllowP2trInputs": false,
         "AllowP2wpkhOutputs": true,
-        "AllowP2trOutputs": true,
+        "AllowP2trOutputs": false,
         "RoundParallelization": 1
     },
 
