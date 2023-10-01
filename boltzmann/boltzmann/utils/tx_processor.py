@@ -79,8 +79,9 @@ def process_tx(tx, options, max_duration, max_txos, max_cj_intrafees_ratio=0):
     # Post processes results (replaces txo ids by bitcoin addresses)
     txo_ins = post_process_txos(txo_ins, map_ins)
     txo_outs = post_process_txos(txo_outs, map_outs)
-    print('Duration = %s' % str( (datetime.now() - t1).total_seconds()))       
-    return mat_lnk, nb_cmbn, txo_ins, txo_outs, fees, intrafees, efficiency
+    duration = (datetime.now() - t1).total_seconds()
+    print('Duration = %s' % str(duration))
+    return mat_lnk, nb_cmbn, txo_ins, txo_outs, fees, intrafees, efficiency, duration
 
 
 def filter_txos(txos, prefix):

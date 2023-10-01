@@ -233,6 +233,9 @@ class BitcoindRPCWrapper(BlockchainDataWrapper):
             * 'out' (List[dict]): same as 'prev_out'
         """
         rpc_style_tx = self._get_decoded_tx(txid)
+        return self.get_tx_from_result(txid, rpc_style_tx)
+
+    def get_tx_from_result(self, txid, rpc_style_tx):
         rpc_style_tx['block_height'] = self._get_block_height(txid, rpc_style_tx)
         rpc_style_tx['time'] = None
         rpc_style_tx['hash'] = rpc_style_tx['txid']

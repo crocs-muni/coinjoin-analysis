@@ -16,7 +16,11 @@ sys.path.append('boltzmann/boltzmann/')
 import ludwig
 from cProfile import Profile
 from pstats import SortKey, Stats
-
+from decimal import Decimal
+import jsonpickle
+from multiprocessing import Pool, RLock
+from multiprocessing.pool import ThreadPool
+from tqdm import tqdm
 
 BTC_CLI_PATH = 'C:\\bitcoin-25.0\\bin\\bitcoin-cli'
 WASABIWALLET_DATA_DIR = 'c:\\Users\\xsvenda\\AppData\\Roaming'
@@ -26,8 +30,9 @@ UNKNOWN_WALLET_STRING = 'UNKNOWN'
 COORDINATOR_WALLET_STRING = 'Coordinator'
 PRINT_COLLATED_COORD_CLIENT_LOGS = False
 INSERT_WALLET_NODES = False
-ASSUME_COORDINATOR_WALLET = True
+ASSUME_COORDINATOR_WALLET = False
 VERBOSE = False
+NUM_THREADS = 1
 
 
 class CJ_LOG_TYPES(Enum):
@@ -48,6 +53,32 @@ class CJ_LOG_TYPES(Enum):
 COLORS = ['darkorange', 'green', 'lightblue', 'gray', 'aquamarine', 'darkorchid1', 'cornsilk3', 'chocolate',
           'deeppink1', 'cadetblue', 'darkgreen', 'black']
 LINE_STYLES = ['-', '--', '-.', ':']
+
+
+# Define a custom JSON encoder that handles Decimal objects
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return str(obj)
+        return super(DecimalEncoder, self).default(obj)
+
+
+class DecimalDecoder(json.JSONDecoder):
+    def decode(self, s):
+        obj = super(DecimalDecoder, self).decode(s)
+        return self._decode_decimal(obj)
+
+    def _decode_decimal(self, obj):
+        if isinstance(obj, str):
+            try:
+                return Decimal(obj)
+            except ValueError:
+                pass
+        elif isinstance(obj, list):
+            return [self._decode_decimal(item) for item in obj]
+        elif isinstance(obj, dict):
+            return {key: self._decode_decimal(value) for key, value in obj.items()}
+        return obj
 
 
 def prepare_display_address(addr):
@@ -421,16 +452,17 @@ def graphviz_tx_info(cjtx, address_wallet_mapping, graphdot):
                 graphviz_insert_cjtx_address_mapping(cjtxid, addr, cjtx['outputs'][index]['value'],
                                                      WALLET_COLORS[wallet_name], graphdot)  # coinjoin to addr
     # insert detected deterministic links
-    for link in cjtx['analysis']['processed']['deterministic_links']:
-        addr1 = link[0][0]
-        addr2 = link[1][0]
-        edge_color = WALLET_COLORS[address_wallet_mapping[addr1]]
-        edge_color = 'black'
-        if address_wallet_mapping[addr1] != address_wallet_mapping[addr2]:
-            print('ERROR: {} Deterministic link mismatch {} to {}'.format(cjtxid, address_wallet_mapping[addr1], address_wallet_mapping[addr2]))
+    if 'analysis' in cjtx.keys():
+        for link in cjtx['analysis']['processed']['deterministic_links']:
+            addr1 = link[0][0]
+            addr2 = link[1][0]
+            edge_color = WALLET_COLORS[address_wallet_mapping[addr1]]
+            edge_color = 'black'
+            if address_wallet_mapping[addr1] != address_wallet_mapping[addr2]:
+                print('ERROR: {} Deterministic link mismatch {} to {}'.format(cjtxid, address_wallet_mapping[addr1], address_wallet_mapping[addr2]))
 
-        if len(cjtx['analysis']['processed']['deterministic_links']) < 100:  # do not draw cases with too many deterministic links
-            graphviz_insert_address_address_mapping(addr1, addr2, edge_color, graphdot)
+            if len(cjtx['analysis']['processed']['deterministic_links']) < 100:  # do not draw cases with too many deterministic links
+                graphviz_insert_address_address_mapping(addr1, addr2, edge_color, graphdot)
 
 
 def random_line_style():
@@ -441,7 +473,14 @@ def insert_percentages_annotations(bar_data, fig):
     total = sum(bar_data)
     percentages = [(value / total) * 100 for value in bar_data]
     for i, percentage in enumerate(percentages):
-        fig.text(i, bar_data[i], f'{percentage:.0f}%', ha='center')
+        fig.text(i, bar_data[i], f'{percentage:.1f}%', ha='center')
+
+
+# Function to calculate sliding window average
+def sliding_window_average(data, window_size):
+    cumsum = np.cumsum(data)
+    cumsum[window_size:] = cumsum[window_size:] - cumsum[:-window_size]
+    return cumsum[window_size - 1:] / window_size
 
 
 def analyze_coinjoin_stats(cjtx_stats, base_path):
@@ -459,17 +498,21 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     rounds = cjtx_stats['rounds']
 
     # Create four subplots with their own axes
-    fig = plt.figure(figsize=(24, 16))
-    ax1 = fig.add_subplot(3, 2, 1)
-    ax2 = fig.add_subplot(3, 2, 2)
-    ax3 = fig.add_subplot(3, 2, 3)
-    ax4 = fig.add_subplot(3, 2, 4)
-    ax5 = fig.add_subplot(3, 2, 5)
-    ax6 = fig.add_subplot(3, 2, 6)
+    fig = plt.figure(figsize=(48, 24))
+    ax1 = fig.add_subplot(3, 3, 1)
+    ax2 = fig.add_subplot(3, 3, 2)
+    ax3 = fig.add_subplot(3, 3, 3)
+    ax4 = fig.add_subplot(3, 3, 4)
+    ax5 = fig.add_subplot(3, 3, 5)
+    ax6 = fig.add_subplot(3, 3, 6)
+    ax7 = fig.add_subplot(3, 3, 7)
+    ax8 = fig.add_subplot(3, 3, 8)
+    ax9 = fig.add_subplot(3, 3, 9)
     #
     # Number of coinjoins per given time interval (e.g., hour)
     #
     SLOT_WIDTH_SECONDS = 3600
+    SLOT_WIDTH_SECONDS = 600
     broadcast_times = [datetime.strptime(coinjoins[item]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for item in
                        coinjoins.keys()]
     broadcast_times.extend(
@@ -522,7 +565,6 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     #
     # Number of coinjoins per given time interval (e.g., hour)
     #
-    SLOT_WIDTH_SECONDS = 3600
     broadcast_times = []
     for round_id in rounds.keys():
         if 'logs' in rounds[round_id]:
@@ -639,8 +681,13 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
         cj_time.append({'txid':cjtxid, 'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")})
     sorted_cj_time = sorted(cj_time,  key=lambda x: x['broadcast_time'])
 
-
-    ax5.plot([coinjoins[cjtx['txid']]['analysis']['processed']['efficiency'] for cjtx in sorted_cj_time if 'analysis' in coinjoins[cjtx['txid']].keys()], label='Wallet efficiency (%)')
+    efficiency_data = [coinjoins[cjtx['txid']]['analysis']['processed']['efficiency'] for cjtx in sorted_cj_time if 'analysis' in coinjoins[cjtx['txid']].keys()]
+    x = range(1, len(efficiency_data))
+    efficiency_data_avg10 = sliding_window_average(efficiency_data, 10)
+    efficiency_data_avg100 = sliding_window_average(efficiency_data, 100)
+    ax5.plot(efficiency_data, label='Wallet efficiency (%)')
+    #ax5.plot(x[10-2:], efficiency_data_avg10, label='Wallet efficiency avg(10) (%)')
+    ax5.plot(x[100-2:], efficiency_data_avg100, label='Wallet efficiency avg(100) (%)', linewidth=3, color='green')
     ax5.set_xlabel('Coinjoin in time')
     ax5.set_ylabel('Wallet efficiency (%)')
     ax5.legend()
@@ -649,6 +696,21 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax6.plot([coinjoins[cjtx['txid']]['analysis']['processed']['num_deterministic_links'] for cjtx in sorted_cj_time if 'analysis' in coinjoins[cjtx['txid']].keys()], label='Number of deterministic links (#)')
     ax6.set_xlabel('Coinjoin in time')
     ax6.legend()
+
+    #
+    # Number of inputs and outputs in coinjoins
+    #
+    outputs_data = [len(coinjoins[cjtx['txid']]['analysis']['processed']['outputs']) for cjtx in sorted_cj_time if 'analysis' in coinjoins[cjtx['txid']].keys()]
+    x = range(1, len(outputs_data))
+    outputs_data_avg10 = sliding_window_average(outputs_data, 10)
+    outputs_data_avg100 = sliding_window_average(outputs_data, 100)
+    ax7.plot(outputs_data, label='Number of outputs')
+    #ax7.plot(x[10 - 2:], outputs_data_avg10, label='Number of outputs avg(10)', linewidth=2)
+    ax7.plot(x[100 - 2:], outputs_data_avg100, label='Number of outputs avg(100)', linewidth=3, color='green')
+    ax7.plot([len(coinjoins[cjtx['txid']]['analysis']['processed']['inputs']) for cjtx in sorted_cj_time if 'analysis' in coinjoins[cjtx['txid']].keys()], label='Number of inputs', color='red')
+    ax7.set_xlabel('Coinjoin in time')
+    ax7.set_ylabel('Number of inputs/outputs')
+    ax7.legend()
 
     experiment_name = os.path.basename(base_path)
     plt.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
@@ -909,7 +971,6 @@ def load_wallets_info():
     wallets_info = {}
     wallet_names = ['{}{}'.format('SimplePassiveWallet', index) for index in range(1, MAX_WALLETS + 1)]
     wallet_names.extend(['{}{}'.format('Wallet', index) for index in range(1, MAX_WALLETS + 1)])
-    wallet_names.append('DistributorWallet')
     for wallet_name in wallet_names:
         if wcli.wcli(['selectwallet', wallet_name, 'pswd']) is not None:
             print('Wallet `{}` found.'.format(wallet_name))
@@ -949,9 +1010,8 @@ def visualize_coinjoins(cjtx_stats, base_path):
         visualize_cjtx_graph(cjtx_stats['coinjoins'], cjtxid, address_wallet_mapping, dot2)
 
     # render resulting graphviz
-    print(
-        'Going to render coinjoin relations graph (may take several minutes if larger number of coinjoins are visualized) ... ',
-        end='')
+    print('Going to render coinjoin relations graph (may take several minutes if larger number of coinjoins '
+          'are visualized) ... ', end='')
     save_file = os.path.join(base_path, "coinjoin_graph")
     dot2.render(save_file, view=True)
     print('done')
@@ -1004,13 +1064,6 @@ def fix_coordinator_wallet_addresses(cjtx_stats):
 
 
 def process_experiment(base_path):
-    # WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\20230903_5minRound_3parallel_max20inputs_fromFresh30btx\\'
-    # WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\20230903_5minRound_1parallel_max10inputs_fromFresh30btx\\'
-    # WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\20230903_5minRound_3parallel_max20inputs_fromFresh30btx'
-    # WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\20230902_5minRound_3parallel_max10inputs_fromFresh30btx_samererun'
-    # WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\20230902_5minRound_3parallel_max10inputs_fromFresh30btx'
-    # WASABIWALLET_DATA_DIR = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\20230905_3minRound_3parallel_max10inputs_fromFresh30btx'
-
     WASABIWALLET_DATA_DIR = base_path
 
     save_file = os.path.join(WASABIWALLET_DATA_DIR, "coinjoin_tx_info.json")
@@ -1050,20 +1103,75 @@ def process_experiment(base_path):
         print('done')
 
     # Compute coinjoin stats
-    if COMPUTE_COINJOIN_STATS:
-        for cjtxid in cjtx_stats['coinjoins'].keys():
-            if 'analysis' not in cjtx_stats['coinjoins'][cjtxid]:
-                #or cjtx_stats['coinjoins'][cjtxid]['analysis']['processed']['successfully_analyzed'] is False:
-                # run analysis per single coinjoin as analysis might be long and RPC connection is closed
-                result = ludwig.analyze_txs([cjtxid])
-                # insert analysis to cj info
-                cjtx_stats['coinjoins'][cjtxid]['analysis'] = result[cjtxid]
+    if RETRIEVE_TRANSACTION_INFO:
+        print('Fetching transactions info for analysis...')
+        result = ludwig.retrieve_txs(list(cjtx_stats['coinjoins'].keys()))
+        for cjtxid in result.keys():
+            cjtx_stats['coinjoins'][cjtxid]['raw_tx'] = jsonpickle.encode(result[cjtxid])
 
-            # check for potentially incorrect mapping (as we know ground truth)
-            for link in cjtx_stats['coinjoins'][cjtxid]['analysis']['processed']['deterministic_links']:
-                if cjtx_stats['address_wallet_mapping'][link[0][0]] != cjtx_stats['address_wallet_mapping'][link[1][0]]:
-                    print('ERROR: {} Deterministic link mismatch {} to {}'.format(cjtxid, cjtx_stats['address_wallet_mapping'][link[0][0]],
-                                                                                  cjtx_stats['address_wallet_mapping'][link[1][0]]))
+        print('Saving updated transaction info (raw_tx)...', end='')
+        with open(save_file, "w") as file:
+            file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
+        print('done')
+
+    if LOAD_COMPUTED_TRANSACTION_INFO:
+        # if available, use already computed tx entropy analysis
+        #   (expected files 'tx_analysis_cjtxid'.json in 'tx' folder)
+        tx_info_path = os.path.join(WASABIWALLET_DATA_DIR, "tx")
+        if os.path.isdir(tx_info_path):
+            for cjtxid in cjtx_stats['coinjoins'].keys():
+                tx_analysis_path = os.path.join(tx_info_path, "tx_analysis_{}.json".format(cjtxid))
+                if os.path.isfile(tx_analysis_path):
+                    # Create analysis section of not yet
+                    if 'analysis' not in cjtx_stats['coinjoins'][cjtxid].keys():
+                        cjtx_stats['coinjoins'][cjtxid]['analysis'] = {}
+                    # Load existing tx analysis
+                    with open(tx_analysis_path, "r") as file:
+                        tx_analysis = json.load(file)
+                    cjtx_stats['coinjoins'][cjtxid]['analysis'].update(tx_analysis[cjtxid])
+
+            print('Saving updated transaction info (tx_analysis)...', end='')
+            with open(save_file, "w") as file:
+                file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
+            print('done')
+
+    # Compute coinjoin stats
+    if COMPUTE_COINJOIN_STATS or FORCE_COMPUTE_COINJOIN_STATS:
+        if PARALLELIZE_COMPUTE_COINJOIN_STATS:
+            def analyze_tx(cjtx: dict):
+                tx_result = ludwig.analyze_txs_from_prefetched_simple(cjtx[0])
+                for txid in cjtx[0].keys():
+                    with open('{}/tx_analysis_{}.json'.format(WASABIWALLET_DATA_DIR, txid), "w") as file:
+                        file.write(json.dumps(tx_result, indent=4))
+                return tx_result
+
+            to_analyze = []
+            for cjtxid in cjtx_stats['coinjoins'].keys():
+                if FORCE_COMPUTE_COINJOIN_STATS or 'analysis' not in cjtx_stats['coinjoins'][cjtxid]:
+                    tx = jsonpickle.decode(cjtx_stats['coinjoins'][cjtxid]['raw_tx'])
+                    to_analyze.append([{cjtxid: tx}])
+
+            with tqdm(total=len(to_analyze)) as progress:
+                for result in ThreadPool(NUM_THREADS).imap(analyze_tx, to_analyze):
+                    progress.update(1)
+                    for txid in result.keys():
+                        cjtx_stats['coinjoins'][txid]['analysis'] = result[txid]
+        else:
+            for cjtxid in cjtx_stats['coinjoins'].keys():
+                if FORCE_COMPUTE_COINJOIN_STATS or 'analysis' not in cjtx_stats['coinjoins'][cjtxid]:
+                    tx = jsonpickle.decode(cjtx_stats['coinjoins'][cjtxid]['raw_tx'])
+                    if tx is not None:
+                        result = ludwig.analyze_txs_from_prefetched_simple({cjtxid: tx})
+
+                        # insert analysis to cj info
+                        cjtx_stats['coinjoins'][cjtxid]['analysis'] = result[cjtxid]
+
+                # check for potentially incorrect mapping (as we know ground truth)
+                if 'analysis' in cjtx_stats['coinjoins'][cjtxid]:
+                    for link in cjtx_stats['coinjoins'][cjtxid]['analysis']['processed']['deterministic_links']:
+                        if cjtx_stats['address_wallet_mapping'][link[0][0]] != cjtx_stats['address_wallet_mapping'][link[1][0]]:
+                            print('ERROR: {} Deterministic link mismatch {} to {}'.format(cjtxid, cjtx_stats['address_wallet_mapping'][link[0][0]],
+                                                                                          cjtx_stats['address_wallet_mapping'][link[1][0]]))
         with open(save_file, "w") as file:
             file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
     print('Entropy analysis: {} txs out of {} successfully analyzed'.format(sum([1 for cjtxid in cjtx_stats['coinjoins'].keys() if 'analysis' in cjtx_stats['coinjoins'][cjtxid] and cjtx_stats['coinjoins'][cjtxid]['analysis']['processed']['successfully_analyzed'] is True]), len(cjtx_stats['coinjoins'].keys())))
@@ -1099,31 +1207,91 @@ def process_multiple_experiments(base_path):
                 process_experiment(target_base_path)
 
 
+class ANALYSIS_TYPE(Enum):
+    COLLECT_COINJOIN_DATA_LOCAL = 1
+    COMPUTE_COINJOIN_TXINFO_REMOTE = 2
+    ANALYZE_COINJOIN_DATA_LOCAL = 3
+
+
 if __name__ == "__main__":
     PROFILE_PERFORMANCE = False
-    FRESH_COINJOIN = True
-    if FRESH_COINJOIN:
+
+    # Analysis type
+    #cfg = ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL
+    cfg = ANALYSIS_TYPE.ANALYZE_COINJOIN_DATA_LOCAL
+    #cfg = ANALYSIS_TYPE.COMPUTE_COINJOIN_TXINFO_REMOTE
+
+    if cfg == ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL:
         # Extract all info from running wallet and fullnode
-        LOAD_TXINFO_FROM_FILE = False  # If True, existence of coinjoin_tx_info.json is assumed and all data are read from it. Bitcoin Core/Wallet RPC is not required
-        LOAD_WALLETS_INFO_VIA_RPC = True  # If False, existance of wallets_info.json with wallet information is assumed and loaded from
-        GENERATE_COINJOIN_GRAPH = True
+        # If True, existence of coinjoin_tx_info.json is assumed and all data are read from it.
+        # Bitcoin Core/Wallet RPC is not required
+        LOAD_TXINFO_FROM_FILE = False
+        # If True, info is obtained via RPC from WalletWasabi client, otherwise existence of wallets_info.json
+        # with wallet information is assumed and loaded from
+        LOAD_WALLETS_INFO_VIA_RPC = True
+        # If True, coordinator logs are parsed for various error logs
         PARSE_ERRORS = True
-        COMPUTE_COINJOIN_STATS = True
-    else:
+        # If True, transaction info is retrieved from Bitcoin Core via RPC
+        RETRIEVE_TRANSACTION_INFO = True
+        # If True, subfolder 'tx' is searched for existence of alreday computed transaction analysis results
+        # (tx_analysis_*.json). Used when tx analysis is performed externally and not all at once
+        # (e.g., with high paralellism)
+        LOAD_COMPUTED_TRANSACTION_INFO = False
+        # If True, coinjoin analysis (Boltzmann links etc.) is performed if not yet done for given tx
+        COMPUTE_COINJOIN_STATS = False
+        # If True, recomputation of coinjoin analysis is performed even if already computed before
+        FORCE_COMPUTE_COINJOIN_STATS = False
+        # If True, multiple analysis threads (NUM_THREADS) are started for analysis
+        PARALLELIZE_COMPUTE_COINJOIN_STATS = False
+        # If True, graphviz tx graph is executed
+        GENERATE_COINJOIN_GRAPH = False
+        # Base start path with data for processing (WalletWasabi and other folders)
+        target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
+    elif cfg == ANALYSIS_TYPE.ANALYZE_COINJOIN_DATA_LOCAL:
         # Just recompute analysis
+        LOAD_TXINFO_FROM_FILE = True
+        LOAD_WALLETS_INFO_VIA_RPC = False
+        PARSE_ERRORS = False
+
+        RETRIEVE_TRANSACTION_INFO = False
+
+        LOAD_COMPUTED_TRANSACTION_INFO = True
+
+        COMPUTE_COINJOIN_STATS = False
+        FORCE_COMPUTE_COINJOIN_STATS = False
+        PARALLELIZE_COMPUTE_COINJOIN_STATS = False
+
+        GENERATE_COINJOIN_GRAPH = True
+
+        target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
+    elif cfg == ANALYSIS_TYPE.COMPUTE_COINJOIN_TXINFO_REMOTE:
+        # Compute only time-consuming transaction entropy analysis from pre-retrieved transactions
         LOAD_TXINFO_FROM_FILE = True
         LOAD_WALLETS_INFO_VIA_RPC = False
         GENERATE_COINJOIN_GRAPH = False
         PARSE_ERRORS = False
-        COMPUTE_COINJOIN_STATS = False
+
+        RETRIEVE_TRANSACTION_INFO = False
+
+        LOAD_COMPUTED_TRANSACTION_INFO = True
+
+        COMPUTE_COINJOIN_STATS = True
+        FORCE_COMPUTE_COINJOIN_STATS = True
+        PARALLELIZE_COMPUTE_COINJOIN_STATS = True
+        NUM_THREADS = 100
+
+        GENERATE_COINJOIN_GRAPH = False
+
+        target_base_path = '/home/xsvenda/coinjoin/'
 
     #GENERATE_COINJOIN_GRAPH = True
+    #FORCE_COMPUTE_COINJOIN_STATS = False
     #COMPUTE_COINJOIN_STATS = True
+    #PARALLELIZE_COINJOIN_STATS = False
 
-    target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol3\\20230922_2000Round_3parallel_max10inputs_10wallets_1btc'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol3\\20230924_2000Round_1parallel_max10inputs_10wallets_0.2btc'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol2\\20230903_5minRound_3parallel_max20inputs_fromFresh30btx'
+    #target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
+    #target_base_path = '/home/xsvenda/coinjoin/'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230930_1000Round_1parallel_max7inputs_10wallets_1Msats\\'
 
     if PROFILE_PERFORMANCE:
         with Profile() as profile:
