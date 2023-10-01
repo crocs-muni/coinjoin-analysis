@@ -499,15 +499,31 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
 
     # Create four subplots with their own axes
     fig = plt.figure(figsize=(48, 24))
-    ax1 = fig.add_subplot(3, 3, 1)
-    ax2 = fig.add_subplot(3, 3, 2)
-    ax3 = fig.add_subplot(3, 3, 3)
-    ax4 = fig.add_subplot(3, 3, 4)
-    ax5 = fig.add_subplot(3, 3, 5)
-    ax6 = fig.add_subplot(3, 3, 6)
-    ax7 = fig.add_subplot(3, 3, 7)
-    ax8 = fig.add_subplot(3, 3, 8)
-    ax9 = fig.add_subplot(3, 3, 9)
+    ax1 = fig.add_subplot(3, 4, 1)
+    ax2 = fig.add_subplot(3, 4, 2)
+    ax3 = fig.add_subplot(3, 4, 3)
+    ax4 = fig.add_subplot(3, 4, 4)
+    ax5 = fig.add_subplot(3, 4, 5)
+    ax6 = fig.add_subplot(3, 4, 6)
+    ax7 = fig.add_subplot(3, 4, 7)
+    ax8 = fig.add_subplot(3, 4, 8)
+    ax9 = fig.add_subplot(3, 4, 9)
+    ax10 = fig.add_subplot(3, 4, 10)
+    ax11 = fig.add_subplot(3, 4, 11)
+    ax12 = fig.add_subplot(3, 4, 12)
+
+    ax_coinjoins = ax1
+    ax_logs = ax2
+    ax_wallets_distrib = ax5
+    ax_utxo_provided = ax6
+    ax_num_inoutputs = ax3
+    ax_num_participating_wallets = ax4
+    ax_tx_entropy = ax7
+    ax_txentropy_roundtime = ax8
+    ax_txentropy_inoutsize = ax9
+    ax_txcombinations = ax10
+
+
     #
     # Number of coinjoins per given time interval (e.g., hour)
     #
@@ -546,21 +562,21 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
         del cjtx_in_hours[len(cjtx_in_hours.keys()) - 1]
         del cjtx_blame_in_hours[len(cjtx_blame_in_hours.keys()) - 1]
         del rounds_started_in_hours[len(rounds_started_in_hours.keys()) - 1]
-    ax1.plot([len(rounds_started_in_hours[hour]) for hour in rounds_started_in_hours.keys()], label='Rounds started',
+    ax_coinjoins.plot([len(rounds_started_in_hours[hour]) for hour in rounds_started_in_hours.keys()], label='Rounds started',
              color='blue')
-    ax1.plot([len(cjtx_in_hours[cjtx_hour]) for cjtx_hour in cjtx_in_hours.keys()], label='All coinjoins finished',
+    ax_coinjoins.plot([len(cjtx_in_hours[cjtx_hour]) for cjtx_hour in cjtx_in_hours.keys()], label='All coinjoins finished',
              color='green')
-    ax1.plot([len(cjtx_blame_in_hours[cjtx_hour]) for cjtx_hour in cjtx_blame_in_hours.keys()],
+    ax_coinjoins.plot([len(cjtx_blame_in_hours[cjtx_hour]) for cjtx_hour in cjtx_blame_in_hours.keys()],
              label='Blame coinjoins finished', color='orange')
-    ax1.legend()
+    ax_coinjoins.legend()
     x_ticks = []
     for slot in cjtx_in_hours.keys():
         x_ticks.append(
             (experiment_start_time + slot * timedelta(seconds=SLOT_WIDTH_SECONDS)).strftime("%Y-%m-%d %H:%M:%S"))
-    ax1.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
-    ax1.set_ylim(0)
-    ax1.set_ylabel('Number of coinjoin transactions')
-    ax1.set_title('Number of coinjoin transactions in given time period')
+    ax_coinjoins.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
+    ax_coinjoins.set_ylim(0)
+    ax_coinjoins.set_ylabel('Number of coinjoin transactions')
+    ax_coinjoins.set_title('Number of coinjoin transactions in given time period')
 
     #
     # Number of coinjoins per given time interval (e.g., hour)
@@ -592,18 +608,18 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
             linestyle = LINE_STYLES[index % len(LINE_STYLES)]
             if log_type not in (CJ_LOG_TYPES.ROUND_STARTED.name, CJ_LOG_TYPES.BLAME_ROUND_STARTED.name,
                                 CJ_LOG_TYPES.COINJOIN_BROADCASTED.name):
-                ax2.plot([len(logs_in_hours[log_type][log_hour]) for log_hour in logs_in_hours[log_type].keys()],
+                ax_logs.plot([len(logs_in_hours[log_type][log_hour]) for log_hour in logs_in_hours[log_type].keys()],
                          label='{} ({})'.format(log_type, num_logs_of_type), linestyle=linestyle)
         index = index + 1
-    ax2.legend(fontsize=6)
+    ax_logs.legend(fontsize=6)
     x_ticks = []
     for slot in cjtx_in_hours.keys():
         x_ticks.append(
             (experiment_start_time + slot * timedelta(seconds=SLOT_WIDTH_SECONDS)).strftime("%Y-%m-%d %H:%M:%S"))
-    ax2.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
-    ax2.set_ylim(0)
-    ax2.set_ylabel('Number of logs')
-    ax2.set_title('Number of logs in a given time period')
+    ax_logs.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
+    ax_logs.set_ylim(0)
+    ax_logs.set_ylabel('Number of logs')
+    ax_logs.set_title('Number of logs in a given time period')
 
     #
     # Number of distinct wallets in coinjoins (including coordinator)
@@ -637,14 +653,15 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
             wallets_in_frequency_all[wallet_num] = 0
     wallets_in_frequency_all_ordered = [wallets_in_frequency_all[key] for key in
                                         sorted(wallets_in_frequency_all.keys())]
-    ax3.bar(range(0, len(wallets_in_frequency_all_ordered)), wallets_in_frequency_all_ordered)
-    insert_percentages_annotations(wallets_in_frequency_all_ordered, ax3)  # Annotate the bars with percentages
+    ax_wallets_distrib.bar(range(0, len(wallets_in_frequency_all_ordered)), wallets_in_frequency_all_ordered)
+    insert_percentages_annotations(wallets_in_frequency_all_ordered, ax_wallets_distrib)  # Annotate the bars with percentages
 
-    ax3.set_xticks(range(0, len(wallets_in_frequency_all_ordered)))
-    ax3.set_xticklabels(range(0, len(wallets_in_frequency_all_ordered)))
-    ax3.set_xlabel('Number of distinct wallets')
-    ax3.set_ylabel('Number of coinjoins')
-    ax3.set_title('Number of coinjoins with specific number of distinct wallets')
+    ax_wallets_distrib.set_xticks(range(0, len(wallets_in_frequency_all_ordered)))
+    ax_wallets_distrib.set_xticklabels(range(0, len(wallets_in_frequency_all_ordered)))
+    ax_wallets_distrib.set_xlabel('Number of distinct wallets')
+    ax_wallets_distrib.set_ylabel('Number of coinjoins')
+    ax_wallets_distrib.set_xlim(0.5)
+    ax_wallets_distrib.set_title('Number of coinjoins with specific number of distinct wallets  (all transactions)')
 
     #
     # How many times given wallet participated in coinjoin?
@@ -663,39 +680,21 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
             wallet_times_used = wallet_times_used + wallet_times_used_in_cjtx
         wallets_used.append(wallet_times_used)
 
-    ax4.bar(wallets_info.keys(), wallets_used)
-    insert_percentages_annotations(wallets_used, ax4)
-    ax4.set_xlabel('Wallet name')
+    ax_utxo_provided.bar(wallets_info.keys(), wallets_used)
+    insert_percentages_annotations(wallets_used, ax_utxo_provided)
+    ax_utxo_provided.set_xlabel('Wallet name')
     x_ticks = list(wallets_info.keys())
-    ax4.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
-    ax4.set_ylabel('Number of participations')
-    ax4.set_title('Number of inputs given wallet provided to coinjoin txs')
+    ax_utxo_provided.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
+    ax_utxo_provided.set_ylabel('Number of participations')
+    ax_utxo_provided.set_title('Number of inputs given wallet provided to coinjoin txs (all transactions)')
 
     #
     # Transaction entropy analysis
     #
-    #num_deterministic_links = [coinjoins[cjtxid]['analysis']['processed']['num_deterministic_links'] for cjtxid in coinjoins.keys()]
-    wallets_in_frequency_all_ordered = [wallets_in_frequency_all[key] for key in sorted(wallets_in_frequency_all.keys())]
     cj_time = []
     for cjtxid in coinjoins.keys():
         cj_time.append({'txid':cjtxid, 'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")})
     sorted_cj_time = sorted(cj_time,  key=lambda x: x['broadcast_time'])
-
-    efficiency_data = [coinjoins[cjtx['txid']]['analysis']['processed']['efficiency'] for cjtx in sorted_cj_time if 'analysis' in coinjoins[cjtx['txid']].keys()]
-    x = range(1, len(efficiency_data))
-    efficiency_data_avg10 = sliding_window_average(efficiency_data, 10)
-    efficiency_data_avg100 = sliding_window_average(efficiency_data, 100)
-    ax5.plot(efficiency_data, label='Wallet efficiency (%)')
-    #ax5.plot(x[10-2:], efficiency_data_avg10, label='Wallet efficiency avg(10) (%)')
-    ax5.plot(x[100-2:], efficiency_data_avg100, label='Wallet efficiency avg(100) (%)', linewidth=3, color='green')
-    ax5.set_xlabel('Coinjoin in time')
-    ax5.set_ylabel('Wallet efficiency (%)')
-    ax5.legend()
-
-    ax6.plot([coinjoins[cjtx['txid']]['analysis']['processed']['tx_entropy'] for cjtx in sorted_cj_time if 'analysis' in coinjoins[cjtx['txid']].keys()], label='Tx entropy (bits)')
-    ax6.plot([coinjoins[cjtx['txid']]['analysis']['processed']['num_deterministic_links'] for cjtx in sorted_cj_time if 'analysis' in coinjoins[cjtx['txid']].keys()], label='Number of deterministic links (#)')
-    ax6.set_xlabel('Coinjoin in time')
-    ax6.legend()
 
     #
     # Number of inputs and outputs in coinjoins
@@ -704,17 +703,128 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     x = range(1, len(outputs_data))
     outputs_data_avg10 = sliding_window_average(outputs_data, 10)
     outputs_data_avg100 = sliding_window_average(outputs_data, 100)
-    ax7.plot(outputs_data, label='Number of outputs')
-    #ax7.plot(x[10 - 2:], outputs_data_avg10, label='Number of outputs avg(10)', linewidth=2)
-    ax7.plot(x[100 - 2:], outputs_data_avg100, label='Number of outputs avg(100)', linewidth=3, color='green')
-    ax7.plot([len(coinjoins[cjtx['txid']]['analysis']['processed']['inputs']) for cjtx in sorted_cj_time if 'analysis' in coinjoins[cjtx['txid']].keys()], label='Number of inputs', color='red')
-    ax7.set_xlabel('Coinjoin in time')
-    ax7.set_ylabel('Number of inputs/outputs')
-    ax7.legend()
+    ax_num_inoutputs.plot(outputs_data, label='Number of outputs')
+    #ax_num_inoutputs.plot(x[10 - 2:], outputs_data_avg10, label='Number of outputs avg(10)', linewidth=2)
+    ax_num_inoutputs.plot(x[100 - 2:], outputs_data_avg100, label='Number of outputs avg(100)', linewidth=3, color='red')
+    ax_num_inoutputs.plot([len(coinjoins[cjtx['txid']]['analysis']['processed']['inputs']) for cjtx in sorted_cj_time if 'analysis' in coinjoins[cjtx['txid']].keys()], label='Number of inputs', color='magenta')
+    ax_num_inoutputs.set_xlabel('Coinjoin in time')
+    ax_num_inoutputs.set_ylabel('Number of inputs/outputs')
+    ax_num_inoutputs.legend()
+    ax_num_inoutputs.set_title('Number of inputs and outputs of cj transactions (all transactions)')
+
+    #
+    # Wallet efficiency in time
+    #
+    # efficiency_data = [coinjoins[cjtx['txid']]['analysis']['processed']['efficiency'] for cjtx in sorted_cj_time if 'analysis' in coinjoins[cjtx['txid']].keys()
+    #                    and coinjoins[cjtx['txid']]['analysis']['processed']['successfully_analyzed'] is True]
+    # x = range(1, len(efficiency_data))
+    # efficiency_data_avg10 = sliding_window_average(efficiency_data, 10)
+    # efficiency_data_avg100 = sliding_window_average(efficiency_data, 100)
+    # ax5.plot(efficiency_data, label='Wallet efficiency (%)')
+    # #ax5.plot(x[10-2:], efficiency_data_avg10, label='Wallet efficiency avg(10) (%)')
+    # ax5.plot(x[100-2:], efficiency_data_avg100, label='Wallet efficiency avg(100) (%)', linewidth=3, color='green')
+    # ax5.set_xlabel('Coinjoin in time')
+    # ax5.set_ylabel('Wallet efficiency (%)')
+    # ax5.legend()
+    # ax5.set_title('Wallet efficiency with respect to perfect coinjoin (only successfully analyzed transactions!)')
+
+    #
+    # Transaction entropy and deterministic links
+    #
+    tx_entropy_data = [coinjoins[cjtx['txid']]['analysis']['processed']['tx_entropy'] for cjtx in sorted_cj_time
+                       if 'analysis' in coinjoins[cjtx['txid']].keys() and coinjoins[cjtx['txid']]['analysis']['processed']['successfully_analyzed'] is True]
+    x = range(1, len(tx_entropy_data))
+    tx_entropy_data_avg100 = sliding_window_average(tx_entropy_data, 100)
+    ax_tx_entropy.plot(tx_entropy_data, label='Tx entropy (bits)')
+    ax_tx_entropy.plot(x[100-2:], tx_entropy_data_avg100, label='Tx entropy avg(100) (bits)', linewidth=3, color='red')
+    ax_tx_entropy.plot([coinjoins[cjtx['txid']]['analysis']['processed']['num_deterministic_links'] for cjtx in sorted_cj_time
+              if 'analysis' in coinjoins[cjtx['txid']].keys() and coinjoins[cjtx['txid']]['analysis']['processed']['successfully_analyzed'] is True], label='Number of deterministic links (#)')
+    ax_tx_entropy.set_xlabel('Coinjoin in time')
+    ax_tx_entropy.legend()
+    ax_tx_entropy.set_title('Transaction entropy and deterministic links (only successfully analyzed transactions!)')
+
+    # Number of different wallets involved time
+    num_wallets_in_time_data = [coinjoins[cjtx['txid']]['num_wallets_involved'] for cjtx in sorted_cj_time]
+    num_wallets_in_time_data_avg100 = sliding_window_average(num_wallets_in_time_data, 100)
+    x = range(1, len(num_wallets_in_time_data))
+    ax_num_participating_wallets.plot(num_wallets_in_time_data, label='Number of participating wallets')
+    ax_num_participating_wallets.plot(x[100-2:], num_wallets_in_time_data_avg100, label='Number of participating wallets avg(100)', linewidth=3, color='red')
+    ax_num_participating_wallets.set_xlabel('Coinjoin in time')
+    ax_num_participating_wallets.set_ylabel('Number of wallets')
+    ax_num_participating_wallets.legend()
+    ax_num_participating_wallets.set_title('Number of wallets participating in coinjoin transaction (all transactions)')
+
+    #
+    # tx entropy versus coinjoin round start-broadcast time
+    #
+    x_cat, y_cat, x_cat_blame, y_cat_blame = [], [], [], []
+    for cjtx in sorted_cj_time:
+        if ('analysis' in coinjoins[cjtx['txid']].keys()
+                and coinjoins[cjtx['txid']]['analysis']['processed']['successfully_analyzed'] is True):
+            time_diff = (datetime.strptime(coinjoins[cjtx['txid']]['broadcast_time'],"%Y-%m-%d %H:%M:%S.%f")
+                         - datetime.strptime(coinjoins[cjtx['txid']]['round_start_time'],"%Y-%m-%d %H:%M:%S.%f")).total_seconds()
+            tx_entropy = coinjoins[cjtx['txid']]['analysis']['processed']['tx_entropy']
+            if coinjoins[cjtx['txid']]['is_blame_round'] is False:
+                x_cat.append(time_diff)
+                y_cat.append(tx_entropy)
+            else:
+                x_cat_blame.append(time_diff)
+                y_cat_blame.append(tx_entropy)
+
+    ax_txentropy_roundtime.scatter(x_cat, y_cat, label='Normal round', color='green')
+    ax_txentropy_roundtime.scatter(x_cat_blame, y_cat_blame, label='Blame round', color='red')
+    ax_txentropy_roundtime.set_xlabel('Length of round (seconds)')
+    ax_txentropy_roundtime.set_ylabel('Transaction entropy (bits)')
+    ax_txentropy_roundtime.legend()
+    ax_txentropy_roundtime.set_title('Dependency of tx entropy on round duration (only successfully analyzed transactions!)')
+
+
+    #
+    # tx entropy versus coinjoin round start-broadcast time
+    #
+    x_cat_in, y_cat_in, x_cat_out, y_cat_out = [], [], [], []
+    for cjtx in sorted_cj_time:
+        if ('analysis' in coinjoins[cjtx['txid']].keys()
+                and coinjoins[cjtx['txid']]['analysis']['processed']['successfully_analyzed'] is True):
+            cjtx_record_processed = coinjoins[cjtx['txid']]['analysis']['processed']
+            tx_entropy = cjtx_record_processed['tx_entropy']
+            for input in cjtx_record_processed['inputs']:
+                x_cat_in.append(input[1])
+                y_cat_in.append(tx_entropy)
+            for output in cjtx_record_processed['outputs']:
+                x_cat_out.append(output[1])
+                y_cat_out.append(tx_entropy)
+
+    ax_txentropy_inoutsize.scatter(x_cat_in, y_cat_in, label='Tx inputs', color='green', s=1)
+    ax_txentropy_inoutsize.scatter(x_cat_out, y_cat_out, label='Tx outputs', color='red', s=1)
+    ax_txentropy_inoutsize.set_xscale('log')
+    ax_txentropy_inoutsize.set_xlabel('Value (sats) (log scale)')
+    ax_txentropy_inoutsize.set_ylabel('Transaction entropy (bits)')
+    #ax_txentropy_inoutsize.ticklabel_format(style='plain', axis='x')
+    ax_txentropy_inoutsize.ticklabel_format(style='plain', axis='y')
+    #ax_txentropy_inoutsize.set_xlim(0, 250000)
+    ax_txentropy_inoutsize.legend()
+    ax_txentropy_inoutsize.set_title('Dependency of tx entropy on size of inputs / outputs (only successfully analyzed transactions!)')
+
+    #
+    # Wallet efficiency in time
+    #
+    num_combinations_data = [coinjoins[cjtx['txid']]['analysis']['processed']['num_combinations_detected'] for cjtx in sorted_cj_time if 'analysis' in coinjoins[cjtx['txid']].keys()
+                       and coinjoins[cjtx['txid']]['analysis']['processed']['successfully_analyzed'] is True]
+    x = range(1, len(num_combinations_data))
+    num_combinations_data_avg100 = sliding_window_average(num_combinations_data, 100)
+    ax_txcombinations.plot(num_combinations_data, label='Number of tx combinations detected')
+    ax_txcombinations.plot(x[100-2:], num_combinations_data_avg100, label='Number of tx combinations detected avg(100)', linewidth=3, color='green')
+    ax_txcombinations.set_xlabel('Coinjoin in time')
+    ax_txcombinations.set_ylabel('Number of combinations (log scale)')
+    ax_txcombinations.ticklabel_format(style='plain', axis='y')
+    ax_txcombinations.set_yscale('log')
+    ax_txcombinations.legend()
+    ax_txcombinations.set_title('Number of tx combinations found in time (only successfully analyzed transactions!)')
 
     experiment_name = os.path.basename(base_path)
     plt.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
-    plt.subplots_adjust(bottom=0.1, wspace=0.5, hspace=0.5)
+    plt.subplots_adjust(bottom=0.1, wspace=0.1, hspace=0.5)
     save_file = os.path.join(base_path, "coinjoin_stats.png")
     plt.savefig(save_file, dpi=300)
     plt.close()
@@ -1284,14 +1394,19 @@ if __name__ == "__main__":
 
         target_base_path = '/home/xsvenda/coinjoin/'
 
-    #GENERATE_COINJOIN_GRAPH = True
+    GENERATE_COINJOIN_GRAPH = False
     #FORCE_COMPUTE_COINJOIN_STATS = False
     #COMPUTE_COINJOIN_STATS = True
     #PARALLELIZE_COINJOIN_STATS = False
 
     #target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
     #target_base_path = '/home/xsvenda/coinjoin/'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230930_1000Round_1parallel_max7inputs_10wallets_1Msats\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230930_1000Round_1parallel_max7inputs_10wallets_1Msats\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230930_148Round_1parallel_max10inputs_10wallets_1Msats\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230930_460Round_1parallel_max10inputs_10wallets_1Msats\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230929_2000Round_1parallel_max4inputs_10wallets_100ksats\\second_part\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230929_2000Round_1parallel_max4inputs_10wallets_100ksats\\first_part\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230928_2000Round_1parallel_max4inputs_10wallets_0.2btc\\'
 
     if PROFILE_PERFORMANCE:
         with Profile() as profile:
@@ -1300,7 +1415,7 @@ if __name__ == "__main__":
     else:
         process_experiment(target_base_path)
 
-    # BASE_PATH = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\debug\\'
-    # process_multiple_experiments(BASE_PATH)
+    BASE_PATH = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\'
+    process_multiple_experiments(BASE_PATH)
 
 
