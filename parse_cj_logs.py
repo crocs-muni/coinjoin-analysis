@@ -522,6 +522,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_txentropy_roundtime = ax8
     ax_txentropy_inoutsize = ax9
     ax_txcombinations = ax10
+    ax_txentropy_roundtime_wallets = ax11
 
 
     #
@@ -778,6 +779,30 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_txentropy_roundtime.legend()
     ax_txentropy_roundtime.set_title('Dependency of tx entropy on round duration (only successfully analyzed transactions!)')
 
+    #
+    # tx entropy versus coinjoin round start-broadcast time colored by wallet
+    #
+    wallet_offset = 0
+    for wallet_name in wallets_info.keys():
+        x_cat, y_cat = [], []
+        for cjtx in sorted_cj_time:
+            if ('analysis' in coinjoins[cjtx['txid']].keys()
+                    and coinjoins[cjtx['txid']]['analysis']['processed']['successfully_analyzed'] is True):
+                time_diff = (datetime.strptime(coinjoins[cjtx['txid']]['broadcast_time'],"%Y-%m-%d %H:%M:%S.%f")
+                             - datetime.strptime(coinjoins[cjtx['txid']]['round_start_time'],"%Y-%m-%d %H:%M:%S.%f")).total_seconds()
+                tx_entropy = coinjoins[cjtx['txid']]['analysis']['processed']['tx_entropy']
+                wallets_used_intx = [coinjoins[cjtx['txid']]['inputs'][index]['wallet_name'] for index in coinjoins[cjtx['txid']]['inputs'].keys()]
+                if wallet_name in wallets_used_intx:
+                    x_cat.append(time_diff + wallet_offset)
+                    y_cat.append(tx_entropy)
+
+        ax_txentropy_roundtime_wallets.scatter(x_cat, y_cat, label=wallet_name, alpha=0.5, s=10)
+        #wallet_offset += 0.3
+
+    ax_txentropy_roundtime_wallets.set_xlabel('Length of round (seconds)')
+    ax_txentropy_roundtime_wallets.set_ylabel('Transaction entropy (bits)')
+    ax_txentropy_roundtime_wallets.legend()
+    ax_txentropy_roundtime_wallets.set_title('Dependency of tx entropy on round duration (only successfully analyzed transactions!)')
 
     #
     # tx entropy versus coinjoin round start-broadcast time
@@ -1103,8 +1128,8 @@ def visualize_coinjoins(cjtx_stats, base_path):
     dot2.attr(rankdir='LR', size='8,5')
     dot2.attr(size='120,80')
 
+    # Generate wallet color mapping
     color_ctr = 0
-
     for wallet_name in cjtx_stats['wallets_info'].keys():
         WALLET_COLORS[wallet_name] = COLORS[color_ctr]
         graphviz_insert_wallet(wallet_name, dot2)
@@ -1112,6 +1137,7 @@ def visualize_coinjoins(cjtx_stats, base_path):
     # add special color for 'unknown' wallet
     WALLET_COLORS[UNKNOWN_WALLET_STRING] = 'red'
     WALLET_COLORS[COORDINATOR_WALLET_STRING] = 'grey30'
+
     graphviz_insert_wallet(UNKNOWN_WALLET_STRING, dot2)
     graphviz_insert_wallet(COORDINATOR_WALLET_STRING, dot2)
 
@@ -1145,6 +1171,7 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc):
             wallets_info = json.load(file)
 
     print("Wallets info loaded.")
+
     return wallets_info
 
 
@@ -1401,7 +1428,7 @@ if __name__ == "__main__":
 
     #target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
     #target_base_path = '/home/xsvenda/coinjoin/'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230930_1000Round_1parallel_max7inputs_10wallets_1Msats\\'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230930_1000Round_1parallel_max7inputs_10wallets_1Msats\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230930_148Round_1parallel_max10inputs_10wallets_1Msats\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230930_460Round_1parallel_max10inputs_10wallets_1Msats\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230929_2000Round_1parallel_max4inputs_10wallets_100ksats\\second_part\\'
@@ -1415,7 +1442,7 @@ if __name__ == "__main__":
     else:
         process_experiment(target_base_path)
 
-    BASE_PATH = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\'
-    process_multiple_experiments(BASE_PATH)
+    # BASE_PATH = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\'
+    # process_multiple_experiments(BASE_PATH)
 
 
