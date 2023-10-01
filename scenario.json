@@ -1,9 +1,33 @@
 {
     "type": "SimplePassive",
-    "freshWallets": false,
+    "freshWallets": true,
     "startingFunds": [1000000, 500000],
     "rounds": 4,
-    "walletsCounts": 2,
+    "walletsCounts": 5,
+
+    "walletsInfo": [
+        {
+            "walletIndex": 0,
+            "walletFunds": [200000, 50000]
+        },
+        {
+            "walletIndex": 4,
+            "walletFunds": [3000000]
+        },
+        {
+            "walletIndex": 2,
+            "walletFunds": [100000]
+        }
+    ],
+
+    "walletsConfig": {
+        "AutoCoinJoin": false,
+        "PlebStopThreshold": "0.01",
+        "AnonScoreTarget": 5,
+        "FeeRateMedianTimeFrameHours": 0,
+        "RedCoinIsolation": false,
+        "ExcludedCoinsFromCoinJoin": []
+    },
 
     "backendConfig": {
         "MinRegistrableAmount": "0.00005",
@@ -28,14 +52,5 @@
         "AllowP2wpkhOutputs": true,
         "AllowP2trOutputs": false,
         "RoundParallelization": 1
-    },
-
-    "walletsConfig": {
-        "AutoCoinJoin": false,
-        "PlebStopThreshold": "0.01",
-        "AnonScoreTarget": 5,
-        "FeeRateMedianTimeFrameHours": 0,
-        "RedCoinIsolation": false,
-        "ExcludedCoinsFromCoinJoin": []
     }
 }
