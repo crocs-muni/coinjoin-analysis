@@ -12,6 +12,11 @@ import re
 from dateutil import tz
 
 
+def log_and_print(msg : str):
+    logging.info(f"{datetime.now().__str__()} {msg}")
+    print(msg)
+
+
 class ConstantsScenarios():
     backend_url = "http://localhost:37127/"
     url = "http://127.0.0.1:37128/"
@@ -57,7 +62,7 @@ class ScenarioManager():
         pass
 
 
-class SimpleScenarioManager(ScenarioManager):
+class SimplePassiveScenarioManager(ScenarioManager):
     def __init__(self, 
                  round_count: int,
                  participants_count: int,
@@ -287,9 +292,6 @@ class RoundChecker():
         
         self.coin_join_wallet_manager.stop_all()
 
-def log_and_print(msg : str):
-    logging.info(f"{datetime.now().__str__()} {msg}")
-    print(msg)
 
 def parse_unspent_wallet_coins(trehsold = 2000):
     parsed_coins = []
@@ -350,6 +352,10 @@ def distribute_coins(distributor_coins, requested_funds, verbose = True):
 
 
 def prepare_wallets(needed_coins):
+
+    #needed_amount = sum(map(lambda requested: requested[1], needed_coins))
+    #check_distributor(needed_amount)
+
     rpc_commands.confirmed_select(CONSTANTS_SCENARIOS.distributor_wallet)
     distributor_coins = parse_unspent_wallet_coins()
     distribute_coins(distributor_coins, needed_coins)
@@ -370,15 +376,22 @@ def prepare_wallets_amount(wallets, amount = 20000):
         prepare_wallets(needed_coins)
 
 
-def prepare_wallets_values(wallets, values = [100000, 50000]):
+def prepare_wallets_values(wallets, values, default_values = [100000, 50000] ):
     needed_coins = []
-    for wallet in wallets:
+    for index, wallet in enumerate(wallets):
         rpc_commands.confirmed_select(wallet)
         
-        for value in values:
-            # new address each time is needed as if the same value was used, the TXOs would be joined
-            address = rpc_commands.get_address()
-            needed_coins.append((address, value))
+        if index in values:
+            for value in values[index]:
+                # new address each time is needed as if the same value was used, the TXOs would be joined
+                address = rpc_commands.get_address()
+                needed_coins.append((address, value))
+        
+        else:
+            for value in default_values:
+                # new address each time is needed as if the same value was used, the TXOs would be joined
+                address = rpc_commands.get_address()
+                needed_coins.append((address, value))
 
     if len(needed_coins) > 0:
         prepare_wallets(needed_coins)
@@ -434,13 +447,58 @@ def create_n_same_wallets(count, previous_index_number, wallets_config):
     return created_wallets
 
 
+def check_distributor(needed_sum):
+    wallets = os.listdir(CONSTANTS_SCENARIOS.path_to_wallets)
+    if CONSTANTS_SCENARIOS.distributor_wallet + ".json" not in wallets:
+        log_and_print("Distributor wallet \"{}\" not found, creating new one.".format(CONSTANTS_SCENARIOS.distributor_wallet))
+        rpc_commands.create_wallet(CONSTANTS_SCENARIOS.distributor_wallet)
+    
+    rpc_commands.confirmed_select(CONSTANTS_SCENARIOS.distributor_wallet)
+    funds = rpc_commands.get_amount_of_coins()
+    if funds < needed_sum:
+        log_and_print("Distributor wallet needs more funds, sending additional funds from btc core wallet.")
+        address = rpc_commands.get_address("distributor", verbose=False)
+
+        core_funds = regtest_control.get_btc_balance()
+        # needs to be transformed to satoshis
+        core_funds_transformed = core_funds * 100_000_000
+        # if btc core wallet does not have required funds, it needs to mine more blocks
+        if core_funds < needed_sum:
+            log_and_print("Btc core wallet has no additional funds")
+            # calculate how many blocks need to be mined + add 5 more
+            need_to_mine = (needed_sum - core_funds_transformed) // (50 * 100_000_000) + 5
+            print("Need to mine additional blocks: ", need_to_mine)
+            #regtest_control.mine_block_regtest(need_to_mine)
+
+        # sending additional funds, that are needed + 20 btc
+
+        need_to_send = (needed_sum - funds) // 100_000_000 + 20
+        print("Sent additional ", need_to_send)
+        #regtest_control.send_to_address_btc_core(address, 40)
+        #regtest_control.mine_block_regtest()
+
+
+def parse_compound_funds(wallets_info, max_allowed_index):
+    compound_funds = {}
+    for info in wallets_info:
+        index = info["walletIndex"]
+        funds = info["walletFunds"]
+        if index > max_allowed_index:
+            raise RuntimeError(f"Index {index} is larger than number of participants. Max allowed index: {max_allowed_index}.")
+        if index in compound_funds:
+            raise RuntimeError(f"Multiple occurences of index {index} while loading starting wallet funds.")
+        compound_funds[index] = funds
+    
+    return compound_funds
+
+
 def prepare_simple_scenario(scenario):
 
     # extracting scenario configurations
     fresh_wallets = load_from_scenario("freshWallets", True, scenario)
     starting_funds = load_from_scenario("startingFunds", [1000000], scenario)
     if not fresh_wallets and "startingFunds" in scenario:
-        log_and_print("Starting funds were set but option for creating fresh wallets is turned off, ignoring sturting funds option.")
+        log_and_print("Starting funds were set but option for creating fresh wallets is turned off, ignoring starting funds option.")
     rounds = load_from_scenario("rounds", 3, scenario)
     participants = load_from_scenario("walletsCounts", 4, scenario)
 
@@ -455,7 +513,14 @@ def prepare_simple_scenario(scenario):
     backend_settings_set_time = None
     if backend_config is not None:
         set_backend_config(backend_config)
-        backend_settings_set_time = datetime.now(tz= tz.tzlocal())
+    backend_settings_set_time = datetime.now(tz= tz.tzlocal())
+
+
+    # preparing compound funds if present
+    compound_funds = {}
+    wallets_info = load_from_scenario("walletsInfo", [], scenario)
+    if len(wallets_info) > 0:
+        compound_funds = parse_compound_funds(wallets_info, participants - 1)
 
     # finding out existing wallets and extracting current number to use in name
     existing_wallets = list(filter(lambda x: "SimplePassiveWallet" in x, WalletsListings().wallets_availiable))
@@ -471,6 +536,7 @@ def prepare_simple_scenario(scenario):
         wallet_number = 1
 
     used_wallets = []
+
 
     # creating needed wallets
     if fresh_wallets:
@@ -493,12 +559,12 @@ def prepare_simple_scenario(scenario):
 
     # distributing funds to wallets used in this scenario
     if fresh_wallets:
-        prepare_wallets_values(used_wallets, starting_funds)
+        prepare_wallets_values(used_wallets, compound_funds, starting_funds)
 
     else:
         prepare_wallets_amount(used_wallets, rounds * 10000)
 
-    scenario_manager = SimpleScenarioManager(rounds,
+    scenario_manager = SimplePassiveScenarioManager(rounds,
                                              participants,
                                              backend_config,
                                              backend_settings_set_time,
@@ -523,7 +589,11 @@ if __name__ == "__main__":
         log_and_print("Scenario file does not contain type.")
         sys.exit(1)
     elif scenario["type"] == "SimplePassive":
-        scenario_manager = prepare_simple_scenario(scenario)
+        try:
+            scenario_manager = prepare_simple_scenario(scenario)
+        except Exception as e:
+            log_and_print(f"Error during preparing the simple passive scenario. Error message: {e}")
+            sys.exit(1)
 
     coinjoin_manager = CoinJoinWalletManager(scenario_manager.used_wallets)
     round_checker = RoundChecker(scenario_manager, coinjoin_manager)
