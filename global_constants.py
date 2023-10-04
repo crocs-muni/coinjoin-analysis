@@ -1,10 +1,9 @@
 import json
 import os
 
-
 class GlobalConstants():
-    backend_url = "http://localhost:37127/"
-    client_url = "http://127.0.0.1:37128/"
+    backend_endpoint = "http://localhost:37127/"
+    client_endpoint = "http://127.0.0.1:37128/"
 
     bitcoin_testnet_rpc_url = "http://127.0.0.1:18332/"
     bitcoin_regtest_rpc_url = "http://127.0.0.1:18443/"
