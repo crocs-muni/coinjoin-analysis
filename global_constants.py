@@ -1,10 +1,6 @@
 import json
 import os
 
-#  D:\wasabi_devel\WalletWasabi\WalletWasabi.Backend
-#  D:\wasabi_devel\WalletWasabi\WalletWasabi.Fluent.Desktop
-#  D:\wasabiV2.0.4\WalletWasabi-2.0.4\WalletWasabi.Backend
-#  D:\wasabiV2.0.4\WalletWasabi-2.0.4\WalletWasabi.Daemon
 
 class GlobalConstants():
     backend_url = "http://localhost:37127/"
@@ -15,12 +11,12 @@ class GlobalConstants():
 
     network = "RegTest" # one of RegRest, TestNet
 
-    backend_folder_path = "D:\wasabiV2.0.4\WalletWasabi-2.0.4\WalletWasabi.Backend"
-    client_folder_path = "D:\wasabiV2.0.4\WalletWasabi-2.0.4\WalletWasabi.Daemon" 
+    backend_folder_path = ""
+    client_folder_path = "" 
     distributor_wallet_name = "DistributorWallet"
     version2 = True
 
-    wasabi_wallet_data = "C:/Users/david/AppData/Roaming/WalletWasabi"
+    wasabi_wallet_data = ""
 
     # time needed in registration phase of round to start scenarion in it
     starting_round_time_required = 60
