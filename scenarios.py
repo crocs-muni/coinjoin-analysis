@@ -10,6 +10,8 @@ import regtest_control
 import sys
 import re
 from dateutil import tz
+import global_constants
+import processes_control
 
 
 def log_and_print(msg : str):
@@ -25,6 +27,7 @@ class ConstantsScenarios():
     coin_tresholds = 2000
     distributor_wallet = "DistributorWallet"
     network = "RegTest"  # one of RegTest, TestNet, MainNet
+    version2 = True
 
     # time needed in registration phase of round to start scenarion in it
     starting_round_time_required = 60
@@ -62,6 +65,29 @@ class ScenarioManager():
         pass
 
 
+def translate_json_name(name: str):
+    if global_constants.GLOBAL_CONSTANTS.version2:
+        result = str(name[0]).upper() + name[1:]
+    else:
+        result = str(name[0]).lower() + name[1:]
+    return result
+
+
+class JsonParamsNaming():
+    def __init__(self):
+        self.round_id = translate_json_name("roundId")
+        self.round_states = translate_json_name("roundStates")
+        self.state_id = translate_json_name("stateId")
+        self.phase = translate_json_name("phase")
+        self.input_registration = translate_json_name("inputRegistration")
+        self.input_registration_start = translate_json_name("inputRegistrationStart")
+        self.input_registration_remaining = translate_json_name("inputRegistrationRemaining")
+        self.is_blame_round = translate_json_name("isBlameRound")
+        self.id = translate_json_name("id")
+
+backend_names = JsonParamsNaming()
+
+
 class SimplePassiveScenarioManager(ScenarioManager):
     def __init__(self, 
                  round_count: int,
@@ -86,7 +112,7 @@ class SimplePassiveScenarioManager(ScenarioManager):
 
 class WalletsListings():
     def __init__(self):
-        wallets_availiable = os.listdir(CONSTANTS_SCENARIOS.path_to_wallets)
+        wallets_availiable = os.listdir(global_constants.GLOBAL_CONSTANTS.path_to_wallets)
         self.wallets_availiable = list(map(lambda file_name: file_name.split(".")[0], wallets_availiable))
 
 
@@ -102,12 +128,20 @@ class CoinJoinWalletManager():
         self.wallets: List[str] = wallets
 
     def start_coinjoin(self, wallet):
-        rpc_commands.confirmed_select(wallet)
-        rpc_commands.start_coinjoin(False)
+        if global_constants.GLOBAL_CONSTANTS.version2:
+            rpc_commands.confirmed_load(wallet)
+            rpc_commands.start_coinjoin(wallet, verbose=False)
+        else:
+            rpc_commands.confirmed_select(wallet)
+            rpc_commands.start_coinjoin(verbose=False)
 
     def stop_coinjoin(self, wallet):
-        rpc_commands.confirmed_select(wallet)
-        rpc_commands.stop_coinjoin(False)
+        if global_constants.GLOBAL_CONSTANTS.version2:
+            rpc_commands.confirmed_load(wallet)
+            rpc_commands.stop_coinjoin(wallet)
+        else:
+            rpc_commands.confirmed_select(wallet)
+            rpc_commands.stop_coinjoin(verbose=False)
 
     def start_all(self):
         for wallet in self.wallets:
@@ -160,6 +194,9 @@ def parse_time_from_backend_response(time_string: str):
 
 class RoundChecker():
 
+    started_rounds_tracked = 0
+    finished_rounds_tracekd = 0
+
     rounds_finished = []
     rounds_finished_ids = set()
     rounds_active = []
@@ -172,82 +209,95 @@ class RoundChecker():
         self.coin_join_wallet_manager = coin_join_wallet_manager
 
     def get_current_rounds(self):
-        response = requests.get(CONSTANTS_SCENARIOS.backend_url + "WabiSabi/human-monitor")
+        response = requests.get(global_constants.GLOBAL_CONSTANTS.backend_endpoint + "WabiSabi/human-monitor")
         response_json = response.json()
-        return response_json["roundStates"]
+        return response_json[backend_names.round_states]
 
     def get_status_from_wasabi_api(self, round_id):
-        content = "{{\"roundCheckpoints\": [{{\"roundId\": \"{0}\", \"stateId\": 0}}]}}".format(round_id)
-        response = requests.post(CONSTANTS_SCENARIOS.backend_url + "WabiSabi/status", 
+        if global_constants.GLOBAL_CONSTANTS.version2:
+            content = "{{\"RoundCheckpoints\": [{{\"RoundId\": \"{0}\", \"StateId\": 0}}]}}".format(round_id)
+        else:
+            content = "{{\"roundCheckpoints\": [{{\"roundId\": \"{0}\", \"stateId\": 0}}]}}".format(round_id)
+        response = requests.post(global_constants.GLOBAL_CONSTANTS.backend_endpoint + "WabiSabi/status", 
                                  data = content,
                                  headers= {
                                      "Accept" : "application/json",
                                      "Content-Type" : "application/json-patch+json"
                                  })
         response_json = response.json()
-        return response_json["roundStates"]
+        return response_json[backend_names.round_states]
 
     def start(self):
-        time_to_compare_rounds = self.scenario_manager.initial_backend_settings_timestamp + timedelta(seconds=CONSTANTS_SCENARIOS.config_refresh_time)
+        time_to_compare_rounds = self.scenario_manager.initial_backend_settings_timestamp + timedelta(seconds=global_constants.GLOBAL_CONSTANTS.config_refresh_time)
 
 
         from_setting_backend = datetime.now(tz=tz.tzlocal()) - self.scenario_manager.initial_backend_settings_timestamp 
         # enforcing that new backend configurations were noticed and loaded
-        while from_setting_backend.seconds < CONSTANTS_SCENARIOS.config_refresh_time:
-            log_and_print("Configuration for backend was not loaded yet. Waiting for other {} seconds".format(CONSTANTS_SCENARIOS.config_refresh_time - from_setting_backend.seconds))
-            time.sleep(CONSTANTS_SCENARIOS.config_refresh_time - from_setting_backend.seconds)
+        while from_setting_backend.seconds < global_constants.GLOBAL_CONSTANTS.config_refresh_time:
+            log_and_print("Configuration for backend was not loaded yet. Waiting for other {} seconds".format(global_constants.GLOBAL_CONSTANTS.config_refresh_time - from_setting_backend.seconds))
+            time.sleep(global_constants.GLOBAL_CONSTANTS.config_refresh_time - from_setting_backend.seconds)
             from_setting_backend = datetime.now(tz=tz.tzlocal()) - self.scenario_manager.initial_backend_settings_timestamp
 
-        # how to ensure, that current round is not round with previous settings?
-        while True:
-            current_rounds = self.get_current_rounds()
-            current_rounds = list(filter(lambda x: x["phase"] == "InputRegistration", current_rounds))
-            # if there are no rounds running, no problem here
-            if len(current_rounds) == 0:
-                break
+        # should not be needed as the config is loaded before backend is started
+        # # how to ensure, that current round is not round with previous settings?
+        # while True:
+        #     current_rounds = self.get_current_rounds()
+        #     current_rounds = list(filter(lambda x: x[backend_names.phase] == backend_names.input_registration, current_rounds))
+        #     # if there are no rounds running, no problem here
+        #     if len(current_rounds) == 0:
+        #         break
 
-            first_round_id = current_rounds[0]["roundId"]
+        #     first_round_id = current_rounds[0][backend_names.round_id]
 
-            # get status for rounds
-            round_states = self.get_status_from_wasabi_api(first_round_id)
-            # log_and_print("At scenario initiation, there are these rounds: ")
+        #     # get status for rounds
+        #     round_states = self.get_status_from_wasabi_api(first_round_id)
+        #     # log_and_print("At scenario initiation, there are these rounds: ")
 
-            all_rounds_ok = True
+        #     all_rounds_ok = True
 
-            # check if all rounds started after loading the initial configuration + refresh time
-            for round in current_rounds:
-                correct_round_state = list(filter(lambda x: x["id"] == round["roundId"] , round_states))[0]
-                round_started = correct_round_state["inputRegistrationStart"]
-                # internet says this should work since python 3.7 but it does not
-                # real_time_start = datetime.fromisoformat(round_started)
-                real_time_start = parse_time_from_backend_response(round_started)
+        #     # check if all rounds started after loading the initial configuration + refresh time
+        #     for round in current_rounds:
 
-                if real_time_start < time_to_compare_rounds:
-                    log_and_print("At the start of scenario, at least round {} runs with old configuration for additional {}".format(round["roundId"], round["inputRegistrationRemaining"]))
-                    waiting_time = parse_time_to_seconds(round["inputRegistrationRemaining"])
-                    log_and_print(f"Waiting for {waiting_time} seconds")
-                    all_rounds_ok = False
-                    time.sleep(waiting_time)
-                    break
+        #         correct_round_state = list(filter(lambda x: x[backend_names.id] == round[backend_names.round_id], round_states))[0]
+        #         round_started = correct_round_state[backend_names.input_registration_start]
+
+        #         # internet says this should work since python 3.7 but it does not
+        #         # real_time_start = datetime.fromisoformat(round_started)
+        #         real_time_start = parse_time_from_backend_response(round_started)
+
+        #         if real_time_start < time_to_compare_rounds:
+        #             log_and_print("At the start of scenario, at least round {} runs with \
+        #                           old configuration for additional {}".format(round[backend_names.round_id], 
+        #                                                                       round[backend_names.input_registration_remaining]))
+        #             waiting_time = parse_time_to_seconds(round[backend_names.input_registration_remaining])
+        #             log_and_print(f"Waiting for {waiting_time} seconds")
+        #             all_rounds_ok = False
+        #             time.sleep(waiting_time)
+        #             break
                 
-            if all_rounds_ok:
-                break
+        #     if all_rounds_ok:
+        #         break
                 
 
         # ensuring, that there is enaught time in at least one round to register inputs
         registerable_round_long_enaught = False
-        while registerable_round_long_enaught:
+        while True:
             current_rounds = self.get_current_rounds()
-            
             for round in current_rounds:
-                if round["phase"] == "InputRegistration" and not round["isBlameRound"]:
+                if (round[backend_names.phase] == backend_names.input_registration 
+                    and not round[backend_names.is_blame_round]):
                     registerable_round_long_enaught = (registerable_round_long_enaught or
-                                                        parse_time_to_seconds(round["inputRegistrationRemaining"]) >= CONSTANTS_SCENARIOS.starting_round_time_required)
-                    break
+                                                        parse_time_to_seconds(round[backend_names.input_registration_remaining]) 
+                                                        >= global_constants.GLOBAL_CONSTANTS.starting_round_time_required)
+                    
+                    if registerable_round_long_enaught:
+                        break
             
             if not registerable_round_long_enaught:
                 log_and_print("Waiting for round in which inputs can be registered.")
                 time.sleep(5)
+            else:
+                break
         
         self.run()
 
@@ -260,42 +310,49 @@ class RoundChecker():
 
         while len(self.rounds_finished) < self.round_limit:
             current_rounds = self.get_current_rounds()
-            current_rounds_ids = set(map(lambda x: x["roundId"], current_rounds))
+            current_rounds_ids = set(map(lambda x: x[backend_names.round_id], current_rounds))
             ended_rounds = []
 
             for round in self.rounds_active:
-                if round["roundId"] not in current_rounds_ids:
-                    log_and_print(" Registered end of round {0}".format(round["roundId"]))
+                if round[backend_names.round_id] not in current_rounds_ids:
+                    log_and_print(" Registered end of round {0}".format(round[backend_names.round_id]))
                     ended_rounds.append(round)
                     self.rounds_finished.append(round)
-                    self.rounds_finished_ids.add(round["roundId"])
+                    self.rounds_finished_ids.add(round[backend_names.round_id])
+                    log_and_print(" This was round number {}".format(self.finished_rounds_tracekd))
+                    self.finished_rounds_tracekd += 1
 
             for round in ended_rounds:
                 self.rounds_active.remove(round)
-                self.rounds_active_ids.remove(round["roundId"])
+                self.rounds_active_ids.remove(round[backend_names.round_id])
                 
                 # if round ended, signall it to manager so it can change configurations if needed
                 self.scenario_manager.progress_round()
 
             
             for round in current_rounds:
-                if round["roundId"] not in self.rounds_active_ids:
+                if round[backend_names.round_id] not in self.rounds_active_ids:
                     self.rounds_active.append(round)
-                    self.rounds_active_ids.add(round["roundId"])
-                    log_and_print(" Registered creation of round {0}".format(round["roundId"]))
+                    self.rounds_active_ids.add(round[backend_names.round_id])
+                    log_and_print(" Registered creation of round {0}".format(round[backend_names.round_id]))
+                    log_and_print(" This is round number {}".format(self.started_rounds_tracked))
+                    self.started_rounds_tracked += 1
             
             if len(ended_rounds) > 0:
                 regtest_control.mine_block_regtest()
-                log_and_print(" Mined new block")
+                log_and_print(" Mined new block, because at least one round ended")
 
             time.sleep(2)
         
         self.coin_join_wallet_manager.stop_all()
 
 
-def parse_unspent_wallet_coins(trehsold = 2000):
+def parse_unspent_wallet_coins(trehsold = 2000, wallet: str = global_constants.GLOBAL_CONSTANTS.distributor_wallet_name):
     parsed_coins = []
-    coins = rpc_commands.list_unspent(False)["result"]
+    if global_constants.GLOBAL_CONSTANTS.version2:
+        coins = rpc_commands.list_unspent(wallet, verbose=False)["result"]
+    else:
+        coins = rpc_commands.list_unspent(verbose=False)["result"]
     for coin in filter(lambda x: x['confirmed'] and x['amount'] > trehsold, coins):
         #print(coin["amount"])
         parsed_coins.append(Coin(coin["txid"], coin["index"], coin["amount"]))
@@ -303,12 +360,18 @@ def parse_unspent_wallet_coins(trehsold = 2000):
 
 
 def check_wallet_funds(wallet, needed_coins, amount):
-    rpc_commands.confirmed_select(wallet)
-    wallet_coins = parse_unspent_wallet_coins()
+    if global_constants.GLOBAL_CONSTANTS.version2:
+        rpc_commands.confirmed_load(wallet)
+    else:
+        rpc_commands.confirmed_select(wallet)
+    wallet_coins = parse_unspent_wallet_coins(wallet=wallet)
     suma = sum(map(lambda coin: coin.amount, wallet_coins))
     print(wallet, suma)
     if suma < amount:
-        address = rpc_commands.get_address()
+        if global_constants.GLOBAL_CONSTANTS.version2:
+            address = rpc_commands.get_address(wallet=wallet)
+        else:
+            address = rpc_commands.get_address()
         needed_coins.append((address, amount - suma))
 
 
@@ -319,13 +382,21 @@ def distribute_coins(distributor_coins, requested_funds, verbose = True):
     #print(payments)
     payments = "[\n" + payments + "],"
 
+    payments = ""
+    for request in requested_funds:
+        if len(payments) != 0:
+            payments = payments + ","
+        payments = payments + "{{\"sendto\":\"{0}\", \"amount\":{1}, \"label\":\"redistribution\"}}".format(request[0], request[1])
+
+    payments = "[" + payments + "],"
 
     # calculating how many distributor coins will be needed to fill needs
     needed_amount = sum(map(lambda requested: requested[1], requested_funds))
     ordered_distributor_coins = sorted(distributor_coins, key= lambda coin: coin.amount)
+    print(ordered_distributor_coins)
     needed_distributor_coins = 0
     acumulated = 0
-    while acumulated <= needed_amount + CONSTANTS_SCENARIOS.coin_tresholds:
+    while acumulated <= needed_amount + global_constants.GLOBAL_CONSTANTS.coin_tresholds:
         acumulated += ordered_distributor_coins[needed_distributor_coins].amount
         needed_distributor_coins += 1
     
@@ -335,18 +406,36 @@ def distribute_coins(distributor_coins, requested_funds, verbose = True):
                                                                          ordered_distributor_coins[index].index) 
                                                                          for index in range(needed_distributor_coins))
 
-    coins = "[\n" + coins + "],"
+    coins = ""
+    for index in range(needed_distributor_coins):
+        if index != 0:
+            coins = coins + ','
+        coins = coins + "{{\"transactionid\":\"{0}\", \"index\":{1}}}".format(ordered_distributor_coins[index].txid, 
+                                                                         ordered_distributor_coins[index].index)
 
-    send_content ='''
+
+    coins = "[" + coins + "],"
+
+    send_content_visible ='''
     {"jsonrpc":"2.0","id":"1","method":"send", "params": 
     { "payments":''' + payments + ''' 
     "coins":''' + coins + '''
     "feeTarget":2, "password": "pswd" }}
     '''
+
+    # "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"selectwallet\", \"params\" : [\"" + wallet_name + "\", \"pswd\"]}"
+    # previous version for some reason didnt work with processes started as subprocesses
+    send_content = "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"send\", \"params\": { \"payments\":" + payments + " \"coins\":" + coins + "\"feeTarget\":2, \"password\": \"pswd\" } }"
+
     if verbose:
         print(send_content)
-        
-    response = rpc_commands.send_post(data = send_content)
+    
+    print("Before sending funds via command.")
+    if global_constants.GLOBAL_CONSTANTS.version2:
+        response = rpc_commands.send_post(data = send_content, specified_wallet = global_constants.GLOBAL_CONSTANTS.distributor_wallet_name)
+    else:
+        response = rpc_commands.send_post(data = send_content)
+    print("Redistribution completed.")
     if verbose:
         print(response.json()) 
 
@@ -356,11 +445,15 @@ def prepare_wallets(needed_coins):
     #needed_amount = sum(map(lambda requested: requested[1], needed_coins))
     #check_distributor(needed_amount)
 
-    rpc_commands.confirmed_select(CONSTANTS_SCENARIOS.distributor_wallet)
-    distributor_coins = parse_unspent_wallet_coins()
+    if global_constants.GLOBAL_CONSTANTS.version2:
+        rpc_commands.confirmed_load(global_constants.GLOBAL_CONSTANTS.distributor_wallet_name)
+    else:
+        rpc_commands.confirmed_select(global_constants.GLOBAL_CONSTANTS.distributor_wallet_name)
+
+    distributor_coins = parse_unspent_wallet_coins(wallet=global_constants.GLOBAL_CONSTANTS.distributor_wallet_name)
     distribute_coins(distributor_coins, needed_coins)
 
-    if CONSTANTS_SCENARIOS.network == "RegTest":
+    if global_constants.GLOBAL_CONSTANTS.network == "RegTest":
         regtest_control.mine_block_regtest()
     else:
         # TODO, need to wait until next block is mined
@@ -379,18 +472,26 @@ def prepare_wallets_amount(wallets, amount = 20000):
 def prepare_wallets_values(wallets, values, default_values = [100000, 50000] ):
     needed_coins = []
     for index, wallet in enumerate(wallets):
-        rpc_commands.confirmed_select(wallet)
+        
+        if not global_constants.GLOBAL_CONSTANTS.version2:
+            rpc_commands.confirmed_select(wallet)
         
         if index in values:
             for value in values[index]:
                 # new address each time is needed as if the same value was used, the TXOs would be joined
-                address = rpc_commands.get_address()
+                if global_constants.GLOBAL_CONSTANTS.version2:
+                    address = rpc_commands.get_address(wallet=wallet)
+                else:
+                    address = rpc_commands.get_address()
                 needed_coins.append((address, value))
         
         else:
             for value in default_values:
                 # new address each time is needed as if the same value was used, the TXOs would be joined
-                address = rpc_commands.get_address()
+                if global_constants.GLOBAL_CONSTANTS.version2:
+                    address = rpc_commands.get_address(wallet=wallet)
+                else:
+                    address = rpc_commands.get_address()
                 needed_coins.append((address, value))
 
     if len(needed_coins) > 0:
@@ -417,12 +518,12 @@ def set_config(new_config, file_path):
 
 
 def set_wallet_config(new_config, wallet_name):
-    wallet_file = os.path.join(CONSTANTS_SCENARIOS.path_to_wallets, wallet_name + ".json")
+    wallet_file = os.path.join(global_constants.GLOBAL_CONSTANTS.path_to_wallets, wallet_name + ".json")
     set_config(new_config, wallet_file)
 
 
 def set_backend_config(new_config):
-    set_config(new_config, CONSTANTS_SCENARIOS.path_to_backend_wabisabi_config)
+    set_config(new_config, global_constants.GLOBAL_CONSTANTS.path_to_backend_wabisabi_config)
 
 
 def load_from_scenario(value, default, scenario):
@@ -440,42 +541,14 @@ def create_n_same_wallets(count, previous_index_number, wallets_config):
         log_and_print("Creating wallet " + wallet_name)
         rpc_commands.create_wallet(wallet_name)
         if wallets_config is not None:
-            rpc_commands.confirmed_select(wallet_name)
+            if global_constants.GLOBAL_CONSTANTS.version2:
+                rpc_commands.confirmed_load(wallet_name)
+            else:
+                rpc_commands.confirmed_select(wallet_name)
             set_wallet_config(wallets_config, wallet_name)
         created_wallets.append(wallet_name)
 
     return created_wallets
-
-
-def check_distributor(needed_sum):
-    wallets = os.listdir(CONSTANTS_SCENARIOS.path_to_wallets)
-    if CONSTANTS_SCENARIOS.distributor_wallet + ".json" not in wallets:
-        log_and_print("Distributor wallet \"{}\" not found, creating new one.".format(CONSTANTS_SCENARIOS.distributor_wallet))
-        rpc_commands.create_wallet(CONSTANTS_SCENARIOS.distributor_wallet)
-    
-    rpc_commands.confirmed_select(CONSTANTS_SCENARIOS.distributor_wallet)
-    funds = rpc_commands.get_amount_of_coins()
-    if funds < needed_sum:
-        log_and_print("Distributor wallet needs more funds, sending additional funds from btc core wallet.")
-        address = rpc_commands.get_address("distributor", verbose=False)
-
-        core_funds = regtest_control.get_btc_balance()
-        # needs to be transformed to satoshis
-        core_funds_transformed = core_funds * 100_000_000
-        # if btc core wallet does not have required funds, it needs to mine more blocks
-        if core_funds < needed_sum:
-            log_and_print("Btc core wallet has no additional funds")
-            # calculate how many blocks need to be mined + add 5 more
-            need_to_mine = (needed_sum - core_funds_transformed) // (50 * 100_000_000) + 5
-            print("Need to mine additional blocks: ", need_to_mine)
-            #regtest_control.mine_block_regtest(need_to_mine)
-
-        # sending additional funds, that are needed + 20 btc
-
-        need_to_send = (needed_sum - funds) // 100_000_000 + 20
-        print("Sent additional ", need_to_send)
-        #regtest_control.send_to_address_btc_core(address, 40)
-        #regtest_control.mine_block_regtest()
 
 
 def parse_compound_funds(wallets_info, max_allowed_index):
@@ -504,7 +577,7 @@ def prepare_simple_scenario(scenario):
 
     backend_config = load_from_scenario("backendConfig", None, scenario)
     if backend_config is None:
-        log_and_print("Backend configuration was not specified, using current configration.")
+        log_and_print("Backend configuration was not specified, using current configuration.")
 
     wallets_config = load_from_scenario("walletsConfig", None, scenario)
     if wallets_config is None:
@@ -524,10 +597,11 @@ def prepare_simple_scenario(scenario):
 
     # finding out existing wallets and extracting current number to use in name
     existing_wallets = list(filter(lambda x: "SimplePassiveWallet" in x, WalletsListings().wallets_availiable))
-    existing_wallets.sort()
+    # sorting by number, that is after 'SimplePassiveWallet' text
+    existing_wallets.sort(key= lambda x: int(x[19:]))
     if len(existing_wallets) > 0:
         last_wallet = existing_wallets[-1]
-        numbers = re.findall(r'\d+', last_wallet)
+        numbers = re.findall(r'\d+$', last_wallet)
         if len(numbers) == 0:
             wallet_number = 1
         else:
@@ -557,10 +631,18 @@ def prepare_simple_scenario(scenario):
             new_wallets_created = create_n_same_wallets(participants - number_of_existing, wallet_number, wallets_config)
             used_wallets.extend(new_wallets_created)
 
+
+    # loading all wallets used in the scenario
+    if global_constants.GLOBAL_CONSTANTS.version2:
+        rpc_commands.confirmed_load(global_constants.GLOBAL_CONSTANTS.distributor_wallet_name)
+        for wallet in used_wallets:
+            rpc_commands.confirmed_load(wallet)
+
     # distributing funds to wallets used in this scenario
     if fresh_wallets:
+        print("Started funds redistribution")
         prepare_wallets_values(used_wallets, compound_funds, starting_funds)
-
+        print("Coins redistribution finished.")
     else:
         prepare_wallets_amount(used_wallets, rounds * 10000)
 
@@ -575,6 +657,11 @@ def prepare_simple_scenario(scenario):
 
 if __name__ == "__main__":
 
+
+    if global_constants.GLOBAL_CONSTANTS.version2 != CONSTANTS_SCENARIOS.version2:
+        print("Sync your versions.")
+        sys.exit(1)
+
     logging.basicConfig(filename='automation.log', encoding='utf-8', level=logging.INFO)
 
     log_and_print("Script scenario started.")
@@ -588,15 +675,67 @@ if __name__ == "__main__":
     if "type" not in scenario:
         log_and_print("Scenario file does not contain type.")
         sys.exit(1)
-    elif scenario["type"] == "SimplePassive":
+
+    try: 
+        backend_config = load_from_scenario("backendConfig", None, scenario)
+    except Exception as e:
+        log_and_print("Error during reading of backend configuration from scenario file")
+        sys.exit(1)
+    
+    if backend_config is None:
+        log_and_print("Backend configuration has not been set, values from previous coordinator \
+                      runs or the default ones will be used")
+        
+    else:
+        set_backend_config(backend_config)
+
+    # Run backend and wait until it outputs creation of new block filters
+    subprocesses_handler = processes_control.Wasabi_Processes_Handler()
+
+    try:
+        subprocesses_handler.run_backend()
+    except Exception as e:
+        log_and_print("An error occured during opening or reading output of the backend subprocess: " + repr(e))
+        subprocesses_handler.clean_subprocesses()
+        sys.exit(1)
+
+    # Run client and wait until blocks are downloaded
+    try:
+        subprocesses_handler.run_client()
+    except Exception as e:
+        log_and_print("An error occured during opening or reading of client output: " + repr(e))
+        subprocesses_handler.clean_subprocesses()
+        sys.exit(1)
+
+    if scenario["type"] == "SimplePassive":
         try:
             scenario_manager = prepare_simple_scenario(scenario)
+            print("Returned scenarion manager.")
         except Exception as e:
             log_and_print(f"Error during preparing the simple passive scenario. Error message: {e}")
+            subprocesses_handler.clean_subprocesses()
             sys.exit(1)
+
+    # as the wallet does not load the changes in its correspondig file, we have to stop the client and start it again
+    # freshly loading all wallets
+    try:
+        subprocesses_handler.stop_client()
+        subprocesses_handler.run_client()
+        for wallet in scenario_manager.used_wallets:
+            rpc_commands.confirmed_load(wallet)
+
+    except Exception as e:
+        subprocesses_handler.clean_subprocesses()
+        log_and_print("Error occured during reopening of client app.")
+
 
     coinjoin_manager = CoinJoinWalletManager(scenario_manager.used_wallets)
     round_checker = RoundChecker(scenario_manager, coinjoin_manager)
-    round_checker.start()
+
+    try:
+        round_checker.start()
+    except Exception as e:
+        log_and_print("While traking scenarios, error occured: " + repr(e))
 
     log_and_print("Script scenario ended.")
+    subprocesses_handler.clean_subprocesses()
