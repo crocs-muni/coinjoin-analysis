@@ -1,18 +1,26 @@
 import global_constants
 import regtest_control
 import subprocess
-
+import time
+import signal
 
 class Wasabi_Processes_Handler():
     process_backend = None
     process_client = None
 
 
+    def stop_client(self):
+        if self.process_client is not None:
+            time.sleep(2)
+            self.process_client.kill()
+        
+
     def clean_subprocesses(self):
         if self.process_client is not None:
-            self.process_client.kill()
+            self.process_client.send_signal(signal.CTRL_C_EVENT)
+
         if self.process_backend is not None:
-            self.process_backend.kill()
+            self.process_backend.send_signal(signal.CTRL_C_EVENT)
 
 
     def run_backend(self):
@@ -49,6 +57,7 @@ class Wasabi_Processes_Handler():
                 break
         
         #print("Created all filters.")
+        self.process_backend.stdout = subprocess.DEVNULL
         
 
     def run_client(self):
@@ -68,5 +77,6 @@ class Wasabi_Processes_Handler():
 
             if "Downloaded filters for blocks from" in output:
                 break
+        self.process_client.stdout = subprocess.DEVNULL
         
         print("Downloaded filters for client")
