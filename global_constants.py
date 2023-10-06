@@ -23,6 +23,8 @@ class GlobalConstants():
     # in wallet wasabi, changes in configurations are checked every 10 seconds
     config_refresh_time = 10
 
+    coin_tresholds = 2000
+
     rpc_user = ""
     rpc_pswd = ""
 
