@@ -1,25 +1,9 @@
 import regtest_control
 import rpc_commands
-import subprocess
 import sys
+import processes_control
+import global_constants
 
-
-class InitializationConstants():
-    url = "http://127.0.0.1:37128/"
-    backend_folder_path = ""
-    client_folder_path = ""
-    distributor_wallet_name = "DistributorWallet"
-
-
-INIT_REGTEST_CONSTANTS = InitializationConstants()
-
-
-def clean_subprocesses(backend : subprocess.Popen, client : subprocess.Popen):
-    if client is not None:
-        client.kill()
-    if backend is not None:
-        backend.kill()
-    
 
 if __name__ == "__main__":
 
@@ -45,97 +29,79 @@ if __name__ == "__main__":
     # 3. Create Distributor wallet
 
     ## 3.a Run backend and wait until it outputs creation of new block filters
+    subprocesses_handler = processes_control.Wasabi_Processes_Handler()
+
     try:
-        process_backend = subprocess.Popen("dotnet run " + "--project " +  INIT_REGTEST_CONSTANTS.backend_folder_path, 
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
-                                text=True)
-        
-        print(type(process_backend))
-
-        taproot_created = False
-        segwit_created = False
-
-        while True:
-            output = process_backend.stdout.readline()
-            if output == '' and process_backend.poll() is not None:
-                break
-
-            # uncoment this two lines if you want to see backend output
-            #if output:
-            #    print(output)
-
-            if f"Created Taproot filter for block: {block_count}" in output:
-                taproot_created = True
-
-            if f"Created SegwitTaproot filter for block: {block_count}" in output:
-                segwit_created = True
-            
-            if segwit_created and taproot_created:
-                break
-        
-        print("Created all filters.")
-    
+        subprocesses_handler.run_backend()
+        print("Backend sucesfully started and all filters created.")
     except Exception as e:
         print("An error occured during opening or reading output of the backend subprocess.", e)
-        clean_subprocesses(process_backend, process_client)
+        subprocesses_handler.clean_subprocesses()
         sys.exit(1)
 
     # 3.b Run client
     try:
-        process_client = subprocess.Popen("dotnet run " + "--project " +  INIT_REGTEST_CONSTANTS.client_folder_path, 
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            text=True)
-
-        while True:
-            output = process_client.stdout.readline()
-            if output == '' and process_client.poll() is not None:
-                break
-
-            # uncomment this two lines if you want to see backend output
-            #if output:
-            #    print(output)
-
-            if "Downloaded filters for blocks from" in output:
-                break
-        
-        print("Downloaded filters for client")
-
-    except:
+        subprocesses_handler.run_client()
+        print("Client was sucesfully started and all filters were downloaded.")
+    except Exception as e:
         print("An error occured during opening or reading of client output.", e)
-        clean_subprocesses(process_backend, process_client)
+        subprocesses_handler.clean_subprocesses()
         sys.exit(1)
 
     # 3.c Create Distributor wallet if not existing
     try:
-        selection = rpc_commands.select(INIT_REGTEST_CONSTANTS.distributor_wallet_name, False)
+        if global_constants.GLOBAL_CONSTANTS.version2:
+            selection = rpc_commands.get_wallet_info(global_constants.GLOBAL_CONSTANTS.distributor_wallet_name, False)
+            selection = selection.json()
+        else:
+            selection = rpc_commands.select(global_constants.GLOBAL_CONSTANTS.distributor_wallet_name, False)
+
         print("Response for selecting distributor wallet: ", selection)
         if "error" in selection and "not found" in selection["error"]["message"]:
-            rpc_commands.create_wallet(INIT_REGTEST_CONSTANTS.distributor_wallet_name)
+            rpc_commands.create_wallet(global_constants.GLOBAL_CONSTANTS.distributor_wallet_name)
             print("Distributor wallet created.")
 
-            rpc_commands.confirmed_select(INIT_REGTEST_CONSTANTS.distributor_wallet_name)
-            print("Distributor wallet selected.")
+            if global_constants.GLOBAL_CONSTANTS.version2:
+                rpc_commands.confirmed_load(global_constants.GLOBAL_CONSTANTS.distributor_wallet_name)
+            else:
+                rpc_commands.confirmed_select(global_constants.GLOBAL_CONSTANTS.distributor_wallet_name)
+            print("Distributor wallet loaded/selected.")
 
             # 4. Send funds to distributor wallet
-            distiributor_address = rpc_commands.get_address("initiation")
+            if global_constants.GLOBAL_CONSTANTS.version2:
+                distiributor_address = rpc_commands.get_address("initiation", global_constants.GLOBAL_CONSTANTS.distributor_wallet_name)
+            else:
+                distiributor_address = rpc_commands.get_address("initiation")
             print("Address of distributor: ", distiributor_address)
             regtest_control.send_to_address_btc_core(distiributor_address, 30)
             regtest_control.mine_block_regtest()
 
-        elif "error" in selection:
-            print("Unexceted error ocurred, wasabi client rpc responded with: ", selection)
-
-        else:
+        elif "error" not in selection or ("error" in selection and "not fully loaded yet" in selection["error"]["message"]):
             print("Distributor already exists.")
-            rpc_commands.confirmed_select(INIT_REGTEST_CONSTANTS.distributor_wallet_name)
+            if global_constants.GLOBAL_CONSTANTS.version2:
+                rpc_commands.confirmed_load(global_constants.GLOBAL_CONSTANTS.distributor_wallet_name)
+            else:
+                rpc_commands.confirmed_select(global_constants.GLOBAL_CONSTANTS.distributor_wallet_name)
             
             print("Coins:")
-            rpc_commands.list_unspent()
+            if global_constants.GLOBAL_CONSTANTS.version2:
+                rpc_commands.list_unspent(global_constants.GLOBAL_CONSTANTS.distributor_wallet_name)
+                funds = rpc_commands.get_amount_of_coins(global_constants.GLOBAL_CONSTANTS.distributor_wallet_name)
+            else:
+                rpc_commands.list_unspent()
+                funds = rpc_commands.get_amount_of_coins()
+            
 
-            if rpc_commands.get_amount_of_coins() < 30:
+            if funds < 3_000_000_000: # 2_972_333_728, 29.72_333_728
                 print("Distributor has less then 30 BTC, sending additional funds")
                 # 4. Send funds to distributor wallet
-                distiributor_address = rpc_commands.get_address("initiation", False)
+                if global_constants.GLOBAL_CONSTANTS.version2:
+                    distiributor_address = rpc_commands.get_address("initiation", 
+                                                                    global_constants.GLOBAL_CONSTANTS.distributor_wallet_name,
+                                                                    verbose=False)
+                else:
+                    distiributor_address = rpc_commands.get_address("initiation", verbose=False)
+
                 print("Address of distributor: ", distiributor_address)
                 
                 regtest_control.send_to_address_btc_core(distiributor_address, 45)
@@ -143,12 +109,17 @@ if __name__ == "__main__":
             else:
                 print("Wallet has already enough BTC")
 
+        elif "error" in selection:
+            print("Unexpected error ocurred, wasabi client rpc responded with: ", selection)
+        
+        else:
+            print("Unexpected content of response for selecting the distributor wallet: ", selection)
+
     except Exception as e:
         print("An error occured during creation of distributor wallet or during the sending funds to it.", e)
-        clean_subprocesses(process_backend, process_client)
+        subprocesses_handler.clean_subprocesses()
         sys.exit(1)
 
      # 5. Cleanup - kill both running processes
-    clean_subprocesses(process_backend, process_client)
-
+    subprocesses_handler.clean_subprocesses()
 
