@@ -144,6 +144,21 @@ def list_unspent(wallet: str = None, verbose: bool = True, different_endpoint: s
     return response.json()
 
 
+def list_all_coins(wallet: str = None, verbose: bool = True, different_endpoint: str = None):
+    """
+    Sends request for getting all coins (including those from past) of chosen wallet.
+    :param wallet: name of the wallet that for listing its coins
+    :param verbose: specifies if response should be printed
+    :return: Client response for request as Response object
+    """
+
+    list_content = '{"jsonrpc":"2.0","id":"1","method":"listcoins"}'
+    response = send_post(list_content, wallet, different_endpoint)
+    if verbose:
+        print(response.json())
+    return response.json()
+
+
 def create_wallet(name: str, pswd: str = "pswd", verbose: bool = True, different_endpoint: str = None):
     """
     Sends request for creating new wallet. If succesfull, wallet is also
