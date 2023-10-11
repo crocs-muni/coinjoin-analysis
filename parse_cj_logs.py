@@ -1,3 +1,4 @@
+import csv
 import math
 import re
 import subprocess
@@ -35,6 +36,8 @@ ASSUME_COORDINATOR_WALLET = False
 VERBOSE = False
 NUM_THREADS = 1
 SATS_IN_BTC = 100000000
+PRE_2_0_4_VERSION = False
+
 
 class CJ_LOG_TYPES(Enum):
     ROUND_STARTED = 'ROUND_STARTED'
@@ -48,6 +51,7 @@ class CJ_LOG_TYPES(Enum):
     SIGNING_PHASE_TIMEOUT = 'SIGNING_PHASE_TIMEOUT'
     ALICE_REMOVED = 'ALICE_REMOVED'
     FILLED_SOME_ADDITIONAL_INPUTS = 'FILLED_SOME_ADDITIONAL_INPUTS'
+    UTXO_IN_PRISON = 'UTXO_IN_PRISON'
 
 
 # colors used for different wallet clusters. Avoid following colors : 'red' (used for cjtx)
@@ -138,7 +142,10 @@ def find_round_ids(filename, regex_pattern, group_names):
                             hit_group[group_name] = match.group(group_name).strip()
                     # insert into dictionary with key equal to value of first hit group
                     key_name = match.group(group_names[0]).strip()
-                    hits[key_name] = hit_group
+                    if key_name not in hits.keys():
+                        hits[key_name] = []
+                    hits[key_name].append(hit_group)
+                    hits[key_name] = hit_group  # FIXME: we need to store all hits, not only the last one
 
     except FileNotFoundError:
         print(f"File '{filename}' not found.")
@@ -619,6 +626,19 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
              color='green')
     ax_coinjoins.plot([len(cjtx_blame_in_hours[cjtx_hour]) for cjtx_hour in cjtx_blame_in_hours.keys()],
              label='Blame coinjoins finished', color='orange')
+
+    logs_in_hours = {}
+    logs_in_hours[CJ_LOG_TYPES.UTXO_IN_PRISON.name] = {hour: [] for hour in range(0, num_slots + 1)}
+    for round_id in rounds.keys():  # go over all logs, insert into vector based on the log type
+        if 'logs' in rounds[round_id]:
+            for entry in rounds[round_id]['logs']:
+                if entry['type'] == CJ_LOG_TYPES.UTXO_IN_PRISON.name:
+                    timestamp = datetime.strptime(entry['timestamp'], "%Y-%m-%d %H:%M:%S.%f")
+                    log_hour = int((timestamp - slot_start_time).total_seconds() // SLOT_WIDTH_SECONDS)
+                    logs_in_hours[entry['type']][log_hour].append(log_hour)
+    ax_coinjoins.plot([len(logs_in_hours[CJ_LOG_TYPES.UTXO_IN_PRISON.name][log_hour]) for log_hour in logs_in_hours[CJ_LOG_TYPES.UTXO_IN_PRISON.name].keys()],
+                         label='(UTXOs in prison)', color='lightgray', linestyle='--')
+
     ax_coinjoins.legend()
     x_ticks = []
     for slot in cjtx_in_hours.keys():
@@ -991,11 +1011,15 @@ def parse_coinjoin_logs(base_directory):
     coord_input_file = '{}\\WalletWasabi\\Backend\\Logs.txt'.format(base_directory)
 
     print('Parsing coinjoin-relevant data from coordinator logs {}...'.format(coord_input_file), end='')
-    regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with params: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
+    if PRE_2_0_4_VERSION:
+        regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with params: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
+    else:
+        regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with parameters: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
     start_round_ids = find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp'])
     # 2023-09-05 08:56:50.892 [38] INFO	Arena.CreateBlameRoundAsync (417)	Blame Round (c05a3b73cebffc79956e1e3abf3d9020b3e02e05f01eb7fb0d01dbcd26d64be7): Blame round created from round '05a9dfe6244d2f4004d2927798ecd42d557bbaefe61de58f67a0265f5710a2da'.
     regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Blame Round \((?P<round_id>.*)\): Blame round created from round '(?P<orig_round_id>.*)'?"
     start_blame_rounds_id = find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp'])
+    # 2023-10-07 11:04:56.723 [43] INFO	Arena.StepTransactionSigningPhaseAsync (374)	Round (dee277ed8fd5d1af24bf09126818b3cec362f52f9fc4323474c2ec5075454d1a): Successfully broadcast the coinjoin: 345386611e7a4543524a3c7fa27f14d511fbb70b1b8786d777b19fb265e95558.
     regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Successfully broadcast the coinjoin: (?P<cj_tx_id>[0-9a-f]*)\.?"
     success_coinjoin_round_ids = find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp', 'cj_tx_id'])
     # round_cjtx_mapping = find_round_cjtx_mapping(coord_input_file, regex_pattern, 'round_id', 'cj_tx_id')
@@ -1088,7 +1112,10 @@ def parse_coinjoin_errors(cjtx_stats, base_directory):
             rounds_logs[round_id]['cj_tx_id'] = success_coinjoin_round_ids[round_id]['cj_tx_id']
 
     # Start of a round
-    regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with params: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
+    if PRE_2_0_4_VERSION:
+        regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with params: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
+    else:
+        regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with parameters: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
     start_round_ids = find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp'])
     insert_type(start_round_ids, CJ_LOG_TYPES.ROUND_STARTED)
     insert_by_round_id(rounds_logs, start_round_ids)
@@ -1208,14 +1235,27 @@ def load_wallets_info():
     wallet_names = ['{}{}'.format('SimplePassiveWallet', index) for index in range(1, MAX_WALLETS + 1)]
     #wallet_names.extend(['{}{}'.format('Wallet', index) for index in range(1, MAX_WALLETS + 1)])
     for wallet_name in wallet_names:
-        if wcli.wcli(['selectwallet', wallet_name, 'pswd']) is not None:
-            print('Wallet `{}` found.'.format(wallet_name))
-            wcli.wcli(['getwalletinfo'])
-            wallet_addresses = wcli.wcli(['listkeys'])
+        if wcli.LEGACY_API:
+            if wcli.wcli(['selectwallet', wallet_name, 'pswd']) is not None:
+                print('Wallet `{}` found.'.format(wallet_name))
+                wcli.wcli(['getwalletinfo'])
+                wallet_addresses = wcli.wcli(['listkeys'])
+                wallet_coins_all = wcli.wcli(['listcoins'])
+                wallet_coins_unspent = wcli.wcli(['listunspentcoins'])
+                if wallet_addresses is not None:
+                    wallets_info[wallet_name] = wallet_addresses
+            else:
+                print('Wallet `{}` not found.'.format(wallet_name))
+        else:
+            #if wcli.wcli(['-wallet={}'.format(wallet_name), 'getwalletinfo']) is not None:
+            wcli.wcli(['-wallet={}'.format(wallet_name), 'getwalletinfo'])
+            wallet_addresses = wcli.wcli(['-wallet={}'.format(wallet_name), 'listkeys'])
+            wallet_coins_all = wcli.wcli(['-wallet={}'.format(wallet_name), 'listcoins'])
+            wallet_coins_unspent = wcli.wcli(['-wallet={}'.format(wallet_name), 'listunspentcoins'])
             if wallet_addresses is not None:
                 wallets_info[wallet_name] = wallet_addresses
-        else:
-            print('Wallet `{}` not found.'.format(wallet_name))
+            else:
+                print('Wallet `{}` not found.'.format(wallet_name))
     return wallets_info
 
 
@@ -1302,6 +1342,43 @@ def fix_coordinator_wallet_addresses(cjtx_stats):
 
     # Rebuild full wallet mapping
     cjtx_stats['address_wallet_mapping'] = build_address_wallet_mapping(cjtx_stats)
+    return cjtx_stats
+
+
+def load_prison_data(cjtx_stats, base_path):
+    prison_file = os.path.join(base_path, "WalletWasabi", "Backend", "WabiSabi", "Prison.txt")
+    items_in_prison = 0
+
+    #detect prison version (<2.0.4 is different than >=2.0.4)
+
+    if os.path.exists(prison_file):
+        with open(prison_file, 'r') as csv_file:
+            reader = csv.reader(csv_file, delimiter=',')
+            for row in reader:
+                prison_log = {}
+                prison_log['type'] = CJ_LOG_TYPES.UTXO_IN_PRISON.name
+                prison_log['timestamp'] = datetime.fromtimestamp(int(row[0])).strftime("%Y-%m-%d %H:%M:%S.%f")
+                prison_log['utxo'] = row[1]
+                prison_log['reason'] = row[2]
+                prison_log['round_id'] = ''
+                prison_log['value'] = ''
+                prison_log['adv_reason'] = ''
+
+                if prison_log['reason'] == 'RoundDisruption':
+                    prison_log['value'] = row[3]
+                    prison_log['round_id'] = row[4]
+                    prison_log['adv_reason'] = row[5]
+                elif prison_log['reason'] == 'Cheating':
+                    prison_log['round_id'] = row[3]
+                else:
+                    print('Unknown prison reason {}'.format(prison_log['reason']))
+
+                cjtx_stats['rounds'][prison_log['round_id']]['logs'].append(prison_log)
+                items_in_prison += 1
+
+        print('Total {} records found in prison'.format(items_in_prison))
+    else:
+        print('WARNING: No prison file found at {}'.format(prison_file))
     return cjtx_stats
 
 
@@ -1418,6 +1495,8 @@ def process_experiment(base_path):
             file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
     print('Entropy analysis: {} txs out of {} successfully analyzed'.format(sum([1 for cjtxid in cjtx_stats['coinjoins'].keys() if 'analysis' in cjtx_stats['coinjoins'][cjtxid] and cjtx_stats['coinjoins'][cjtxid]['analysis']['processed']['successfully_analyzed'] is True]), len(cjtx_stats['coinjoins'].keys())))
 
+    load_prison_data(cjtx_stats, WASABIWALLET_DATA_DIR)
+
     # Analyze various coinjoins statistics
     analyze_coinjoin_stats(cjtx_stats, WASABIWALLET_DATA_DIR)
 
@@ -1459,8 +1538,8 @@ if __name__ == "__main__":
     PROFILE_PERFORMANCE = False
 
     # Analysis type
-    #cfg = ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL
-    cfg = ANALYSIS_TYPE.ANALYZE_COINJOIN_DATA_LOCAL
+    cfg = ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL
+    #cfg = ANALYSIS_TYPE.ANALYZE_COINJOIN_DATA_LOCAL
     #cfg = ANALYSIS_TYPE.COMPUTE_COINJOIN_TXINFO_REMOTE
 
     if cfg == ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL:
@@ -1520,7 +1599,7 @@ if __name__ == "__main__":
         COMPUTE_COINJOIN_STATS = True
         FORCE_COMPUTE_COINJOIN_STATS = True
         PARALLELIZE_COMPUTE_COINJOIN_STATS = True
-        NUM_THREADS = 1
+        NUM_THREADS = 100
 
         GENERATE_COINJOIN_GRAPH = False
 
@@ -1543,6 +1622,8 @@ if __name__ == "__main__":
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20231002_1000Round_1parallel_max20inputs_5and5wallets_10M_1Msats\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20231003_500Round_1parallel_max100inputs_30wallets_10Msats\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20231004_500Round_1parallel_max100inputs_30wallets_10Msats\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231008_2000Rounds_1parallel_max5inputs_10wallets\\'
 
     if PROFILE_PERFORMANCE:
         with Profile() as profile:
@@ -1552,6 +1633,6 @@ if __name__ == "__main__":
         process_experiment(target_base_path)
 
     target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\'
-    process_multiple_experiments(target_base_path)
+    #process_multiple_experiments(target_base_path)
 
 
