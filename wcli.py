@@ -12,6 +12,7 @@ import sys
 
 WASABIWALLET_DATA_DIR = ""
 LEGACY_API = True
+LEGACY_API = False
 VERBOSE = True
 
 
@@ -32,6 +33,11 @@ def wcli(args):
         if args and args[0].startswith("-wallet="):
             wallet_name = args[0][8:] + "/"
             args = args[1:]
+
+        if endpoint[-1] != "/":
+            endpoint = endpoint + "/"
+        if wallet_name is not None:
+            endpoint = endpoint + wallet_name
 
     method = args[0]
     params = args[1:]
