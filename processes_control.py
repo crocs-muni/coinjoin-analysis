@@ -13,6 +13,11 @@ class Wasabi_Processes_Handler():
         if self.process_client is not None:
             time.sleep(2)
             self.process_client.kill()
+    
+    def stop_backend(self):
+        if self.process_backend is not None:
+            time.sleep(2)
+            self.process_backend.kill()
         
 
     def clean_subprocesses(self):
