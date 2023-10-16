@@ -20,9 +20,10 @@ from cProfile import Profile
 from pstats import SortKey, Stats
 from decimal import Decimal
 import jsonpickle
-from multiprocessing import Pool, RLock
 from multiprocessing.pool import ThreadPool
 from tqdm import tqdm
+import anonymity_score
+
 
 BTC_CLI_PATH = 'C:\\bitcoin-25.0\\bin\\bitcoin-cli'
 WASABIWALLET_DATA_DIR = 'c:\\Users\\xsvenda\\AppData\\Roaming'
@@ -375,13 +376,15 @@ def prepare_node_attribs(coinjoin_txid, addr, value_size):
 
 def graphviz_insert_address_cjtx_mapping(addr, coinjoin_txid, value_size, edge_color, graphdot):
     coinjoin_txid, addr, width = prepare_node_attribs(coinjoin_txid, addr, value_size)
-    graphdot.edge(addr, coinjoin_txid, color=edge_color, label="{}₿".format(value_size) if value_size > 0 else '',
-                  style='dashed')
+    label = "{}₿".format(value_size) if value_size > 0 else ''
+    graphdot.edge(addr, coinjoin_txid, color=edge_color, label=label, style='dashed')
 
 
-def graphviz_insert_cjtx_address_mapping(coinjoin_txid, addr, value_size, edge_color, graphdot):
+def graphviz_insert_cjtx_address_mapping(coinjoin_txid, addr, value_size, entropy, edge_color, graphdot):
     coinjoin_txid, addr, width = prepare_node_attribs(coinjoin_txid, addr, value_size)
-    graphdot.edge(coinjoin_txid, addr, color=edge_color, style='solid', label="{}₿".format(value_size), penwidth=width)
+    label = "{}₿".format(value_size) if value_size > 0 else ''
+    label = label + " e={}".format(round(entropy, 1)) if entropy > 0 else ''
+    graphdot.edge(coinjoin_txid, addr, color=edge_color, style='solid', label=label, penwidth=width)
 
 
 def graphviz_insert_address_address_mapping(add1, addr2, edge_color, graphdot):
@@ -458,7 +461,8 @@ def graphviz_tx_info(cjtx, address_wallet_mapping, graphdot):
             if address_wallet_mapping[addr] == wallet_name:
                 graphviz_insert_address(addr, WALLET_COLORS[wallet_name], graphdot)
                 graphviz_insert_wallet_address_mapping(wallet_name, addr, graphdot)  # wallet to address
-                graphviz_insert_cjtx_address_mapping(cjtxid, addr, cjtx['outputs'][index]['value'],
+                entropy = cjtx['outputs'][index]['anon_score'] if 'anon_score' in cjtx['outputs'][index] else 0
+                graphviz_insert_cjtx_address_mapping(cjtxid, addr, cjtx['outputs'][index]['value'], entropy,
                                                      WALLET_COLORS[wallet_name], graphdot)  # coinjoin to addr
     # insert detected deterministic links
     if 'analysis' in cjtx.keys():
@@ -574,14 +578,21 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_num_inoutputs = ax3
     ax_num_participating_wallets = ax4
     ax_wallets_distrib = ax5
+
     ax_utxo_provided = ax6
-    ax_utxo_entropy_from_outputs = ax7
-    ax_boltzmann_entropy = ax8
-    ax_utxo_entropy_from_outputs_inoutsize = ax9
-    ax_boltzmann_entropy_inoutsize = ax10
-    ax_boltzmann_entropy_roundtime = ax11
-    ax_txcombinations = ax12
-    ax_boltzmann_entropy_roundtime_wallets = ax13
+
+    ax_anonscore_distrib_wallets = ax7
+    ax_anonscore_from_outputs = ax8
+
+    ax_utxo_entropy_from_outputs = ax9
+    ax_utxo_entropy_from_outputs_inoutsize = ax10
+
+
+    ax_boltzmann_entropy_inoutsize = ax12
+    ax_boltzmann_entropy = ax13
+    ax_boltzmann_entropy_roundtime = ax14
+    ax_boltzmann_txcombinations = ax15
+    ax_boltzmann_entropy_roundtime_wallets = ax16
 
     #
     # Number of coinjoins per given time interval (e.g., hour)
@@ -801,7 +812,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     # ax5.set_title('Wallet efficiency with respect to perfect coinjoin (only successfully analyzed transactions!)')
 
     #
-    # Transaction entropy and deterministic links
+    # Transaction boltzmann entropy and deterministic links
     #
     tx_entropy_data = [coinjoins[cjtx['txid']]['analysis']['processed']['tx_entropy'] for cjtx in sorted_cj_time
                        if 'analysis' in coinjoins[cjtx['txid']].keys() and coinjoins[cjtx['txid']]['analysis']['processed']['successfully_analyzed'] is True]
@@ -815,7 +826,9 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_boltzmann_entropy.legend()
     ax_boltzmann_entropy.set_title('Transaction entropy and deterministic links (Boltzmann, only successfully analyzed transactions! {}/{})'.format(num_boltzmann_analyzed, len(coinjoins.keys())))
 
+    #
     # Number of different wallets involved time
+    #
     num_wallets_in_time_data = [coinjoins[cjtx['txid']]['num_wallets_involved'] for cjtx in sorted_cj_time]
     num_wallets_in_time_data_avg100 = sliding_window_average(num_wallets_in_time_data, 100)
     x = range(1, len(num_wallets_in_time_data))
@@ -851,7 +864,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_boltzmann_entropy_roundtime.set_title('Dependency of tx entropy on round duration (Boltzmann, only successfully analyzed transactions! {}/{})'.format(num_boltzmann_analyzed, len(coinjoins.keys())))
 
     #
-    # tx entropy versus coinjoin round start-broadcast time colored by wallet
+    # tx boltzmann entropy versus coinjoin round start-broadcast time colored by wallet
     #
     wallet_offset = 0
     for wallet_name in wallets_info.keys():
@@ -904,6 +917,68 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_boltzmann_entropy_inoutsize.set_title('Dependency of tx entropy on size of inputs / outputs (Boltzmann, only successfully analyzed transactions! {}/{})'.format(num_boltzmann_analyzed, len(coinjoins.keys())))
 
     #
+    # anonscore versus input/output value size
+    #
+    for wallet_name in wallets_info.keys():
+        x_cat_out, y_cat_out = [], []
+        cj_index = 0
+        for cjtx in sorted_cj_time:
+            for index in coinjoins[cjtx['txid']]['outputs'].keys():
+                output = coinjoins[cjtx['txid']]['outputs'][index]
+                if 'wallet_name' in output.keys() and wallet_name == output['wallet_name'] and 'anon_score' in output.keys():
+                    x_cat_out.append(cj_index)
+                    y_cat_out.append(coinjoins[cjtx['txid']]['outputs'][index]['anon_score'])
+            cj_index = cj_index + 1
+
+        if len(x_cat_out) > 0:
+            ax_anonscore_from_outputs.scatter(x_cat_out, y_cat_out, label='{}'.format(wallet_name), s=1)
+    ax_anonscore_from_outputs.set_xlabel('Coinjoin in time')
+    ax_anonscore_from_outputs.set_ylabel('Wasabi anonscore')
+    ax_anonscore_from_outputs.ticklabel_format(style='plain', axis='y')
+    ax_anonscore_from_outputs.legend()
+    ax_anonscore_from_outputs.set_title('Wasabi Anonscore of outputs in time (all transactions)')
+
+    #
+    # anonscore distribution for wallets
+    #
+    wallet_index = 0
+    max_score = 1
+    for wallet_name in wallets_info.keys():
+        x_cat_out, y_cat_out = [], []
+        cj_index = 0
+        for cjtx in sorted_cj_time:
+            for index in coinjoins[cjtx['txid']]['outputs'].keys():
+                output = coinjoins[cjtx['txid']]['outputs'][index]
+                if ('wallet_name' in output.keys() and wallet_name == output['wallet_name'] and
+                        'anon_score' in output.keys() and output['anon_score'] > 1):
+                    x_cat_out.append(cj_index)
+                    y_cat_out.append(output['anon_score'])
+                    if max_score < output['anon_score']:  # keep the maximum
+                        max_score = output['anon_score']
+            cj_index = cj_index + 1
+
+        if len(x_cat_out) > 0:
+            data = np.array(y_cat_out)
+            hist, bins = np.histogram(data, bins=20, range=(1, max_score))  # You can adjust the number of bins
+            x = (bins[:-1] + bins[1:]) / 2
+            bar_positions = (bins[:-1] + bins[1:]) / 2
+            linestyle = LINE_STYLES[wallet_index % len(LINE_STYLES)]
+
+            #ax_anonscore_distrib_wallets.bar(x + wallet_index * bar_width * 0.9, y, width=bar_width, align='center', alpha=0.5, label='{} outputs'.format(wallet_name))
+            #ax_anonscore_distrib_wallets.plot(x_smooth, y_smooth, label='{} outputs'.format(wallet_name))
+            ticks = [round(value, 1) for value in x]
+            ax_anonscore_distrib_wallets.set_xticks(ticks)
+            ax_anonscore_distrib_wallets.plot(bar_positions, hist, label='{}'.format(wallet_name), linestyle=linestyle)
+
+        wallet_index = wallet_index + 1
+
+    ax_anonscore_distrib_wallets.set_xlabel('Anonscore')
+    ax_anonscore_distrib_wallets.set_ylabel('Number of UTXOs')
+    ax_anonscore_distrib_wallets.ticklabel_format(style='plain', axis='y')
+    ax_anonscore_distrib_wallets.legend()
+    ax_anonscore_distrib_wallets.set_title('Frequency of Wasabi anonscore of wallet outputs (all transactions)')
+
+    #
     # tx entropy versus input/output value size
     #
     x_cat_in, y_cat_in, x_cat_out, y_cat_out, x_cat_out_every, y_cat_out_every = [], [], [], [], [], []
@@ -939,15 +1014,15 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
                        and coinjoins[cjtx['txid']]['analysis']['processed']['successfully_analyzed'] is True]
     x = range(1, len(num_combinations_data))
     num_combinations_data_avg100 = sliding_window_average(num_combinations_data, 100)
-    ax_txcombinations.plot(num_combinations_data, label='Number of tx combinations detected')
-    ax_txcombinations.plot(x[100-2:], num_combinations_data_avg100, label='Number of tx combinations detected avg(100)', linewidth=3, color='green')
-    ax_txcombinations.set_xlabel('Coinjoin in time')
-    ax_txcombinations.set_ylabel('Number of combinations (log scale)')
-    ax_txcombinations.ticklabel_format(style='plain', axis='y')
+    ax_boltzmann_txcombinations.plot(num_combinations_data, label='Number of tx combinations detected')
+    ax_boltzmann_txcombinations.plot(x[100-2:], num_combinations_data_avg100, label='Number of tx combinations detected avg(100)', linewidth=3, color='green')
+    ax_boltzmann_txcombinations.set_xlabel('Coinjoin in time')
+    ax_boltzmann_txcombinations.set_ylabel('Number of combinations (log scale)')
+    ax_boltzmann_txcombinations.ticklabel_format(style='plain', axis='y')
     if len(num_combinations_data) > 0 or len(x_cat_out) > 0:  # logscale only if some data were inserted
-        ax_txcombinations.set_yscale('log')
-    ax_txcombinations.legend()
-    ax_txcombinations.set_title('Number of tx combinations found in time (only successfully analyzed transactions!)')
+        ax_boltzmann_txcombinations.set_yscale('log')
+    ax_boltzmann_txcombinations.legend()
+    ax_boltzmann_txcombinations.set_title('Number of tx combinations found in time (Boltzmann, only successfully analyzed transactions!)')
 
     #
     # Num non-unique output values in time
@@ -1256,7 +1331,7 @@ def load_wallets_info():
                 wallets_info[wallet_name] = wallet_addresses
             else:
                 print('Wallet `{}` not found.'.format(wallet_name))
-    return wallets_info
+    return wallets_info, wallet_coins_all, wallet_coins_unspent
 
 
 def visualize_coinjoins(cjtx_stats, base_path):
@@ -1303,7 +1378,7 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc):
     if load_wallet_info_via_rpc:
         print("Loading current wallets info from WasabiWallet RPC")
         # Load wallets info via WasabiWallet RPC
-        wallets_info = load_wallets_info()
+        wallets_info, wallet_coins_all, wallet_coins_unspent = load_wallets_info()
         # Save wallets info into json
         print("Saving current wallets into {}".format(wallets_file))
         with open(wallets_file, "w") as file:
@@ -1379,6 +1454,35 @@ def load_prison_data(cjtx_stats, base_path):
         print('Total {} records found in prison'.format(items_in_prison))
     else:
         print('WARNING: No prison file found at {}'.format(prison_file))
+    return cjtx_stats
+
+
+def load_anonscore_data(cjtx_stats, base_path):
+    anonscore_file = os.path.join(base_path, "serialized_annonymity.json")
+
+    if os.path.exists(anonscore_file):
+        anon_scores = anonymity_score.deserialize_to_list(anonscore_file)
+
+        anonscore_1 = 0
+        anonscore_gt1 = 0
+        # Pair anon score to outputs
+        for item in anon_scores:
+            txid = item['txid']
+            out_index = str(item['index'])
+            anon_score = item['annon_score']
+            if anon_score > 1:
+                anonscore_gt1 = anonscore_gt1 + 1
+            else:
+                anonscore_1 = anonscore_1 + 1
+
+            if txid in cjtx_stats['coinjoins'].keys():
+                cjtx_stats['coinjoins'][txid]['outputs'][out_index]['anon_score'] = anon_score
+            else:
+                print('WARNING: Processing anon scores - tx {} not found in coinjoin list'.format(txid))
+
+        print('Total {} UTXOs with only base anonscore (=1) and {} with better than base anonscore found.'.format(anonscore_1, anonscore_gt1))
+    else:
+        print('Anonscore statistics not found in {}'.format(anonscore_file))
     return cjtx_stats
 
 
@@ -1497,6 +1601,11 @@ def process_experiment(base_path):
 
     load_prison_data(cjtx_stats, WASABIWALLET_DATA_DIR)
 
+    load_anonscore_data(cjtx_stats, WASABIWALLET_DATA_DIR)
+
+    with open(save_file, "w") as file:
+        file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
+
     # Analyze various coinjoins statistics
     analyze_coinjoin_stats(cjtx_stats, WASABIWALLET_DATA_DIR)
 
@@ -1538,9 +1647,11 @@ if __name__ == "__main__":
     PROFILE_PERFORMANCE = False
 
     # Analysis type
-    cfg = ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL
-    #cfg = ANALYSIS_TYPE.ANALYZE_COINJOIN_DATA_LOCAL
+    #cfg = ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL
+    cfg = ANALYSIS_TYPE.ANALYZE_COINJOIN_DATA_LOCAL
     #cfg = ANALYSIS_TYPE.COMPUTE_COINJOIN_TXINFO_REMOTE
+
+    print('Analysis configuration: {}'.format(cfg.name))
 
     if cfg == ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL:
         # Extract all info from running wallet and fullnode
@@ -1624,6 +1735,10 @@ if __name__ == "__main__":
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20231004_500Round_1parallel_max100inputs_30wallets_10Msats\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231008_2000Rounds_1parallel_max5inputs_10wallets\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231013_500Rounds_1parallel_max20inputs_10wallets_5x10Msats\\'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231014_1000Rounds_1parallel_max10inputs_10wallets_5x10Msats\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231015_1000Rounds_1parallel_max15inputs_10wallets_5x10Msats\\'
+    #
 
     if PROFILE_PERFORMANCE:
         with Profile() as profile:
@@ -1631,6 +1746,8 @@ if __name__ == "__main__":
             Stats(profile).strip_dirs().sort_stats(SortKey.TIME).print_stats()
     else:
         process_experiment(target_base_path)
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231012_500Rounds_1parallel_max20inputs_10wallets_daemon_shortPrison\\'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231012_500Rounds_1parallel_max20inputs_10wallets_daemon_shortPrison\\'
 
     target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\'
     #process_multiple_experiments(target_base_path)
