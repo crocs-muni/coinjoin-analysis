@@ -37,13 +37,14 @@ class GlobalConstants():
         self.path_to_backend = os.path.join(self.wasabi_wallet_data, "Backend")
         self.path_to_backend_wabisabi_config = os.path.join(self.path_to_backend, "WabiSabiConfig.json")
 
-
-
         self.config_path = "{}/Client/Config.json".format(self.wasabi_wallet_data)
-        with open(self.config_path, "rb") as f:
-            loaded_config = json.load(f)
-            self.rpc_user = loaded_config["JsonRpcUser"]
-            self.rpc_pswd = loaded_config["JsonRpcPassword"]
+        if os.path.exists(self.config_path):
+            with open(self.config_path, "rb") as f:
+                loaded_config = json.load(f)
+                self.rpc_user = loaded_config["JsonRpcUser"]
+                self.rpc_pswd = loaded_config["JsonRpcPassword"]
+        else:
+            print('WARNING: {} not found'.format(self.config_path))
 
 GLOBAL_CONSTANTS = GlobalConstants()
 
