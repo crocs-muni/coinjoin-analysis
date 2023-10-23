@@ -646,7 +646,10 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
                 if entry['type'] == CJ_LOG_TYPES.UTXO_IN_PRISON.name:
                     timestamp = datetime.strptime(entry['timestamp'], "%Y-%m-%d %H:%M:%S.%f")
                     log_hour = int((timestamp - slot_start_time).total_seconds() // SLOT_WIDTH_SECONDS)
-                    logs_in_hours[entry['type']][log_hour].append(log_hour)
+                    if log_hour in logs_in_hours[entry['type']].keys():
+                        logs_in_hours[entry['type']][log_hour].append(log_hour)
+                    else:
+                        print('ERROR: missing log entry time slot {} for {}/{}, ignoring it'.format(log_hour, entry['type'], timestamp))
     ax_coinjoins.plot([len(logs_in_hours[CJ_LOG_TYPES.UTXO_IN_PRISON.name][log_hour]) for log_hour in logs_in_hours[CJ_LOG_TYPES.UTXO_IN_PRISON.name].keys()],
                          label='(UTXOs in prison)', color='lightgray', linestyle='--')
 
@@ -682,7 +685,12 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
             for entry in rounds[round_id]['logs']:
                 timestamp = datetime.strptime(entry['timestamp'], "%Y-%m-%d %H:%M:%S.%f")
                 log_hour = int((timestamp - slot_start_time).total_seconds() // SLOT_WIDTH_SECONDS)
-                logs_in_hours[entry['type']][log_hour].append(log_hour)
+                if log_hour in logs_in_hours[entry['type']].keys():
+                    logs_in_hours[entry['type']][log_hour].append(log_hour)
+                else:
+                    print('ERROR: missing log entry time slot {} for {}/{}, ignoring it'.format(log_hour, entry['type'],
+                                                                                                timestamp))
+
     index = 0
     for log_type in logs_in_hours.keys():
         num_logs_of_type = sum(logs_in_hours[log_type][log_hour])
