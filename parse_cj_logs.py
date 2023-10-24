@@ -55,6 +55,13 @@ class CJ_LOG_TYPES(Enum):
     UTXO_IN_PRISON = 'UTXO_IN_PRISON'
 
 
+class CJ_ALICE_TYPES(Enum):
+    ALICE_REGISTERED = 'ALICE_REGISTERED'
+    ALICE_CONNECTION_CONFIRMED = 'ALICE_CONNECTION_CONFIRMED'
+    ALICE_READY_TO_SIGN = 'ALICE_READY_TO_SIGN'
+    ALICE_POSTED_SIGNATURE = 'ALICE_POSTED_SIGNATURE'
+
+
 # colors used for different wallet clusters. Avoid following colors : 'red' (used for cjtx)
 COLORS = ['darkorange', 'green', 'lightblue', 'gray', 'aquamarine', 'darkorchid1', 'cornsilk3', 'chocolate',
           'deeppink1', 'cadetblue', 'darkgreen', 'burlywood4', 'cyan', 'darkgray', 'darkslateblue', 'dodgerblue4',
@@ -1090,7 +1097,61 @@ def build_address_wallet_mapping(cjtx_stats):
     return address_wallet_mapping
 
 
-def parse_coinjoin_logs(base_directory):
+def parse_client_coinjoin_logs(cjtx_stats, base_directory):
+    # Client logs parsing
+    # 2023-10-23 16:23:30.303 [40] INFO	AliceClient.RegisterInputAsync (121)	Round (5455291d82b748469b5eb2e63d3859370c1f3823d4b8ca5cea7322f93b98af05), Alice (6eb340fe-d153-ac10-0246-252e8a866fbc): Registered 95cdc75886465b7e0a95b7f7e41a92c0ff92a8d2d075d426b92f0ca1b8424d2c-4.
+    # 2023-10-23 16:23:38.053 [41] INFO	AliceClient.CreateRegisterAndConfirmInputAsync (77)	Round (5455291d82b748469b5eb2e63d3859370c1f3823d4b8ca5cea7322f93b98af05), Alice (6eb340fe-d153-ac10-0246-252e8a866fbc): Connection was confirmed.
+    # 2023-10-23 16:24:05.939 [27] INFO	AliceClient.ReadyToSignAsync (223)	Round (5455291d82b748469b5eb2e63d3859370c1f3823d4b8ca5cea7322f93b98af05), Alice (6eb340fe-d153-ac10-0246-252e8a866fbc): Ready to sign.
+    # 2023-10-23 16:24:46.110 [41] INFO	AliceClient.SignTransactionAsync (217)	Round (5455291d82b748469b5eb2e63d3859370c1f3823d4b8ca5cea7322f93b98af05), Alice (6eb340fe-d153-ac10-0246-252e8a866fbc): Posted a signature.
+    client_input_file = '{}\\WalletWasabi\\Client\\Logs.txt'.format(base_directory)
+
+    print('Parsing coinjoin-relevant data from client logs {}...'.format(client_input_file), end='')
+
+    # class CJ_ALICE_TYPES(Enum):
+    #     ALICE_REGISTERED = 'ALICE_REGISTERED'
+    #     ALICE_CONNECTION_CONFIRMED = 'ALICE_CONNECTION_CONFIRMED'
+    #     ALICE_READY_TO_SIGN = 'ALICE_READY_TO_SIGN'
+    #     ALICE_POSTED_SIGNATURE = 'ALICE_POSTED_SIGNATURE'
+
+
+    alice_events_log = {}
+    regex_pattern = r"(?P<timestamp>.*) \[.+(AliceClient.RegisterInputAsync.*) \(.*Round \((?P<round_id>.*)\), Alice \((?P<alice_id>.*)\): Registered (?P<tx_id>.*)-(?P<tx_out_index>[0-9]+)\.?"
+    alice_events = find_round_ids(client_input_file, regex_pattern, ['round_id', 'timestamp', 'alice_id', 'tx_id', 'tx_out_index'])
+    for round_id in alice_events.keys():
+        for alice_event in alice_events[round_id]:
+            alice_id = alice_event['alice_id']
+            if alice_id not in alice_events_log.keys():
+                alice_events_log[alice_id] = {}
+
+            alice_events_log[alice_id][CJ_ALICE_TYPES.ALICE_REGISTERED.name] = alice_event
+
+    regex_pattern = r"(?P<timestamp>.*) \[.+(AliceClient.CreateRegisterAndConfirmInputAsync.*) \(.*Round \((?P<round_id>.*)\), Alice \((?P<alice_id>.*)\): Connection was confirmed\.?"
+    alice_events = find_round_ids(client_input_file, regex_pattern, ['round_id', 'timestamp', 'alice_id'])
+    for round_id in alice_events.keys():
+        for alice_event in alice_events[round_id]:
+            alice_id = alice_event['alice_id']
+            alice_events_log[alice_id][CJ_ALICE_TYPES.ALICE_CONNECTION_CONFIRMED.name] = alice_event
+
+    regex_pattern = r"(?P<timestamp>.*) \[.+(AliceClient.ReadyToSignAsync.*) \(.*Round \((?P<round_id>.*)\), Alice \((?P<alice_id>.*)\): Ready to sign\.?"
+    alice_events = find_round_ids(client_input_file, regex_pattern, ['round_id', 'timestamp', 'alice_id'])
+    for round_id in alice_events.keys():
+        for alice_event in alice_events[round_id]:
+            alice_id = alice_event['alice_id']
+            alice_events_log[alice_id][CJ_ALICE_TYPES.ALICE_READY_TO_SIGN.name] = alice_event
+
+    regex_pattern = r"(?P<timestamp>.*) \[.+(AliceClient.SignTransactionAsync.*) \(.*Round \((?P<round_id>.*)\), Alice \((?P<alice_id>.*)\): Posted a signature\.?"
+    alice_events = find_round_ids(client_input_file, regex_pattern, ['round_id', 'timestamp', 'alice_id'])
+    for round_id in alice_events.keys():
+        for alice_event in alice_events[round_id]:
+            alice_id = alice_event['alice_id']
+            alice_events_log[alice_id][CJ_ALICE_TYPES.ALICE_POSTED_SIGNATURE.name] = alice_event
+
+    # Find and pair alice event logs to the right input
+    #for cjtx_id in cjtx_stats['coinjoins'].keys():
+
+    print('finished')
+
+def parse_backend_coinjoin_logs(base_directory):
     coord_input_file = '{}\\WalletWasabi\\Backend\\Logs.txt'.format(base_directory)
 
     print('Parsing coinjoin-relevant data from coordinator logs {}...'.format(coord_input_file), end='')
@@ -1606,6 +1667,8 @@ def process_experiment(base_path):
         with open(save_file, "w") as file:
             file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
     print('Entropy analysis: {} txs out of {} successfully analyzed'.format(sum([1 for cjtxid in cjtx_stats['coinjoins'].keys() if 'analysis' in cjtx_stats['coinjoins'][cjtxid] and cjtx_stats['coinjoins'][cjtxid]['analysis']['processed']['successfully_analyzed'] is True]), len(cjtx_stats['coinjoins'].keys())))
+
+    parse_client_coinjoin_logs(cjtx_stats, WASABIWALLET_DATA_DIR)
 
     load_prison_data(cjtx_stats, WASABIWALLET_DATA_DIR)
 
