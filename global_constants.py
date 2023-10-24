@@ -23,7 +23,7 @@ class GlobalConstants():
     # in wallet wasabi, changes in configurations are checked every 10 seconds
     config_refresh_time = 10
 
-    coin_tresholds = 2000
+    coin_tresholds = 5000
 
     rpc_user = ""
     rpc_pswd = ""
@@ -36,6 +36,7 @@ class GlobalConstants():
         self.path_to_wallets = os.path.join(self.path_to_client_data, "Wallets", self.network)
         self.path_to_backend = os.path.join(self.wasabi_wallet_data, "Backend")
         self.path_to_backend_wabisabi_config = os.path.join(self.path_to_backend, "WabiSabiConfig.json")
+        self.path_to_prison = os.path.join(self.path_to_backend, "WabiSabi", "Prison.txt")
 
         self.config_path = "{}/Client/Config.json".format(self.wasabi_wallet_data)
         if os.path.exists(self.config_path):

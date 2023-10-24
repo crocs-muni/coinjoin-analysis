@@ -1,0 +1,97 @@
+{
+    "type": "SimpleActive",
+    "freshWallets": true,
+    "startingFunds": [1000000, 500000],
+    "rounds": 300,
+    "walletsCounts": 10,
+
+    "walletsInfo": [
+        {
+            "walletIndex": 0,
+            "walletFunds": [200000, 50000]
+        },
+        {
+            "walletIndex": 1,
+            "walletFunds": [3000000, 580000]
+        },
+        {
+            "walletIndex": 5,
+            "walletFunds": [3000000, 15000, 220000]
+        },
+        {
+            "walletIndex": 8,
+            "walletFunds": [3000000, 600000]
+        },
+        {
+            "walletIndex": 7,
+            "walletFunds": [3000000, 15000, 220000]
+        },
+        {
+            "walletIndex": 9,
+            "walletFunds": [30000000]
+        },
+        {
+            "walletIndex": 4,
+            "walletConfig" : {
+                "AnonScoreTarget": 1000,
+                "FeeRateMedianTimeFrameHours": 5
+            }
+        }
+    ],
+
+    "walletsConfig": {
+        "PreferPsbtWorkflow": false,
+        "AutoCoinJoin": false,
+        "PlebStopThreshold": "0.01",
+        "AnonScoreTarget": 100,
+        "FeeRateMedianTimeFrameHours": 0,
+        "IsCoinjoinProfileSelected": false,
+        "RedCoinIsolation": false,
+        "ExcludedCoinsFromCoinJoin": []
+    },
+
+    "backendConfig": {
+        "DoSSeverity": "0.0000",
+        "DoSMinTimeForFailedToVerify": "1d 0h 0m 5s",
+        "DoSMinTimeForCheating": "1d 0h 0m 0s",
+        "DoSPenaltyFactorForDisruptingConfirmation": 0.2,
+        "DoSPenaltyFactorForDisruptingSigning": 1.0,
+        "DoSPenaltyFactorForDisruptingByDoubleSpending": 3.0,
+        "DoSMinTimeInPrison": "120d 0h 0m 0s",
+        "MinRegistrableAmount": "0.00005",
+        "MaxRegistrableAmount": "43000.00",
+        "AllowNotedInputRegistration": true,
+        "StandardInputRegistrationTimeout": "0d 0h 1m 40s",
+        "BlameInputRegistrationTimeout": "0d 0h 3m 0s",
+        "ConnectionConfirmationTimeout": "0d 0h 0m 40s",
+        "OutputRegistrationTimeout": "0d 0h 0m 40s",
+        "TransactionSigningTimeout": "0d 0h 0m 40s",
+        "FailFastOutputRegistrationTimeout": "0d 0h 3m 0s",
+        "FailFastTransactionSigningTimeout": "0d 0h 0m 30s",
+        "RoundExpiryTimeout": "0d 0h 5m 0s",
+        "MaxInputCountByRound": 10,
+        "MinInputCountByRoundMultiplier": 0.4,
+        "CoordinationFeeRate": {
+          "Rate": 0.003,
+          "PlebsDontPayThreshold": 1000000
+        },
+
+        "MaxSuggestedAmountBase": "0.10",
+        "RiskFlags": "",
+        "ReleaseFromWhitelistAfter": "31d 0h 0m 0s",
+        "RoundParallelization": 1,
+        "AllowP2wpkhInputs": true,
+        "AllowP2trInputs": false,
+        "AllowP2wpkhOutputs": true,
+        "AllowP2trOutputs": false
+      },
+
+    "roundsConfigs": [
+        {
+        "index": 4,
+        "backendConfig": {
+            "DoSSeverity": "0.00"
+            }
+        }
+    ]
+}

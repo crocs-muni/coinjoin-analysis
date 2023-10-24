@@ -3,8 +3,7 @@
 ## Types of scenarios
 1. SimplePassive - Everything is set before scenario starts. All wallets have same settings, but can have different starting funds.
 1. ComplexPassive - Everything is set before scenario starts. Wallets can have different settings and can join or leave coinjoin in different rounds.
-1. SimpleActive - Settings for wallets and backend can change each round.
-1. ComplexActive - TBD
+1. SimpleActive - Settings for backend can change each round.
 
 ## How to run scenario
 1. Fill file scenario.json with desired options and their values.
@@ -26,3 +25,15 @@ Allowed options in scenario.json:
 - walletsInfo - array of objects, each containing *walletIndex* and *walletFunds*. WalletIndex parameter represents index of the wallet, for which are the starting funds set. WalletFunds parameter is array of integers and represents starting funds for the specified wallet.
 - walletsConfig - json, confiuration for wallets. Allowed options and allowed type of values can be seen in **parameters.json**
 - backendConfig - json, configuration for backend. Allowed options and allowed type of values can be seen in **parameters.json**
+
+## Complex Passive scenario
+Adds more options for walletsInfo:
+- walletConfig - same possibilities as walletsConfig, apply only to specified wallet. Set before scenario is started.
+
+Adds option of stopping and starting coinjoin in different rounds:
+- TBT, needs polish
+
+## Simple ACtive scenario
+Allows changes of backend configuration:
+- roundsConfigs - array of objects, each containing *index* (identifier for round) and *backendConfig* (configuration to be changed)
+- need to check if all configurations can be changed during runtime or only those changing round parameters
