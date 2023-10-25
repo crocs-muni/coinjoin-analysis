@@ -104,7 +104,7 @@ def generate_llm_inputs(cjtx_stats):
     print('** CONFIGURATION USED **')
     print('MIN_WALLETS_IN_COINJOIN = {}'.format(MIN_WALLETS_IN_COINJOIN))
     print('ANALYSIS_DEPTH_LIMIT = {}'.format(ANALYSIS_DEPTH_LIMIT))
-    print('Total initial transactions: {}'.format(len(cjtx_stats['coinjoins'].keys())))
+    print('Total initial coinjoin transactions: {}'.format(len(cjtx_stats['coinjoins'].keys())))
 
     results = {}
     print('Generating LLM data...', end='')
@@ -265,6 +265,11 @@ def generate_llm_inputs(cjtx_stats):
 
     print(' done')
 
+    print('** CONFIGURATION USED **')
+    print('MIN_WALLETS_IN_COINJOIN = {}'.format(MIN_WALLETS_IN_COINJOIN))
+    print('ANALYSIS_DEPTH_LIMIT = {}'.format(ANALYSIS_DEPTH_LIMIT))
+    print('Total initial coinjoin transactions: {}'.format(len(cjtx_stats['coinjoins'].keys())))
+
     print('coinjoin_txs_included={}'.format(coinjoin_txs_included))
     print('coinjoin_txs_dropped={}'.format(coinjoin_txs_dropped))
     print('test_vectors_total={}'.format(test_vectors_total))
@@ -276,10 +281,13 @@ def generate_llm_inputs(cjtx_stats):
 
 if __name__ == "__main__":
     MIN_WALLETS_IN_COINJOIN = 2  # If root coinjoin transaction does not reach this limit, it is not included in training data (inner txs can be below)
-    ANALYSIS_DEPTH_LIMIT = 1  # Depth of the assumed coinjoin transactions (number of other connected coinjoins)
+    ANALYSIS_DEPTH_LIMIT = 1  # Depth of the assumed coinjoin transactions (number of next other connected coinjoins)
 
     target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
-
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231008_2000Rounds_1parallel_max5inputs_10wallets\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231019_1000Rounds_1parallel_max10inputs_10wallets_5x10Msats_noPrison\\'
+#
+    print('Path used = {}'.format(target_base_path))
     WASABIWALLET_DATA_DIR = target_base_path
 
     save_file = os.path.join(WASABIWALLET_DATA_DIR, "coinjoin_tx_info.json")
