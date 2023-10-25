@@ -110,6 +110,12 @@ def generate_llm_inputs(cjtx_stats):
     print('Generating LLM data...', end='')
     # Take each coinjoin as starting point
     tx_processed_counter = -1
+
+    coinjoin_txs_included = 0
+    coinjoin_txs_dropped = 0
+    test_vectors_total = 0
+    test_vectors_same_wallet = 0
+    test_vectors_different_wallet = 0
     for start_cjtxid in cjtx_stats['coinjoins'].keys():
         tx_processed_counter += 1
         if tx_processed_counter % 80 == 0:
@@ -119,9 +125,11 @@ def generate_llm_inputs(cjtx_stats):
         num_wallets_in_coinjoin = set([cjtx_stats['coinjoins'][start_cjtxid]['inputs'][index]['wallet_name'] for index in cjtx_stats['coinjoins'][start_cjtxid]['inputs'].keys()])
         if len(num_wallets_in_coinjoin) < MIN_WALLETS_IN_COINJOIN:
             print('x', end='')
+            coinjoin_txs_dropped += 1
             continue
 
         print('.', end='')  # Print progress
+        coinjoin_txs_included +=1
 
         # Obtain subtree with connected coinjoin txs with up to ANALYSIS_DEPTH_LIMIT from the root tx
         # get coinjoins in scope (all connected from initial cjtxid)
@@ -247,9 +255,21 @@ def generate_llm_inputs(cjtx_stats):
                 test_item['first_input_wallet'] = first_input_wallet
                 test_item['last_output_wallet'] = last_output_wallet
 
+                test_vectors_total += 1
+                if first_input_wallet == last_output_wallet:
+                    test_vectors_same_wallet += 1
+                else:
+                    test_vectors_different_wallet += 1
+
                 results[start_cjtxid].append(test_item)
 
-    print('done')
+    print(' done')
+
+    print('coinjoin_txs_included={}'.format(coinjoin_txs_included))
+    print('coinjoin_txs_dropped={}'.format(coinjoin_txs_dropped))
+    print('test_vectors_total={}'.format(test_vectors_total))
+    print('test_vectors_same_wallet={}'.format(test_vectors_same_wallet))
+    print('test_vectors_different_wallet={}'.format(test_vectors_different_wallet))
 
     return results
 
