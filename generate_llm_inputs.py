@@ -5,6 +5,7 @@ from collections import deque
 from collections import Counter
 
 SATS_IN_BTC = 100000000
+VERBOSE = False
 
 
 def bfs_with_limit(coinjoins, root, k):
@@ -92,7 +93,7 @@ def serialize_llm_transaction(cjtx):
     return sentence_denom_groups, sentence_values
 
 
-def generate_llm_inputs(cjtx_stats, WASABIWALLET_DATA_DIR):
+def generate_llm_inputs(cjtx_stats):
     """
     Generate inputs for LLM from collected data
     :param cjtx_stats: loaded dict with simulated coinjoins
@@ -100,21 +101,36 @@ def generate_llm_inputs(cjtx_stats, WASABIWALLET_DATA_DIR):
     :return:
     """
 
+    print('** CONFIGURATION USED **')
+    print('MIN_WALLETS_IN_COINJOIN = {}'.format(MIN_WALLETS_IN_COINJOIN))
+    print('ANALYSIS_DEPTH_LIMIT = {}'.format(ANALYSIS_DEPTH_LIMIT))
+    print('Total initial transactions: {}'.format(len(cjtx_stats['coinjoins'].keys())))
+
     results = {}
     print('Generating LLM data...', end='')
     # Take each coinjoin as starting point
-    DEPTH_LIMIT = 1  # Depth of the assumed coinjoin transactions (number of other connected coinjoins)
-    tx_processed_counter = 0
+    tx_processed_counter = -1
     for start_cjtxid in cjtx_stats['coinjoins'].keys():
-        print('.') if tx_processed_counter % 80 == 0 else print('.', end='')
         tx_processed_counter += 1
+        if tx_processed_counter % 80 == 0:
+            print('')
+
+        # Check if enough wallets are present in root coinjoin tx - if not, skip it for generation
+        num_wallets_in_coinjoin = set([cjtx_stats['coinjoins'][start_cjtxid]['inputs'][index]['wallet_name'] for index in cjtx_stats['coinjoins'][start_cjtxid]['inputs'].keys()])
+        if len(num_wallets_in_coinjoin) < MIN_WALLETS_IN_COINJOIN:
+            print('x', end='')
+            continue
+
+        print('.', end='')  # Print progress
+
+        # Obtain subtree with connected coinjoin txs with up to ANALYSIS_DEPTH_LIMIT from the root tx
+        # get coinjoins in scope (all connected from initial cjtxid)
+        cjs_in_scope = bfs_with_limit(cjtx_stats['coinjoins'], start_cjtxid, ANALYSIS_DEPTH_LIMIT)
 
         cj_counter = 1  # Incremental counter of transactions
         coin_counter = 1  # Incremental counter for different coins used between coinjoins (output and corresponding input is the same coin)
-        # get coinjoins in scope (all connected from initial cjtxid)
-        cjs_in_scope = bfs_with_limit(cjtx_stats['coinjoins'], start_cjtxid, DEPTH_LIMIT)
 
-        # Identify all different values
+        # Identify all different denomination values over the whole subtree
         out_values = []
         for txid in cjs_in_scope.keys():
             out_values = out_values + [cjtx_stats['coinjoins'][txid]['inputs'][index]['value'] for index in
@@ -123,8 +139,9 @@ def generate_llm_inputs(cjtx_stats, WASABIWALLET_DATA_DIR):
                                    cjtx_stats['coinjoins'][txid]['outputs'].keys()]
         value_counts = Counter(out_values)
         value_counts_sorted = value_counts.most_common()
-        # print('Number of different denominations: {}'.format(len(value_counts_sorted)))
-        # print('Number of unique denominations: {}'.format(sum([1 for value in value_counts_sorted if value[1] == 1])))
+        if VERBOSE:
+            print('Number of different denominations: {}'.format(len(value_counts_sorted)))
+            print('Number of unique denominations: {}'.format(sum([1 for value in value_counts_sorted if value[1] == 1])))
 
         # Duplicate obtained coinjoin structure for further processing
         coinjoins_dupl = {}
@@ -219,9 +236,10 @@ def generate_llm_inputs(cjtx_stats, WASABIWALLET_DATA_DIR):
                 else:
                     last_output_wallet = 'other'
 
-                # print(coinjoin_sentence_denom_groups)
-                # print(coinjoin_sentence_values)
-                # print('first_in_wallet={}, last_out_wallet={}'.format(first_input_wallet, last_output_wallet))
+                if VERBOSE:
+                    print(coinjoin_sentence_denom_groups)
+                    print(coinjoin_sentence_values)
+                    print('first_in_wallet={}, last_out_wallet={}'.format(first_input_wallet, last_output_wallet))
 
                 test_item = {}
                 test_item['coinjoin_sentence_denom_groups'] = coinjoin_sentence_denom_groups
@@ -237,6 +255,9 @@ def generate_llm_inputs(cjtx_stats, WASABIWALLET_DATA_DIR):
 
 
 if __name__ == "__main__":
+    MIN_WALLETS_IN_COINJOIN = 2  # If root coinjoin transaction does not reach this limit, it is not included in training data (inner txs can be below)
+    ANALYSIS_DEPTH_LIMIT = 1  # Depth of the assumed coinjoin transactions (number of other connected coinjoins)
+
     target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
 
     WASABIWALLET_DATA_DIR = target_base_path
@@ -247,10 +268,9 @@ if __name__ == "__main__":
         cjtx_stats = json.load(file)
 
     # Generate LLM inputs
-    events_vector = generate_llm_inputs(cjtx_stats, WASABIWALLET_DATA_DIR)
+    events_vector = generate_llm_inputs(cjtx_stats)
     events_file = os.path.join(WASABIWALLET_DATA_DIR, "cjtx_events.json")
     with open(events_file, "w") as file:
         file.write(json.dumps(dict(sorted(events_vector.items())), indent=4))
-
 
     print('LLM data generation finished')
