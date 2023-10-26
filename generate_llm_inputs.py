@@ -3,6 +3,7 @@ import os
 import json
 from collections import deque
 from collections import Counter
+import parse_cj_logs
 
 SATS_IN_BTC = 100000000
 VERBOSE = False
@@ -116,6 +117,9 @@ def generate_llm_inputs(cjtx_stats):
     test_vectors_total = 0
     test_vectors_same_wallet = 0
     test_vectors_different_wallet = 0
+
+    visualize_copy = copy.deepcopy(cjtx_stats)
+
     for start_cjtxid in cjtx_stats['coinjoins'].keys():
         tx_processed_counter += 1
         if tx_processed_counter % 80 == 0:
@@ -156,6 +160,10 @@ def generate_llm_inputs(cjtx_stats):
         for key in cjs_in_scope:
             if key in cjtx_stats['coinjoins'].keys():
                 coinjoins_dupl[key] = copy.deepcopy(cjtx_stats['coinjoins'][key])
+
+        if GENERATE_SUBPARTS_GRAPHS:
+            visualize_copy['coinjoins'] = coinjoins_dupl
+            parse_cj_logs.visualize_coinjoins(visualize_copy, os.path.join(WASABIWALLET_DATA_DIR, 'llm'), 'cj_root={}_depth={}'.format(start_cjtxid[:8], ANALYSIS_DEPTH_LIMIT), False)
 
         # Sort obtained coinjoins by their broadcast time
         sorted_cjs_in_scope = sorted(coinjoins_dupl, key=lambda txid: coinjoins_dupl[txid]['broadcast_time'])
@@ -201,9 +209,13 @@ def generate_llm_inputs(cjtx_stats):
             cj_counter += 1
 
         # Generate different variations with swapped inputs and outputs
+        assert sorted_cjs_in_scope[0] == start_cjtxid
+        root_tx_id = sorted_cjs_in_scope[0]
+        last_tx_id = sorted_cjs_in_scope[-1]
+
         results[start_cjtxid] = []
-        num_inputs_first_tx = len(coinjoins_dupl[sorted_cjs_in_scope[0]]['inputs'])
-        num_outputs_last_tx = len(coinjoins_dupl[sorted_cjs_in_scope[-1]]['outputs'])
+        num_inputs_first_tx = len(coinjoins_dupl[root_tx_id]['inputs'])
+        num_outputs_last_tx = len(coinjoins_dupl[last_tx_id]['outputs'])
         num_variants = num_inputs_first_tx * num_outputs_last_tx
 
         # Serialize all coinjoins into single string with variantiosn of the first and last transaction
@@ -212,8 +224,8 @@ def generate_llm_inputs(cjtx_stats):
                 coinjoin_sentence_denom_groups = ''
                 coinjoin_sentence_values = ''
 
-                first_tx = copy.deepcopy(coinjoins_dupl[sorted_cjs_in_scope[0]])
-                last_tx = copy.deepcopy(coinjoins_dupl[sorted_cjs_in_scope[-1]])
+                first_tx = copy.deepcopy(coinjoins_dupl[root_tx_id])
+                last_tx = copy.deepcopy(coinjoins_dupl[last_tx_id])
 
                 first_input_swap = copy.deepcopy(first_tx['inputs'][str(input_variant)])
                 first_tx['inputs'][str(input_variant)] = copy.deepcopy(first_tx['inputs']['0'])
@@ -254,6 +266,10 @@ def generate_llm_inputs(cjtx_stats):
                 test_item['coinjoin_sentence_values'] = coinjoin_sentence_values
                 test_item['first_input_wallet'] = first_input_wallet
                 test_item['last_output_wallet'] = last_output_wallet
+                test_item['root_cj_tx'] = root_tx_id
+                test_item['last_cj_tx'] = last_tx_id
+                test_item['input_index_as_first'] = input_variant
+                test_item['output_index_as_last'] = output_variant
 
                 test_vectors_total += 1
                 if first_input_wallet == last_output_wallet:
@@ -280,10 +296,12 @@ def generate_llm_inputs(cjtx_stats):
 
 
 if __name__ == "__main__":
-    MIN_WALLETS_IN_COINJOIN = 2  # If root coinjoin transaction does not reach this limit, it is not included in training data (inner txs can be below)
+    MIN_WALLETS_IN_COINJOIN = 3  # If root coinjoin transaction does not reach this limit, it is not included in training data (inner txs can be below)
     ANALYSIS_DEPTH_LIMIT = 1  # Depth of the assumed coinjoin transactions (number of next other connected coinjoins)
+    GENERATE_SUBPARTS_GRAPHS = True
 
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\debug\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231008_2000Rounds_1parallel_max5inputs_10wallets\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231019_1000Rounds_1parallel_max10inputs_10wallets_5x10Msats_noPrison\\'
 #
@@ -297,7 +315,7 @@ if __name__ == "__main__":
 
     # Generate LLM inputs
     events_vector = generate_llm_inputs(cjtx_stats)
-    events_file = os.path.join(WASABIWALLET_DATA_DIR, "cjtx_events.json")
+    events_file = os.path.join(WASABIWALLET_DATA_DIR, "cjtx_events_minwallets={}_depth={}.json".format(MIN_WALLETS_IN_COINJOIN, ANALYSIS_DEPTH_LIMIT))
     with open(events_file, "w") as file:
         file.write(json.dumps(dict(sorted(events_vector.items())), indent=4))
 
