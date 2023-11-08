@@ -1470,17 +1470,19 @@ def fix_coordinator_wallet_addresses(cjtx_stats):
     :param cjtx_stats:
     :return:
     """
+    COORDINATOR_WALLET_ADDR_LEN = 32
+    #COORDINATOR_WALLET_ADDR_LEN = 64
     if COORDINATOR_WALLET_STRING not in cjtx_stats['wallets_info']:
         cjtx_stats['wallets_info'][COORDINATOR_WALLET_STRING] = []
     for cjtxid in cjtx_stats['coinjoins'].keys():
         for index in cjtx_stats['coinjoins'][cjtxid]['inputs'].keys():
             target_addr = cjtx_stats['coinjoins'][cjtxid]['inputs'][index]['address']
-            if 'wallet_name' not in cjtx_stats['coinjoins'][cjtxid]['inputs'][index] and len(target_addr) == 64:
+            if 'wallet_name' not in cjtx_stats['coinjoins'][cjtxid]['inputs'][index] and len(target_addr) == COORDINATOR_WALLET_ADDR_LEN:
                 cjtx_stats['coinjoins'][cjtxid]['inputs'][index]['wallet_name'] = COORDINATOR_WALLET_STRING
                 cjtx_stats['wallets_info'][COORDINATOR_WALLET_STRING].append({'address': target_addr})
         for index in cjtx_stats['coinjoins'][cjtxid]['outputs'].keys():
             target_addr = cjtx_stats['coinjoins'][cjtxid]['outputs'][index]['address']
-            if 'wallet_name' not in cjtx_stats['coinjoins'][cjtxid]['outputs'][index] and len(target_addr) == 64:
+            if 'wallet_name' not in cjtx_stats['coinjoins'][cjtxid]['outputs'][index] and len(target_addr) == COORDINATOR_WALLET_ADDR_LEN:
                 cjtx_stats['coinjoins'][cjtxid]['outputs'][index]['wallet_name'] = COORDINATOR_WALLET_STRING
                 cjtx_stats['wallets_info'][COORDINATOR_WALLET_STRING].append({'address': target_addr})
 
