@@ -562,6 +562,26 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
 
     num_boltzmann_analyzed = sum([1 for cjtxid in coinjoins.keys() if 'analysis' in coinjoins[cjtxid] and coinjoins[cjtxid]['analysis']['processed']['successfully_analyzed'] is True])
 
+    # Compute mining fee contribution in given coinjoin by seperate wallets
+    for cjtx in coinjoins.keys():
+        sum_inputs = sum(coinjoins[cjtx]['inputs'][index]['value'] * SATS_IN_BTC for index in coinjoins[cjtx]['inputs'].keys())
+        sum_outputs = sum(coinjoins[cjtx]['outputs'][index]['value'] * SATS_IN_BTC for index in coinjoins[cjtx]['outputs'].keys())
+        mining_fee = sum_inputs - sum_outputs
+        coinjoins[cjtx]['analysis2']['mining_fee'] = mining_fee
+
+        for wallet_name in cjtx_stats['wallets_info'].keys():
+            sum_inputs = sum(
+                coinjoins[cjtx]['inputs'][index]['value'] * SATS_IN_BTC for index in coinjoins[cjtx]['inputs'].keys() if wallet_name == coinjoins[cjtx]['inputs'][index]['wallet_name'])
+            sum_outputs = sum(
+                coinjoins[cjtx]['outputs'][index]['value'] * SATS_IN_BTC for index in coinjoins[cjtx]['outputs'].keys() if wallet_name == coinjoins[cjtx]['outputs'][index]['wallet_name'])
+            mining_and_coinjoin_fee_payed = sum_inputs - sum_outputs
+
+            if sum_inputs > 0:  # save only if some value was found
+                coinjoins[cjtx]['analysis2']['mining_and_coinjoin_fee_payed'][wallet_name] = mining_and_coinjoin_fee_payed
+
+
+
+
     # Create four subplots with their own axes
     fig = plt.figure(figsize=(48, 24))
     ax1 = fig.add_subplot(4, 4, 1)
@@ -595,6 +615,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_utxo_entropy_from_outputs = ax9
     ax_utxo_entropy_from_outputs_inoutsize = ax10
 
+    ax_mining_fees = ax11
 
     ax_boltzmann_entropy_inoutsize = ax12
     ax_boltzmann_entropy = ax13
@@ -672,7 +693,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_coinjoins.set_title('Number of coinjoin transactions in given time period')
 
     #
-    # Number of coinjoins per given time interval (e.g., hour)
+    # Number of coinjoin logs per given time interval (e.g., hour)
     #
     broadcast_times = []
     for round_id in rounds.keys():
