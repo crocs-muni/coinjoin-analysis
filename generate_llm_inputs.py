@@ -4,6 +4,8 @@ import json
 from collections import deque
 from collections import Counter
 import parse_cj_logs
+import numpy as np
+
 
 SATS_IN_BTC = 100000000
 VERBOSE = False
@@ -163,7 +165,7 @@ def generate_llm_inputs(cjtx_stats):
 
         if GENERATE_SUBPARTS_GRAPHS:
             visualize_copy['coinjoins'] = coinjoins_dupl
-            parse_cj_logs.visualize_coinjoins(visualize_copy, os.path.join(WASABIWALLET_DATA_DIR, 'llm'), 'cj_root={}_depth={}'.format(start_cjtxid[:8], ANALYSIS_DEPTH_LIMIT), False)
+            parse_cj_logs.visualize_coinjoins(visualize_copy, os.path.join(WASABIWALLET_DATA_DIR, 'llm', 'minWallets={}_depth={}'.format(MIN_WALLETS_IN_COINJOIN, ANALYSIS_DEPTH_LIMIT)), 'cj_root={}_depth={}'.format(start_cjtxid[:8], ANALYSIS_DEPTH_LIMIT), False)
 
         # Sort obtained coinjoins by their broadcast time
         sorted_cjs_in_scope = sorted(coinjoins_dupl, key=lambda txid: coinjoins_dupl[txid]['broadcast_time'])
@@ -296,12 +298,12 @@ def generate_llm_inputs(cjtx_stats):
 
 
 if __name__ == "__main__":
-    MIN_WALLETS_IN_COINJOIN = 3  # If root coinjoin transaction does not reach this limit, it is not included in training data (inner txs can be below)
-    ANALYSIS_DEPTH_LIMIT = 1  # Depth of the assumed coinjoin transactions (number of next other connected coinjoins)
-    GENERATE_SUBPARTS_GRAPHS = True
+    MIN_WALLETS_IN_COINJOIN = 1  # If root coinjoin transaction does not reach this limit, it is not included in training data (inner txs can be below)
+    ANALYSIS_DEPTH_LIMIT = 0  # Depth of the assumed coinjoin transactions (number of next other connected coinjoins)
+    GENERATE_SUBPARTS_GRAPHS = False
 
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\debug\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\debug\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231008_2000Rounds_1parallel_max5inputs_10wallets\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231019_1000Rounds_1parallel_max10inputs_10wallets_5x10Msats_noPrison\\'
 #
@@ -318,5 +320,21 @@ if __name__ == "__main__":
     events_file = os.path.join(WASABIWALLET_DATA_DIR, "cjtx_events_minwallets={}_depth={}.json".format(MIN_WALLETS_IN_COINJOIN, ANALYSIS_DEPTH_LIMIT))
     with open(events_file, "w") as file:
         file.write(json.dumps(dict(sorted(events_vector.items())), indent=4))
+
+    tx_data = []
+    tx_data_same_wallet = []
+    test_inputs_counter = 0
+    for cjtxid in events_vector.keys():
+        for index in range(0, len(events_vector[cjtxid])):
+            test_input = events_vector[cjtxid][index]['coinjoin_sentence_values']
+            tx_data.append(test_input)
+            test_input_answer = True if events_vector[cjtxid][index]['first_input_wallet'] == events_vector[cjtxid][index]['last_output_wallet'] else False
+            tx_data_same_wallet.append(test_input_answer)
+            test_inputs_counter += 1
+
+    save_file = os.path.join(WASABIWALLET_DATA_DIR, "coinjoin_tx_info.json")
+    print('Total test inputs = {}'.format(test_inputs_counter))
+    np.save(os.path.join(WASABIWALLET_DATA_DIR, 'X.npy'), tx_data)
+    np.save(os.path.join(WASABIWALLET_DATA_DIR, 'Y.npy'), tx_data_same_wallet)
 
     print('LLM data generation finished')
