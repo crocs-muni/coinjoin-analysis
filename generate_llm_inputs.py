@@ -72,28 +72,41 @@ def set_denomination_group(items, cj_counter):
 
 
 def serialize_llm_transaction(cjtx):
-    sentence_denom_groups = ''
-    sentence_values = ''
+    sentence_denom_groups_str = ''
+    sentence_values_str = ''
+    sentence_values = []
+
+    input_values = []
     for key, input in cjtx['inputs'].items():
-        sentence_denom_groups += '{} '.format(input['coin_counter'])
-        sentence_values += '{} '.format(input['coin_counter'])
+        sentence_denom_groups_str += '{} '.format(input['coin_counter'])
+        sentence_values_str += '{} '.format(input['coin_counter'])
 
-        sentence_denom_groups += '{} '.format(input['denomination_group'])
-        sentence_values += '{} '.format(int(input['value'] * SATS_IN_BTC))
+        sentence_denom_groups_str += '{} '.format(input['denomination_group'])
+        sats = int(input['value'] * SATS_IN_BTC)
+        sentence_values_str += '{} '.format(sats)
 
-    sentence_denom_groups += ', '
-    sentence_values += ', '
+        input_values.append((input['coin_counter'], sats))
+
+    sentence_denom_groups_str += ', '
+    sentence_values_str += ', '
+
+    output_values = []
     for key, output in cjtx['outputs'].items():
-        sentence_denom_groups += '{} '.format(output['coin_counter'])
-        sentence_values += '{} '.format(output['coin_counter'])
+        sentence_denom_groups_str += '{} '.format(output['coin_counter'])
+        sentence_values_str += '{} '.format(output['coin_counter'])
 
-        sentence_denom_groups += '{} '.format(output['denomination_group'])
-        sentence_values += '{} '.format(-int(output['value'] * SATS_IN_BTC))
+        sentence_denom_groups_str += '{} '.format(output['denomination_group'])
+        sats = -int(output['value'] * SATS_IN_BTC)
+        sentence_values_str += '{} '.format(sats)
 
-    sentence_denom_groups += '. '
-    sentence_values += '. '
+        output_values.append((output['coin_counter'], sats))
 
-    return sentence_denom_groups, sentence_values
+    sentence_denom_groups_str += '. '
+    sentence_values_str += '. '
+
+    sentence_values.append((input_values, output_values))
+
+    return sentence_denom_groups_str, sentence_values_str, sentence_values
 
 
 def generate_llm_inputs(cjtx_stats):
@@ -223,8 +236,9 @@ def generate_llm_inputs(cjtx_stats):
         # Serialize all coinjoins into single string with variantiosn of the first and last transaction
         for input_variant in range(0, num_inputs_first_tx):
             for output_variant in range(0, num_outputs_last_tx):
-                coinjoin_sentence_denom_groups = ''
-                coinjoin_sentence_values = ''
+                coinjoin_sentence_denom_groups_str = ''
+                coinjoin_sentence_values_str = ''
+                coinjoin_sentence_values = []
 
                 first_tx = copy.deepcopy(coinjoins_dupl[root_tx_id])
                 last_tx = copy.deepcopy(coinjoins_dupl[last_tx_id])
@@ -237,18 +251,24 @@ def generate_llm_inputs(cjtx_stats):
                 last_tx['outputs'][str(output_variant)] = copy.deepcopy(last_tx['outputs'][str(num_outputs_last_tx - 1)])
                 last_tx['outputs'][str(num_outputs_last_tx - 1)] = copy.deepcopy(last_output_swap)
 
-                sentence_denom_groups, sentence_values = serialize_llm_transaction(first_tx)
-                coinjoin_sentence_denom_groups += sentence_denom_groups
-                coinjoin_sentence_values += sentence_values
+                # First transaction
+                sentence_denom_groups_str, sentence_values_str, sentence_values  = serialize_llm_transaction(first_tx)
+                coinjoin_sentence_denom_groups_str += sentence_denom_groups_str
+                coinjoin_sentence_values_str += sentence_values_str
+                coinjoin_sentence_values.append(sentence_values)
 
+                # Intermediate transactions
                 for txid in sorted_cjs_in_scope[1:-2]:  # omit first and last transaction
-                    sentence_denom_groups, sentence_values = serialize_llm_transaction(coinjoins_dupl[txid])
-                    coinjoin_sentence_denom_groups += sentence_denom_groups
-                    coinjoin_sentence_values += sentence_values
+                    sentence_denom_groups_str, sentence_values_str, sentence_values = serialize_llm_transaction(coinjoins_dupl[txid])
+                    coinjoin_sentence_denom_groups_str += sentence_denom_groups_str
+                    coinjoin_sentence_values_str += sentence_values_str
+                    coinjoin_sentence_values.append(sentence_values)
 
-                sentence_denom_groups, sentence_values = serialize_llm_transaction(last_tx)
-                coinjoin_sentence_denom_groups += sentence_denom_groups
-                coinjoin_sentence_values += sentence_values
+                # Last transaction
+                sentence_denom_groups_str, sentence_values_str, sentence_values = serialize_llm_transaction(last_tx)
+                coinjoin_sentence_denom_groups_str += sentence_denom_groups_str
+                coinjoin_sentence_values_str += sentence_values_str
+                coinjoin_sentence_values.append(sentence_values)
 
                 # Get wallet name for the very first and very last item
                 first_input_wallet = first_tx['inputs']['0']['wallet_name']
@@ -259,13 +279,14 @@ def generate_llm_inputs(cjtx_stats):
                     last_output_wallet = 'other'
 
                 if VERBOSE:
-                    print(coinjoin_sentence_denom_groups)
-                    print(coinjoin_sentence_values)
+                    print(coinjoin_sentence_denom_groups_str)
+                    print(coinjoin_sentence_values_str)
                     print('first_in_wallet={}, last_out_wallet={}'.format(first_input_wallet, last_output_wallet))
 
                 test_item = {}
-                test_item['coinjoin_sentence_denom_groups'] = coinjoin_sentence_denom_groups
-                test_item['coinjoin_sentence_values'] = coinjoin_sentence_values
+                test_item['coinjoin_sentence_denom_groups'] = coinjoin_sentence_denom_groups_str
+                test_item['coinjoin_sentence_values'] = coinjoin_sentence_values_str
+                test_item['coinjoin_sentence_plain_values'] = coinjoin_sentence_values
                 test_item['first_input_wallet'] = first_input_wallet
                 test_item['last_output_wallet'] = last_output_wallet
                 test_item['root_cj_tx'] = root_tx_id
@@ -298,7 +319,7 @@ def generate_llm_inputs(cjtx_stats):
 
 
 if __name__ == "__main__":
-    MIN_WALLETS_IN_COINJOIN = 1  # If root coinjoin transaction does not reach this limit, it is not included in training data (inner txs can be below)
+    MIN_WALLETS_IN_COINJOIN = 3  # If root coinjoin transaction does not reach this limit, it is not included in training data (inner txs can be below)
     ANALYSIS_DEPTH_LIMIT = 0  # Depth of the assumed coinjoin transactions (number of next other connected coinjoins)
     GENERATE_SUBPARTS_GRAPHS = False
 
@@ -326,7 +347,7 @@ if __name__ == "__main__":
     test_inputs_counter = 0
     for cjtxid in events_vector.keys():
         for index in range(0, len(events_vector[cjtxid])):
-            test_input = events_vector[cjtxid][index]['coinjoin_sentence_values']
+            test_input = events_vector[cjtxid][index]['coinjoin_sentence_plain_values']
             tx_data.append(test_input)
             test_input_answer = True if events_vector[cjtxid][index]['first_input_wallet'] == events_vector[cjtxid][index]['last_output_wallet'] else False
             tx_data_same_wallet.append(test_input_answer)
