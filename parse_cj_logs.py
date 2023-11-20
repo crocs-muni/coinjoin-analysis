@@ -24,6 +24,8 @@ import jsonpickle
 from multiprocessing.pool import ThreadPool
 from tqdm import tqdm
 import anonymity_score
+import bitcoinlib.transactions
+from bitcoinlib.transactions import Transaction
 
 
 BTC_CLI_PATH = 'C:\\bitcoin-25.0\\bin\\bitcoin-cli'
@@ -225,16 +227,21 @@ def run_command(command, verbose):
     return result
 
 
-def get_input_address(txid, txid_in_out):
+def get_input_address(txid, txid_in_out, raw_txs: dict = {}):
     """
     Returns address which was used in transaction given by 'txid' as 'txid_in_out' output index
-    :param txid:
-    :param txid_in_out:
+    :param txid: transaction id to read input address from
+    :param txid_in_out: index in vout to read input address from
+    :param raw_txs: pre-computed database of transactions
     :return:
     """
-    result = run_command(
-        '{} -regtest getrawtransaction {} true'.format(BTC_CLI_PATH, txid), False)
-    tx_info = result.stdout
+
+    if len(raw_txs) > 0 and txid in raw_txs.keys():
+        tx_info = raw_txs[txid]
+    else:
+        result = run_command(
+            '{} -regtest getrawtransaction {} true'.format(BTC_CLI_PATH, txid), False)
+        tx_info = result.stdout
 
     try:
         parsed_data = json.loads(tx_info)
@@ -246,18 +253,27 @@ def get_input_address(txid, txid_in_out):
     except json.JSONDecodeError as e:
         print("Error decoding JSON:", e)
 
-    return None
+    return None, None
 
 
-def extract_tx_info(txid):
+def extract_tx_info(txid: str, raw_txs: dict):
     """
     Extract input and output addresses
-    :param txid:
-    :return:
+    :param txid: transaction to parse
+    :param raw_txs: dictionary with pre-loaded transactions
+    :return: parsed transaction record
     """
-    result = run_command(
-        '{} -regtest getrawtransaction {} true'.format(BTC_CLI_PATH, txid), False)
-    tx_info = result.stdout
+
+    USE_PRELOADED = True if len(raw_txs) > 0 and txid in raw_txs.keys() else False
+
+    if USE_PRELOADED:
+        # Use pre-loaded transactions if available
+        tx_info = raw_txs[txid]
+    else:
+        # retrieve from fullnode via RPC
+        result = run_command(
+            '{} -regtest getrawtransaction {} true'.format(BTC_CLI_PATH, txid), False)
+        tx_info = result.stdout
 
     tx_record = {}
     input_addresses = {}
@@ -275,8 +291,9 @@ def extract_tx_info(txid):
         inputs = parsed_data['vin']
         index = 0
         for input in inputs:
-            in_address, in_full_info = get_input_address(input['txid'], input[
-                'vout'])  # we need to read and parse previous transaction to obtain address and other information
+            # we need to read and parse previous transaction to obtain address and other information
+            in_address, in_full_info = get_input_address(input['txid'], input['vout'], raw_txs)
+
             tx_record['inputs'][index] = {}
             # tx_record['inputs'][index]['full_info'] = in_full_info
             tx_record['inputs'][index]['address'] = in_address
@@ -1089,7 +1106,6 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     print('Basic coinjoins statistics saved into {}'.format(save_file))
 
 
-
 def build_address_wallet_mapping(cjtx_stats):
     address_wallet_mapping = {}
     for cjtxid in cjtx_stats['coinjoins'].keys():
@@ -1126,7 +1142,7 @@ def parse_client_coinjoin_logs(cjtx_stats, base_directory):
     # 2023-10-23 16:23:38.053 [41] INFO	AliceClient.CreateRegisterAndConfirmInputAsync (77)	Round (5455291d82b748469b5eb2e63d3859370c1f3823d4b8ca5cea7322f93b98af05), Alice (6eb340fe-d153-ac10-0246-252e8a866fbc): Connection was confirmed.
     # 2023-10-23 16:24:05.939 [27] INFO	AliceClient.ReadyToSignAsync (223)	Round (5455291d82b748469b5eb2e63d3859370c1f3823d4b8ca5cea7322f93b98af05), Alice (6eb340fe-d153-ac10-0246-252e8a866fbc): Ready to sign.
     # 2023-10-23 16:24:46.110 [41] INFO	AliceClient.SignTransactionAsync (217)	Round (5455291d82b748469b5eb2e63d3859370c1f3823d4b8ca5cea7322f93b98af05), Alice (6eb340fe-d153-ac10-0246-252e8a866fbc): Posted a signature.
-    client_input_file = '{}\\WalletWasabi\\Client\\Logs.txt'.format(base_directory)
+    client_input_file = os.path.join(base_directory, 'Logs.txt')
 
     print('Parsing coinjoin-relevant data from client logs {}...'.format(client_input_file), end='')
 
@@ -1174,9 +1190,8 @@ def parse_client_coinjoin_logs(cjtx_stats, base_directory):
 
     print('finished')
 
-def parse_backend_coinjoin_logs(base_directory):
-    coord_input_file = '{}\\WalletWasabi\\Backend\\Logs.txt'.format(base_directory)
 
+def parse_backend_coinjoin_logs(coord_input_file, raw_tx_db: dict = {}):
     print('Parsing coinjoin-relevant data from coordinator logs {}...'.format(coord_input_file), end='')
     if PRE_2_0_4_VERSION:
         regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with params: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
@@ -1190,7 +1205,7 @@ def parse_backend_coinjoin_logs(base_directory):
     regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Successfully broadcast the coinjoin: (?P<cj_tx_id>[0-9a-f]*)\.?"
     success_coinjoin_round_ids = find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp', 'cj_tx_id'])
     # round_cjtx_mapping = find_round_cjtx_mapping(coord_input_file, regex_pattern, 'round_id', 'cj_tx_id')
-    round_cjtx_mapping = {round_id: success_coinjoin_round_ids[round_id]['cj_tx_id'] for round_id in
+    round_cjtx_mapping = {round_id: success_coinjoin_round_ids[round_id][0]['cj_tx_id'] for round_id in     # take only the first record found
                           success_coinjoin_round_ids.keys()}
     print('done')
 
@@ -1212,7 +1227,7 @@ def parse_backend_coinjoin_logs(base_directory):
     cjtx_stats = {}
     for round_id in full_round_ids:
         # extract input and output addresses
-        tx_record = extract_tx_info(round_cjtx_mapping[round_id])
+        tx_record = extract_tx_info(round_cjtx_mapping[round_id], raw_tx_db)
         if tx_record is not None:
             # Find coinjoin transaction id and create record if not already
             cjtxid = round_cjtx_mapping[round_id]
@@ -1258,9 +1273,7 @@ def insert_by_round_id(rounds_logs, events):
         rounds_logs[round_id]['logs'].append(value)
 
 
-def parse_coinjoin_errors(cjtx_stats, base_directory):
-    coord_input_file = '{}\\WalletWasabi\\Backend\\Logs.txt'.format(base_directory)
-
+def parse_coinjoin_errors(cjtx_stats, coord_input_file):
     print('Parsing coinjoin-relevant error data from coordinator logs {}...'.format(coord_input_file), end='')
 
     rounds_logs = {}
@@ -1463,13 +1476,55 @@ def visualize_coinjoins(cjtx_stats, base_path='', output_name='coinjoin_graph', 
     dot2.render(save_file, view=view_pdf)
 
 
-def obtain_wallets_info(base_path, load_wallet_info_via_rpc):
+def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_docker_files):
     wallets_file = os.path.join(base_path, "wallets_info.json")
     if load_wallet_info_via_rpc:
         print("Loading current wallets info from WasabiWallet RPC")
         # Load wallets info via WasabiWallet RPC
         wallets_info, wallet_coins_all, wallet_coins_unspent = load_wallets_info()
         # Save wallets info into json
+        print("Saving current wallets into {}".format(wallets_file))
+        with open(wallets_file, "w") as file:
+            file.write(json.dumps(dict(sorted(wallets_info.items())), indent=4))
+    elif load_wallet_from_docker_files:
+        print("Loading current wallets info from pre-retrieved coin files wasabi-client-x/coins.json")
+
+        # List folders corresponding to wallets
+        base_path_wasabi = os.path.join(base_path, 'data')
+        files = os.listdir(base_path_wasabi) if os.path.exists(base_path_wasabi) else print(f'Path {base_path_wasabi} does not exist')
+        wallets_info = {}
+        # Load information from all wallet directories
+        anonymity_by_address = {}
+        for file in files:
+            target_base_path = os.path.join(base_path_wasabi, file)
+            # processs wallets one by one
+            if os.path.isdir(target_base_path) and file.startswith('wasabi-client-'):
+                wallet_name = 'wallet-' + file[len('wasabi-client-'):]
+
+                # Wallet coins (as obtained by 'listcoins' RPC)
+                with open(os.path.join(target_base_path, 'coins.json'), "r") as file:
+                    wallet_coins = json.load(file)
+                    parsed_coins = anonymity_score.parse_wallet_coins(wallet_name, wallet_coins)
+                    for coin in parsed_coins:
+                        anonymity_by_address[coin.address] = coin
+
+                # Wallet addresses (as obtained by 'listkeys' RPC) - now extracted from 'coins.json' file
+                wallet_addresses = []
+                for coin in parsed_coins:
+                    json_representation = {"fullKeyPath": "", "internal": True, "keyState": 2, "label": "",
+                                           "scriptPubKey": "", "pubkey": "", "pubKeyHash": "", "address": coin.address}
+                    wallet_addresses.append(json_representation)
+                wallets_info[wallet_name] = wallet_addresses
+
+        # Serialize parsed coins for all wallets into 'serialized_annonymity.json' file (as expected by subsequent analysis)
+        list_of_coins = list(anonymity_by_address.values())
+        encoded = jsonpickle.encode(list_of_coins)
+        serialization_path = os.path.join(base_path, 'serialized_annonymity.json')
+        with open(serialization_path, "w") as f:
+            f.write(encoded)
+
+        # Save wallets info into json
+        wallets_file = os.path.join(base_path, 'wallets_info.json')
         print("Saving current wallets into {}".format(wallets_file))
         with open(wallets_file, "w") as file:
             file.write(json.dumps(dict(sorted(wallets_info.items())), indent=4))
@@ -1578,6 +1633,29 @@ def load_anonscore_data(cjtx_stats, base_path):
     return cjtx_stats
 
 
+def list_files(folder_path, suffix):
+    json_files = [os.path.join(root, file) for root, dirs, files in os.walk(folder_path) for file in files if file.endswith(suffix)]
+    return json_files
+
+
+def load_rawtx_database(base_tx_path):
+    tx_db = {}
+    files = list_files(base_tx_path, '.json')
+    for tx_file in files:
+        with open(tx_file, "r") as file:
+            raw_tx = json.load(file)
+            result = run_command(
+                '{} -regtest decoderawtransaction \"{}\" '.format(BTC_CLI_PATH, raw_tx['txRawHex']), False)
+            tx_info = result.stdout
+            parsed_tx_info = json.loads(tx_info)
+            tx_db[parsed_tx_info['txid']] = tx_info
+
+            # # Create a Transaction object from the raw hex
+            # tx = Transaction.parse(raw_tx['txRawHex'], False, 'regtest')
+            # tx_db[tx.txid] = tx.as_json()
+    return tx_db
+
+
 def process_experiment(base_path):
     WASABIWALLET_DATA_DIR = base_path
 
@@ -1587,12 +1665,20 @@ def process_experiment(base_path):
         with open(save_file, "r") as file:
             cjtx_stats = json.load(file)
     else:
+        # Load transaction info from serialized files
+        if LOAD_TXINFO_FROM_DOCKER_FILES:
+            tx_path = os.path.join(base_path, 'data', 'wasabi-backend', 'WabiSabi', 'CoinJoinTransactions')
+            RAW_TXS_DB = load_rawtx_database(tx_path)
+
         # Load wallets info
         cjtx_stats = {}
-        cjtx_stats['wallets_info'] = obtain_wallets_info(WASABIWALLET_DATA_DIR, LOAD_WALLETS_INFO_VIA_RPC)
+        cjtx_stats['wallets_info'] = obtain_wallets_info(WASABIWALLET_DATA_DIR, LOAD_WALLETS_INFO_VIA_RPC, LOAD_TXINFO_FROM_DOCKER_FILES)
 
         # Parse conjoins from logs
-        cjtx_stats['coinjoins'] = parse_backend_coinjoin_logs(WASABIWALLET_DATA_DIR)
+        coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'WalletWasabi/Backend/Logs.txt')
+        if not os.path.exists(coord_input_file):  # if not found, try dockerized path
+            coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'data/wasabi-backend/Logs.txt')
+        cjtx_stats['coinjoins'] = parse_backend_coinjoin_logs(coord_input_file, RAW_TXS_DB)
 
         # Build mapping between address and controlling wallet
         cjtx_stats['address_wallet_mapping'] = build_address_wallet_mapping(cjtx_stats)
@@ -1603,7 +1689,10 @@ def process_experiment(base_path):
 
         # Analyze error states
         if PARSE_ERRORS:
-            parse_coinjoin_errors(cjtx_stats, WASABIWALLET_DATA_DIR)
+            coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'WalletWasabi/Backend/Logs.txt')
+            if not os.path.exists(coord_input_file):  # if not found, try dockerized path
+                coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'data/wasabi-backend/Logs.txt')
+            parse_coinjoin_errors(cjtx_stats, coord_input_file)
 
         # Save parsed coinjoin transactions info into json
         with open(save_file, "w") as file:
@@ -1691,7 +1780,9 @@ def process_experiment(base_path):
             file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
     print('Entropy analysis: {} txs out of {} successfully analyzed'.format(sum([1 for cjtxid in cjtx_stats['coinjoins'].keys() if 'analysis' in cjtx_stats['coinjoins'][cjtxid] and cjtx_stats['coinjoins'][cjtxid]['analysis']['processed']['successfully_analyzed'] is True]), len(cjtx_stats['coinjoins'].keys())))
 
-    #parse_client_coinjoin_logs(cjtx_stats, WASABIWALLET_DATA_DIR)
+    client_input_path = os.path.join(WASABIWALLET_DATA_DIR, 'WalletWasabi', 'Client')
+    #parse_client_coinjoin_logs(cjtx_stats, client_input_path)
+    # TODO: load client logs from multiple directories 'wasabi-client-x'
 
     load_prison_data(cjtx_stats, WASABIWALLET_DATA_DIR)
 
@@ -1727,8 +1818,8 @@ def process_multiple_experiments(base_path):
     for file in files:
         target_base_path = os.path.join(base_path, file)
         if os.path.isdir(target_base_path):
-            test_path = os.path.join(target_base_path, 'WalletWasabi')
-            if os.path.exists(test_path):
+            if (os.path.exists(os.path.join(target_base_path, 'WalletWasabi'))
+                    or os.path.exists(os.path.join(target_base_path, 'data'))):
                 print('****************************')
                 print('Analyzing experiment {}'.format(target_base_path))
                 process_experiment(target_base_path)
@@ -1738,6 +1829,7 @@ class ANALYSIS_TYPE(Enum):
     COLLECT_COINJOIN_DATA_LOCAL = 1
     COMPUTE_COINJOIN_TXINFO_REMOTE = 2
     ANALYZE_COINJOIN_DATA_LOCAL = 3
+    COLLECT_COINJOIN_DATA_LOCAL_DOCKER = 4
 
 
 if __name__ == "__main__":
@@ -1745,13 +1837,20 @@ if __name__ == "__main__":
 
     # Analysis type
     #cfg = ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL
-    cfg = ANALYSIS_TYPE.ANALYZE_COINJOIN_DATA_LOCAL
+    cfg = ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
+    #cfg = ANALYSIS_TYPE.ANALYZE_COINJOIN_DATA_LOCAL
     #cfg = ANALYSIS_TYPE.COMPUTE_COINJOIN_TXINFO_REMOTE
 
     print('Analysis configuration: {}'.format(cfg.name))
 
+    RAW_TXS_DB = {}
+
     if cfg == ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL:
         # Extract all info from running wallet and fullnode
+
+        # If True, preprocessed files extracted from dockerized instances are assumed.
+        # If False, local instance with Wasabi wallet is assumed.
+        LOAD_TXINFO_FROM_DOCKER_FILES = False
         # If True, existence of coinjoin_tx_info.json is assumed and all data are read from it.
         # Bitcoin Core/Wallet RPC is not required
         LOAD_TXINFO_FROM_FILE = False
@@ -1776,8 +1875,23 @@ if __name__ == "__main__":
         GENERATE_COINJOIN_GRAPH = False
         # Base start path with data for processing (WalletWasabi and other folders)
         target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
+    elif cfg == ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL_DOCKER:
+        # Extract info from static files previously created and collected from dockerized instances
+        LOAD_TXINFO_FROM_DOCKER_FILES = True
+        LOAD_TXINFO_FROM_FILE = False
+        LOAD_WALLETS_INFO_VIA_RPC = False
+        PARSE_ERRORS = True
+        RETRIEVE_TRANSACTION_INFO = False
+        LOAD_COMPUTED_TRANSACTION_INFO = False
+        COMPUTE_COINJOIN_STATS = False
+        FORCE_COMPUTE_COINJOIN_STATS = False
+        PARALLELIZE_COMPUTE_COINJOIN_STATS = False
+        GENERATE_COINJOIN_GRAPH = False
+        target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
     elif cfg == ANALYSIS_TYPE.ANALYZE_COINJOIN_DATA_LOCAL:
         # Just recompute analysis
+
+        LOAD_TXINFO_FROM_DOCKER_FILES = False
         LOAD_TXINFO_FROM_FILE = True
         LOAD_WALLETS_INFO_VIA_RPC = False
         PARSE_ERRORS = False
@@ -1795,6 +1909,8 @@ if __name__ == "__main__":
         target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
     elif cfg == ANALYSIS_TYPE.COMPUTE_COINJOIN_TXINFO_REMOTE:
         # Compute only time-consuming transaction entropy analysis from pre-retrieved transactions
+
+        LOAD_TXINFO_FROM_DOCKER_FILES = False
         LOAD_TXINFO_FROM_FILE = True
         LOAD_WALLETS_INFO_VIA_RPC = False
         GENERATE_COINJOIN_GRAPH = False
@@ -1819,6 +1935,7 @@ if __name__ == "__main__":
     #PARALLELIZE_COINJOIN_STATS = False
     #LOAD_WALLETS_INFO_VIA_RPC = False
     #LOAD_TXINFO_FROM_FILE = False
+    ASSUME_COORDINATOR_WALLET = True
 
     #target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
     #target_base_path = '/home/xsvenda/coinjoin/'
@@ -1832,7 +1949,7 @@ if __name__ == "__main__":
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20231002_1000Round_1parallel_max20inputs_5and5wallets_10M_1Msats\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20231003_500Round_1parallel_max100inputs_30wallets_10Msats\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20231004_500Round_1parallel_max100inputs_30wallets_10Msats\\'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_147Rounds_1parallel_max4inputs_10wallets_inJailForFailures\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231008_2000Rounds_1parallel_max5inputs_10wallets\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231013_500Rounds_1parallel_max20inputs_10wallets_5x10Msats\\'
@@ -1843,6 +1960,7 @@ if __name__ == "__main__":
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231019_1000Rounds_1parallel_max10inputs_10wallets_5x10Msats_noPrison\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231020_1000Rounds_1parallel_max40inputs_10wallets_5x10Msats_noPrison\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231023_11Rounds_1parallel_max6inputs_10wallets_5x10Msats\\'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol6\\test\\'
     #
 
     if PROFILE_PERFORMANCE:
