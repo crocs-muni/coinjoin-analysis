@@ -265,10 +265,11 @@ def generate_llm_inputs(cjtx_stats):
                     coinjoin_sentence_values.append(sentence_values)
 
                 # Last transaction
-                sentence_denom_groups_str, sentence_values_str, sentence_values = serialize_llm_transaction(last_tx)
-                coinjoin_sentence_denom_groups_str += sentence_denom_groups_str
-                coinjoin_sentence_values_str += sentence_values_str
-                coinjoin_sentence_values.append(sentence_values)
+                if last_tx['txid'] != first_tx['txid']:
+                    sentence_denom_groups_str, sentence_values_str, sentence_values = serialize_llm_transaction(last_tx)
+                    coinjoin_sentence_denom_groups_str += sentence_denom_groups_str
+                    coinjoin_sentence_values_str += sentence_values_str
+                    coinjoin_sentence_values.append(sentence_values)
 
                 # Get wallet name for the very first and very last item
                 first_input_wallet = first_tx['inputs']['0']['wallet_name']
