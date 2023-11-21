@@ -405,7 +405,7 @@ def prepare_node_attribs(coinjoin_txid, addr, value_size):
 def graphviz_insert_address_cjtx_mapping(addr, coinjoin_txid, value_size, edge_color, vin_index, graphdot):
     coinjoin_txid, addr, width = prepare_node_attribs(coinjoin_txid, addr, value_size)
     label = "{}{:.8f}₿".format('[{}] '.format(vin_index), value_size if value_size > 0 else '')
-    graphdot.edge(addr, coinjoin_txid, color=edge_color, label=label, style='dashed')
+    graphdot.edge(addr, coinjoin_txid, color=edge_color, label=label, style='tapered', penwidth=width)
 
 
 def graphviz_insert_cjtx_address_mapping(coinjoin_txid, addr, value_size, entropy, edge_color, vout_index, graphdot):
