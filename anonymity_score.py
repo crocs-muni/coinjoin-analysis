@@ -17,16 +17,17 @@ class CoinWithAnonymity():
         self.amount = amount
         self.spent_in_tx = spent_in_tx
         
+    def as_dict(self):
+        return {'address': self.address, 'txid': self.txid, 'index': self.index, 'wallet': self.wallet,
+                  'annon_score': self.annon_score, 'amount': self.amount, 'spent_in_tx': self.spent_in_tx}
 
-def list_wallet_coins(wallet: str):
+def parse_wallet_coins(wallet_name: str, coins: dict):
     """
-    Creates list of coins with anonymity score for given wallet. Excpects that backend and client are running.
-    :param wallet: name of wallet
+    Creates list of coins with anonymity score for a given wallet from the provided dictionary with coins
+    :param wallet_name: name of wallet
+    :param coins: dictionary with information returned from Wasabi client RPC
     :return: list of parsed coins
     """
-    rpc_commands.confirmed_load(wallet)
-    coins = rpc_commands.list_all_coins(wallet, False)
-    coins = coins["result"]
     parsed_coins: List[CoinWithAnonymity] = []
     for coin in coins:
         
@@ -37,7 +38,7 @@ def list_wallet_coins(wallet: str):
         new_coin = CoinWithAnonymity(coin["address"], 
                                      coin["txid"], 
                                      coin["index"], 
-                                     wallet, 
+                                     wallet_name,
                                      coin["anonymityScore"], 
                                      coin["amount"], 
                                      spent_in)
@@ -46,7 +47,19 @@ def list_wallet_coins(wallet: str):
         parsed_coins.append(new_coin)
     
     return parsed_coins
-    
+
+
+def list_wallet_coins(wallet: str):
+    """
+    Creates list of coins with anonymity score for given wallet. Expects that backend and client are running.
+    :param wallet: name of wallet
+    :return: dictionary with coins retrieved via RPC from the Wasabi wallet client
+    """
+    rpc_commands.confirmed_load(wallet)
+    coins = rpc_commands.list_all_coins(wallet, False)
+    coins = coins["result"]
+
+    return parse_wallet_coins(coins)
 
 
 def get_coins_for_specified_wallets(wallets: List[str], processes_handler: processes_control.Wasabi_Processes_Handler = None):
