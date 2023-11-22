@@ -1579,6 +1579,8 @@ def fix_coordinator_wallet_addresses(cjtx_stats):
 
 def load_prison_data(cjtx_stats, base_path):
     prison_file = os.path.join(base_path, "WalletWasabi", "Backend", "WabiSabi", "Prison.txt")
+    if not os.path.exists(prison_file):
+        prison_file = os.path.join(base_path, "data", "wasabi-backend", "backend", "WabiSabi", "Prison.txt")
     items_in_prison = 0
 
     #detect prison version (<2.0.4 is different than >=2.0.4)
@@ -2009,7 +2011,10 @@ if __name__ == "__main__":
             process_experiment(target_base_path)
             Stats(profile).strip_dirs().sort_stats(SortKey.TIME).print_stats()
     else:
-        process_experiment(target_base_path)
+        if os.path.exists(target_base_path):
+            process_experiment(target_base_path)
+        else:
+            print(f'ERROR: Path {target_base_path} does not exist')
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231012_500Rounds_1parallel_max20inputs_10wallets_daemon_shortPrison\\'
     target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231012_500Rounds_1parallel_max20inputs_10wallets_daemon_shortPrison\\'
 
