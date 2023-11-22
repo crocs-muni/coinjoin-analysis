@@ -55,7 +55,7 @@ def get_neighbors(coinjoins, node):
     return set(next_cjs)
 
 
-def set_denomination_group(items, cj_counter):
+def set_denomination_group_type1(items, cj_counter):
     out_values = [items[index]['value'] for index in items.keys()]
     value_counts = Counter(out_values)
     value_counts_sorted = value_counts.most_common()
@@ -71,14 +71,29 @@ def set_denomination_group(items, cj_counter):
         output['denomination_group'] = '{}_{}'.format(char_mapping[output['value']], cj_counter)
 
 
+def set_denomination_group_type2(items):
+    out_values = [items[index]['value'] for index in items.keys()]
+    value_counts = Counter(out_values)
+    value_counts_sorted = value_counts.most_common()
+    char_mapping = {}
+    for i, value in enumerate(value_counts_sorted):
+        if value[1] > 1:
+            char_mapping[value[0]] = chr(ord('A') + i)
+        else:
+            char_mapping[value[0]] = int(value[0] * SATS_IN_BTC)
+
+    num_different_values = len(value_counts)
+    for key, output in items.items():
+        output['denomination_group'] = char_mapping[output['value']]
+
+
 def serialize_llm_transaction(cjtx):
     sentence_denom_groups_str = ''
     sentence_values_str = ''
-    sentence_values = []
 
+    input_values_denom_group = []
     input_values = []
     for key, input in cjtx['inputs'].items():
-        sentence_denom_groups_str += '{} '.format(input['coin_counter'])
         sentence_values_str += '{} '.format(input['coin_counter'])
 
         sentence_denom_groups_str += '{} '.format(input['denomination_group'])
@@ -86,13 +101,16 @@ def serialize_llm_transaction(cjtx):
         sentence_values_str += '{} '.format(sats)
 
         input_values.append((input['coin_counter'], sats))
+        input_values_denom_group.append(input['denomination_group'])
 
     sentence_denom_groups_str += ', '
     sentence_values_str += ', '
 
+    output_values_denom_group = []
     output_values = []
     for key, output in cjtx['outputs'].items():
-        sentence_denom_groups_str += '{} '.format(output['coin_counter'])
+        if output['distance_to_next_use'] > 1:  # Do not print values with no use (-1) and immediate use (=1)
+            sentence_denom_groups_str += '_{} '.format(output['distance_to_next_use'])
         sentence_values_str += '{} '.format(output['coin_counter'])
 
         sentence_denom_groups_str += '{} '.format(output['denomination_group'])
@@ -100,13 +118,85 @@ def serialize_llm_transaction(cjtx):
         sentence_values_str += '{} '.format(sats)
 
         output_values.append((output['coin_counter'], sats))
+        output_values_denom_group.append((output['distance_to_next_use'], output['denomination_group']))
 
     sentence_denom_groups_str += '. '
     sentence_values_str += '. '
 
-    sentence_values.append((input_values, output_values))
+    return sentence_denom_groups_str, (input_values_denom_group, output_values_denom_group), sentence_values_str, (input_values, output_values)
 
-    return sentence_denom_groups_str, sentence_values_str, sentence_values
+
+def number_inputs_outputs_unique(sorted_cjs_in_scope, coinjoins_dupl):
+    # Numbering of inputs and outputs for all subsequent coinjoins in scope
+
+    cj_counter = 1  # Incremental counter of transactions
+    coin_counter = 1  # Incremental counter for different coins used between coinjoins (output and corresponding input is the same coin)
+    for txid in sorted_cjs_in_scope:
+        # Assign groups of outputs with same denomination and assign denomination_group character based on that
+        # Unique values are having special group 'change' with character '♥'
+        # set_denomination_group_type1(coinjoins_dupl[txid]['inputs'], cj_counter)
+        # set_denomination_group_type1(coinjoins_dupl[txid]['outputs'], cj_counter)
+
+        # Unique values will keep its sats value
+        set_denomination_group_type2(coinjoins_dupl[txid]['inputs'])
+        set_denomination_group_type2(coinjoins_dupl[txid]['outputs'])
+
+        # Assign new counter only to such inputs, which are not connected to already numbered outputs
+        for key, input in coinjoins_dupl[txid]['inputs'].items():
+            if 'coin_counter' not in input.keys():
+                # Check if this input is not output from some previous transaction in the scope we already numbered
+                already_numbered = False
+                for other_cjtx in coinjoins_dupl.keys():
+                    if txid == other_cjtx:
+                        continue
+                    for key, output in coinjoins_dupl[other_cjtx]['outputs'].items():
+                        if other_cjtx == input['txid'] and output['address'] == input['address'] and output['value'] == \
+                                input['value']:
+                            if 'coin_counter' not in input.keys():
+                                input['coin_counter'] = output['coin_counter']
+                            else:
+                                print('ERROR: inconsistent coin_counter')
+                            already_numbered = True
+                            break
+                    if already_numbered:
+                        break
+
+                if not already_numbered:
+                    # We found new input which is not numbered
+                    input['coin_counter'] = coin_counter
+                    coin_counter += 1
+
+        # outputs are always getting new counter
+        for key, output in coinjoins_dupl[txid]['outputs'].items():
+            if 'coin_counter' not in output.keys():
+                output['coin_counter'] = coin_counter
+                coin_counter += 1
+            else:
+                print('ERROR: inconsistent coin_counter')
+        cj_counter += 1
+
+    return coinjoins_dupl
+
+
+def compute_output_distance_to_next_cj(sorted_cjs_in_scope, coinjoins_dupl):
+    for tx_index in range(0, len(sorted_cjs_in_scope)):
+        txid = sorted_cjs_in_scope[tx_index]
+        # outputs are always getting new counter
+        for key, output in coinjoins_dupl[txid]['outputs'].items():
+            distance = -1
+            address = output['address']
+            for tx_index_after in range(tx_index + 1, len(sorted_cjs_in_scope)):
+                for index, input in coinjoins_dupl[sorted_cjs_in_scope[tx_index_after]]['inputs'].items():
+                    if input['address'] == address and input['txid'] == txid:
+                        distance = tx_index_after - tx_index
+                        break
+                if distance != -1:
+                    break
+
+            if 'distance_to_next_use' not in output.keys():
+                output['distance_to_next_use'] = distance
+
+    return coinjoins_dupl
 
 
 def generate_llm_inputs(cjtx_stats):
@@ -140,7 +230,7 @@ def generate_llm_inputs(cjtx_stats):
         if tx_processed_counter % 80 == 0:
             print('')
 
-        # Check if enough wallets are present in root coinjoin tx - if not, skip it for generation
+        # Check if enough wallets are present in root coinjoin tx (<=MIN_WALLETS_IN_COINJOIN) - if not, skip it for generation
         num_wallets_in_coinjoin = set([cjtx_stats['coinjoins'][start_cjtxid]['inputs'][index]['wallet_name'] for index in cjtx_stats['coinjoins'][start_cjtxid]['inputs'].keys()])
         if len(num_wallets_in_coinjoin) < MIN_WALLETS_IN_COINJOIN:
             print('x', end='')
@@ -153,9 +243,6 @@ def generate_llm_inputs(cjtx_stats):
         # Obtain subtree with connected coinjoin txs with up to ANALYSIS_DEPTH_LIMIT from the root tx
         # get coinjoins in scope (all connected from initial cjtxid)
         cjs_in_scope = bfs_with_limit(cjtx_stats['coinjoins'], start_cjtxid, ANALYSIS_DEPTH_LIMIT)
-
-        cj_counter = 1  # Incremental counter of transactions
-        coin_counter = 1  # Incremental counter for different coins used between coinjoins (output and corresponding input is the same coin)
 
         # Identify all different denomination values over the whole subtree
         out_values = []
@@ -170,7 +257,7 @@ def generate_llm_inputs(cjtx_stats):
             print('Number of different denominations: {}'.format(len(value_counts_sorted)))
             print('Number of unique denominations: {}'.format(sum([1 for value in value_counts_sorted if value[1] == 1])))
 
-        # Duplicate obtained coinjoin structure for further processing
+        # Duplicate obtained coinjoin structure for further processing to preserve the original one untouched
         coinjoins_dupl = {}
         for key in cjs_in_scope:
             if key in cjtx_stats['coinjoins'].keys():
@@ -183,45 +270,11 @@ def generate_llm_inputs(cjtx_stats):
         # Sort obtained coinjoins by their broadcast time
         sorted_cjs_in_scope = sorted(coinjoins_dupl, key=lambda txid: coinjoins_dupl[txid]['broadcast_time'])
 
-        # Numbering of inputs and outputs for all subsequent coinjoins in scope
-        for txid in sorted_cjs_in_scope:
-            # Assign groups of outputs with same denomination and assign denomination_group character based on that
-            # Unique values are having special group 'change' with character '♥'
-            set_denomination_group(coinjoins_dupl[txid]['inputs'], cj_counter)
-            set_denomination_group(coinjoins_dupl[txid]['outputs'], cj_counter)
+        # Number inputs and outputs for all subsequent coinjoins in scope
+        number_inputs_outputs_unique(sorted_cjs_in_scope, coinjoins_dupl)
 
-            # Assign new counter only to such inputs, which are not connected to already numbered outputs
-            for key, input in coinjoins_dupl[txid]['inputs'].items():
-                if 'coin_counter' not in input.keys():
-                    # Check if this input is not output from some previous transaction in the scope we already numbered
-                    already_numbered = False
-                    for other_cjtx in coinjoins_dupl.keys():
-                        if txid == other_cjtx:
-                            continue
-                        for key, output in coinjoins_dupl[other_cjtx]['outputs'].items():
-                            if other_cjtx == input['txid'] and output['address'] == input['address'] and output['value'] == input['value']:
-                                if 'coin_counter' not in input.keys():
-                                    input['coin_counter'] = output['coin_counter']
-                                else:
-                                    print('ERROR: inconsistent coin_counter')
-                                already_numbered = True
-                                break
-                        if already_numbered:
-                            break
-
-                    if not already_numbered:
-                        # We found new input which is not numbered
-                        input['coin_counter'] = coin_counter
-                        coin_counter += 1
-
-            # outputs are always getting new counter
-            for key, output in coinjoins_dupl[txid]['outputs'].items():
-                if 'coin_counter' not in output.keys():
-                    output['coin_counter'] = coin_counter
-                    coin_counter += 1
-                else:
-                    print('ERROR: inconsistent coin_counter')
-            cj_counter += 1
+        # Assign number of skipped coinjoins for each output (how many coinjoins were created before the output was used as input to next one)
+        compute_output_distance_to_next_cj(sorted_cjs_in_scope, coinjoins_dupl)
 
         # Generate different variations with swapped inputs and outputs
         assert sorted_cjs_in_scope[0] == start_cjtxid
@@ -233,10 +286,11 @@ def generate_llm_inputs(cjtx_stats):
         num_outputs_last_tx = len(coinjoins_dupl[last_tx_id]['outputs'])
         num_variants = num_inputs_first_tx * num_outputs_last_tx
 
-        # Serialize all coinjoins into single string with variantiosn of the first and last transaction
+        # Serialize all coinjoins into single string with variations of the first and last transaction
         for input_variant in range(0, num_inputs_first_tx):
             for output_variant in range(0, num_outputs_last_tx):
                 coinjoin_sentence_denom_groups_str = ''
+                coinjoin_sentence_denom_groups = []
                 coinjoin_sentence_values_str = ''
                 coinjoin_sentence_values = []
 
@@ -252,22 +306,26 @@ def generate_llm_inputs(cjtx_stats):
                 last_tx['outputs'][str(num_outputs_last_tx - 1)] = copy.deepcopy(last_output_swap)
 
                 # First transaction
-                sentence_denom_groups_str, sentence_values_str, sentence_values  = serialize_llm_transaction(first_tx)
+                sentence_denom_groups_str, sentence_denom_groups, sentence_values_str, sentence_values = serialize_llm_transaction(first_tx)
                 coinjoin_sentence_denom_groups_str += sentence_denom_groups_str
+                coinjoin_sentence_denom_groups.append(sentence_denom_groups)
                 coinjoin_sentence_values_str += sentence_values_str
                 coinjoin_sentence_values.append(sentence_values)
 
                 # Intermediate transactions
                 for txid in sorted_cjs_in_scope[1:-2]:  # omit first and last transaction
-                    sentence_denom_groups_str, sentence_values_str, sentence_values = serialize_llm_transaction(coinjoins_dupl[txid])
+                    sentence_denom_groups_str, sentence_denom_groups, sentence_values_str, sentence_values = serialize_llm_transaction(
+                        coinjoins_dupl[txid])
                     coinjoin_sentence_denom_groups_str += sentence_denom_groups_str
+                    coinjoin_sentence_denom_groups.append(sentence_denom_groups)
                     coinjoin_sentence_values_str += sentence_values_str
                     coinjoin_sentence_values.append(sentence_values)
 
                 # Last transaction
                 if last_tx['txid'] != first_tx['txid']:
-                    sentence_denom_groups_str, sentence_values_str, sentence_values = serialize_llm_transaction(last_tx)
+                    sentence_denom_groups_str, sentence_denom_groups, sentence_values_str, sentence_values = serialize_llm_transaction(last_tx)
                     coinjoin_sentence_denom_groups_str += sentence_denom_groups_str
+                    coinjoin_sentence_denom_groups.append(sentence_denom_groups)
                     coinjoin_sentence_values_str += sentence_values_str
                     coinjoin_sentence_values.append(sentence_values)
 
@@ -286,6 +344,7 @@ def generate_llm_inputs(cjtx_stats):
 
                 test_item = {}
                 test_item['coinjoin_sentence_denom_groups'] = coinjoin_sentence_denom_groups_str
+                test_item['coinjoin_sentence_denom_groups_plain_values'] = coinjoin_sentence_denom_groups
                 test_item['coinjoin_sentence_values'] = coinjoin_sentence_values_str
                 test_item['coinjoin_sentence_plain_values'] = coinjoin_sentence_values
                 test_item['first_input_wallet'] = first_input_wallet
@@ -321,7 +380,7 @@ def generate_llm_inputs(cjtx_stats):
 
 if __name__ == "__main__":
     MIN_WALLETS_IN_COINJOIN = 3  # If root coinjoin transaction does not reach this limit, it is not included in training data (inner txs can be below)
-    ANALYSIS_DEPTH_LIMIT = 0  # Depth of the assumed coinjoin transactions (number of next other connected coinjoins)
+    ANALYSIS_DEPTH_LIMIT = 1  # Depth of the assumed coinjoin transactions (number of next other connected coinjoins)
     GENERATE_SUBPARTS_GRAPHS = False
 
     target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
@@ -337,12 +396,19 @@ if __name__ == "__main__":
     with open(save_file, "r") as file:
         cjtx_stats = json.load(file)
 
+    #
     # Generate LLM inputs
+    #
     events_vector = generate_llm_inputs(cjtx_stats)
     events_file = os.path.join(WASABIWALLET_DATA_DIR, "cjtx_events_minwallets={}_depth={}.json".format(MIN_WALLETS_IN_COINJOIN, ANALYSIS_DEPTH_LIMIT))
+
+    # Save LLM inputs as json
     with open(events_file, "w") as file:
         file.write(json.dumps(dict(sorted(events_vector.items())), indent=4))
 
+    #
+    # Save LLM inputs as numpy binary format for training with separated labels
+    #
     tx_data = []
     tx_data_same_wallet = []
     test_inputs_counter = 0
@@ -354,9 +420,10 @@ if __name__ == "__main__":
             tx_data_same_wallet.append(test_input_answer)
             test_inputs_counter += 1
 
+    # Save llm values as numpy binary format
     save_file = os.path.join(WASABIWALLET_DATA_DIR, "coinjoin_tx_info.json")
     print('Total test inputs = {}'.format(test_inputs_counter))
-    np.save(os.path.join(WASABIWALLET_DATA_DIR, 'X.npy'), tx_data)
-    np.save(os.path.join(WASABIWALLET_DATA_DIR, 'Y.npy'), tx_data_same_wallet)
+    np.save(os.path.join(WASABIWALLET_DATA_DIR, 'first_last_wallet_X.npy'), tx_data)
+    np.save(os.path.join(WASABIWALLET_DATA_DIR, 'first_last_wallet_Y.npy'), tx_data_same_wallet)
 
     print('LLM data generation finished')
