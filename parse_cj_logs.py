@@ -1054,7 +1054,23 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
 
     #ax_utxo_entropy_from_outputs_inoutsize.scatter(x_cat_in, y_cat_in, label='Tx inputs', color='green', s=1)
     #ax_utxo_entropy_from_outputs_inoutsize.scatter(x_cat_out, y_cat_out, label='Tx outputs', color='red', s=1)
+
+    # Add lines corresponding to standard denominations
+    std_denoms = [
+        5000, 6561, 8192, 10000, 13122, 16384, 19683, 20000, 32768, 39366, 50000, 59049, 65536, 100000, 118098,
+        131072, 177147, 200000, 262144, 354294, 500000, 524288, 531441, 1000000, 1048576, 1062882, 1594323, 2000000,
+        2097152, 3188646, 4194304, 4782969, 5000000, 8388608, 9565938, 10000000, 14348907, 16777216, 20000000,
+        28697814, 33554432, 43046721, 50000000, 67108864, 86093442, 100000000, 129140163, 134217728, 200000000,
+        258280326, 268435456, 387420489, 500000000, 536870912, 774840978, 1000000000, 1073741824, 1162261467,
+        2000000000, 2147483648, 2324522934, 3486784401, 4294967296, 5000000000, 6973568802, 8589934592, 10000000000,
+        10460353203, 17179869184, 20000000000, 20920706406, 31381059609, 34359738368, 50000000000, 62762119218,
+        68719476736, 94143178827, 100000000000, 137438953472
+    ]
     ax_utxo_entropy_from_outputs_inoutsize.scatter(x_cat_out_every, y_cat_out_every, label='Tx outputs', color='blue', s=1)
+
+    for value in std_denoms:
+        if value <= max(x_cat_out_every):
+            ax_utxo_entropy_from_outputs_inoutsize.axvline(x=value, color='gray', linestyle='--', linewidth=0.1)
     if len(x_cat_in) > 0 or len(x_cat_out) > 0:  # logscale only if some data were inserted
         ax_utxo_entropy_from_outputs_inoutsize.set_xscale('log')
     ax_utxo_entropy_from_outputs_inoutsize.set_xlabel('Value (sats) (log scale)')
