@@ -599,7 +599,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
             if sum_inputs > 0:  # save only if some value was found
                 if 'mining_and_coinjoin_fee_payed' not in coinjoins[cjtx]['analysis2'].keys():
                     coinjoins[cjtx]['analysis2']['mining_and_coinjoin_fee_payed'] = {}
-                coinjoins[cjtx]['analysis2']['mining_and_coinjoin_fee_payed'][wallet_name] = mining_and_coinjoin_fee_payed
+                coinjoins[cjtx]['analysis2']['mining_and_coinjoin_fee_payed'][wallet_name] = int(mining_and_coinjoin_fee_payed)
 
     # Create four subplots with their own axes
     fig = plt.figure(figsize=(48, 24))
@@ -1711,7 +1711,7 @@ def load_tx_database_from_btccore(base_tx_path):
 
 def process_experiment(base_path):
     WASABIWALLET_DATA_DIR = base_path
-
+    print(f'INPUT PATH: {base_path}')
     save_file = os.path.join(WASABIWALLET_DATA_DIR, "coinjoin_tx_info.json")
     if LOAD_TXINFO_FROM_FILE:
         # Load parsed coinjoin transactions again
@@ -1853,6 +1853,9 @@ def process_experiment(base_path):
     # Analyze various coinjoins statistics
     analyze_coinjoin_stats(cjtx_stats, WASABIWALLET_DATA_DIR)
 
+    with open(save_file, "w") as file:
+        file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
+
     # Visualize coinjoins (only tail coinjoins visualized to prevent graphviz overload)
     to_visualize = dict(list(cjtx_stats['coinjoins'].items())[:])
     #to_visualize = dict(list(cjtx_stats['coinjoins'].items())[:64])
@@ -1861,10 +1864,12 @@ def process_experiment(base_path):
     if GENERATE_COINJOIN_GRAPH:
         print('Going to render coinjoin relations graph (may take several minutes if larger number of coinjoins '
               'are visualized) ... ', end='')
-        visualize_coinjoins(cjtx_stats, WASABIWALLET_DATA_DIR)
+        visualize_coinjoins(cjtx_stats, WASABIWALLET_DATA_DIR, 'coinjoin_graph', False)
         print(' done')
 
     print('All done.')
+
+    return cjtx_stats
 
 
 def process_multiple_experiments(base_path):
