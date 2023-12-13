@@ -5,10 +5,11 @@ from collections import deque
 from collections import Counter
 import parse_cj_logs
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 SATS_IN_BTC = 100000000
 VERBOSE = False
+LINE_STYLES = ['-', '--', '-.', ':']
 
 
 def bfs_with_limit(coinjoins, root, k):
@@ -178,7 +179,28 @@ def number_inputs_outputs_unique(sorted_cjs_in_scope, coinjoins_dupl):
     return coinjoins_dupl
 
 
-def compute_output_distance_to_next_cj(sorted_cjs_in_scope, coinjoins_dupl):
+def compute_link_between_inputs_and_outputs(coinjoins_dupl, sorted_cjs_in_scope):
+    all_outputs = {}
+    # Obtain all outputs as (address, value) tuples
+    for tx_index in range(0, len(sorted_cjs_in_scope)):
+        txid = sorted_cjs_in_scope[tx_index]
+        for index, output in coinjoins_dupl[txid]['outputs'].items():
+            all_outputs[output['address']] = (txid, index, output)  # (txid, output['address'], output['value'])
+
+    # Check if such combination is in inputs of any other transaction in the scope
+    for tx_index in range(0, len(sorted_cjs_in_scope)):
+        txid = sorted_cjs_in_scope[tx_index]
+        for index, input in coinjoins_dupl[txid]['inputs'].items():
+            if input['address'] in all_outputs.keys() and input['value'] == all_outputs[input['address']][2]['value']:
+                # we found corresponding input, mark it as used
+                target_output = all_outputs[input['address']]
+                coinjoins_dupl[target_output[0]]['outputs'][target_output[1]]['spend_by_txid'] = (txid, index)
+                coinjoins_dupl[txid]['inputs'][index]['spending_tx'] = (target_output[0], target_output[1])
+
+    return coinjoins_dupl
+
+
+def compute_output_distance_to_next_cj(coinjoins_dupl, sorted_cjs_in_scope):
     for tx_index in range(0, len(sorted_cjs_in_scope)):
         txid = sorted_cjs_in_scope[tx_index]
         # outputs are always getting new counter
@@ -197,6 +219,204 @@ def compute_output_distance_to_next_cj(sorted_cjs_in_scope, coinjoins_dupl):
                 output['distance_to_next_use'] = distance
 
     return coinjoins_dupl
+
+
+def get_outputs_leaving_mix(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id):
+    wallets_involved = set([coinjoins_dupl[root_tx_id]['inputs'][index]['wallet_name']
+                            for index in coinjoins_dupl[root_tx_id]['inputs'].keys()])
+    wallet_leave_txs = {}
+    for wallet in wallets_involved:
+        wallet_leave_txs[wallet] = []
+
+    for cjtx_id in sorted_cjs_in_scope:
+        for output_index in coinjoins_dupl[cjtx_id]['outputs'].keys():
+            output = coinjoins_dupl[cjtx_id]['outputs'][output_index]
+            output['vout'] = output_index
+            if 'wallet_name' in output and output['wallet_name'] in wallets_involved:  # Analyze only wallets which are having some input in the root transaction
+                # Nobody spent this utxo or its anon score already reached the mixing limit (artificial leave of mix for testing)
+                if 'spend_by_txid' not in output.keys() or output['anon_score'] > FORCE_LIMIT_ANON_SCORE:
+                    # This output is not spent in any of the subsequent mixing transactions
+                    wallet_leave_txs[output['wallet_name']].append((cjtx_id, output))
+                else:
+                    # This output is spent as input in some of the subsequent mixing transaction, ignore
+                    # do nothing
+                    break
+
+    return wallet_leave_txs
+
+
+def get_inputs_entering_mix(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id):
+    wallets_involved = set([coinjoins_dupl[root_tx_id]['inputs'][index]['wallet_name']
+                            for index in coinjoins_dupl[root_tx_id]['inputs'].keys()])
+    wallet_enter_txs = {}
+    for wallet in wallets_involved:
+        wallet_enter_txs[wallet] = []
+
+    for cjtx_id in sorted_cjs_in_scope:
+        for input_index in coinjoins_dupl[cjtx_id]['inputs'].keys():
+            input = coinjoins_dupl[cjtx_id]['inputs'][input_index]
+            input['vin'] = input_index
+            # Analyze only wallets which are having some input in the root transaction
+            if 'wallet_name' in input and input['wallet_name'] in wallets_involved:
+                # This input is not output of some previous transaction in scope (=enters mix)
+                if 'spending_tx' not in input.keys():
+                    # This output is not spent in any of the subsequent mixing transactions
+                    wallet_enter_txs[input['wallet_name']].append((cjtx_id, input))
+                else:
+                    # This output is spent as input in some of the subsequent mixing transaction, ignore
+                    # do nothing
+                    break
+
+    return wallet_enter_txs
+
+
+def get_input_name_string(input):
+    return f'vin_{input[0]}_{input[1]['vin']}'
+
+
+def get_output_name_string(output):
+    return f'vin_{output[1]['txid']}_{output[1]['vout']}'
+
+
+def extract_txid_from_inout_string(inout_string):
+    if inout_string.startswith('vin') or inout_string.startswith('vout'):
+        return inout_string[inout_string.find('_') + 1: inout_string.rfind('_')]
+    else:
+        assert False, f'Invalid inout string {inout_string}'
+
+
+def compute_inputs_leave_distribution_fifo(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id):
+    """
+
+    :param coinjoins_dupl:
+    :param sorted_cjs_in_scope:
+    :param root_tx_id:
+    :return:
+    """
+
+    # Idea:
+    #   1. Find all inputs, which are not resulting from outputs from any previous transaction (entering mix).
+    #   2. Find all outputs, which are not used as input in any other transaction in the scope (leaving mix).
+    #   3. Identify the controlling wallet for every input entering mix and analyze them separately
+    #   4. Assign outputs leaving mix to input entering mix on FIFO basis
+    #      - ordering done based on the cjtx block height
+    #      - outputs are assigned to single input as long as sum of outputs values is not more than input value
+
+    # Assign link between inputs and outputs
+    compute_link_between_inputs_and_outputs(coinjoins_dupl, sorted_cjs_in_scope)
+
+    inputs_enter = get_inputs_entering_mix(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id)
+    outputs_leave = get_outputs_leaving_mix(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id)
+
+    inputs_outputs_mapping = {wallet_name: {} for wallet_name in inputs_enter.keys()}
+
+    for wallet_name in inputs_enter.keys():
+        for input in inputs_enter[wallet_name]:
+            input[1]['to_fulfill'] = int(input[1]['value'] * SATS_IN_BTC)
+    for wallet_name in outputs_leave.keys():
+        for output in outputs_leave[wallet_name]:
+            output[1]['remainig_sats'] = int(output[1]['value'] * SATS_IN_BTC)
+
+    # Iterate over all outputs in FIFO fashion until given input is not fully consumed
+    for wallet_name in inputs_enter.keys():
+        remaining_sats_to_fulfill = 0  # number of sats to be attributed to some input
+        # outputs are assumed to be ordered - starting with ones which are leaving mix first
+        for output in outputs_leave[wallet_name]:
+            # inputs are assumed to be ordered - try to fullfil first inputs first
+            for input in inputs_enter[wallet_name]:
+                # Check if we are not assigning outputs earlier than inputs is taking place
+                distance = sorted_cjs_in_scope.index(output[0]) - sorted_cjs_in_scope.index(input[0])
+                if distance >= 0:
+                    if input[1]['to_fulfill'] > 0:
+                        # we have some sats to fulfill for this input
+
+                        input_name = get_input_name_string(input)
+                        if input_name not in inputs_outputs_mapping[wallet_name].keys():
+                            inputs_outputs_mapping[wallet_name][input_name] = []
+                        inputs_outputs_mapping[wallet_name][input_name].append(output)
+                        output_size = output[1]['remainig_sats']
+                        if output_size <= input[1]['to_fulfill']:
+                            input[1]['to_fulfill'] -= output_size
+                            output[1]['remainig_sats'] = 0
+                            break  # go for next output which will fulfill this input
+                        else:
+                            output[1]['remainig_sats'] -= input[1]['to_fulfill']
+                            input[1]['to_fulfill'] = 0
+                            # this input is fullfilled, but some sats are remaining in output - use it for next input
+                    else:
+                        continue  # this input is fullfilled, process another one
+
+    wallet_leave_distribution = {}
+    wallets_involved = set([coinjoins_dupl[root_tx_id]['inputs'][index]['wallet_name'] for index
+                            in coinjoins_dupl[root_tx_id]['inputs'].keys()])
+    for wallet in wallets_involved:
+        wallet_leave_distribution[wallet] = {}
+
+    for wallet_name in inputs_outputs_mapping.keys():
+        for item_input in inputs_outputs_mapping[wallet_name].keys():
+            txid = extract_txid_from_inout_string(item_input)
+            output_txids = [txid[0] for txid in inputs_outputs_mapping[wallet_name][item_input]]
+            value_counts = Counter(output_txids)
+            for item_output in value_counts.keys():
+                distance = sorted_cjs_in_scope.index(item_output) - sorted_cjs_in_scope.index(txid)
+                if distance < 0:
+                    print(f'Negative distance in coinjoin outputs between {txid} and {item_output}')
+                num_at_distance = value_counts[item_output]
+                if distance in inputs_outputs_mapping[wallet_name]:
+                    wallet_leave_distribution[wallet_name][distance] += num_at_distance
+                else:
+                    wallet_leave_distribution[wallet_name][distance] = num_at_distance
+    return wallet_leave_distribution, inputs_outputs_mapping
+
+
+def compute_inputs_leave_distribution(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id):
+    """
+    Compute position of outputs which are not mixed anymore for wallets participating in root_tx_id tx.
+    :param sorted_cjs_in_scope:
+    :param root_tx_id:
+    :return:
+    """
+
+    # Assign link between inputs and outputs
+    compute_link_between_inputs_and_outputs(coinjoins_dupl, sorted_cjs_in_scope)
+
+    # Idea: 1. Find all outputs, which are not used as input in any other transaction in the scope (leaving mix).
+    #       2. Identify the controlling wallet and check if such wallet is present in the root transaction.
+    #       3. If yes, create list with distribution of outputs leaving mix of every wallet in the root transaction.
+    # Simplification: we assume that wallet is coming with only one input to the root transaction.
+
+    wallets_involved = set([coinjoins_dupl[root_tx_id]['inputs'][index]['wallet_name'] for index
+                            in coinjoins_dupl[root_tx_id]['inputs'].keys()])
+
+    wallet_leave_distribution = {}
+    wallet_leave_txs = {}
+    for wallet in wallets_involved:
+        wallet_leave_txs[wallet] = []
+        wallet_leave_distribution[wallet] = {}
+
+    for cjtx_id in sorted_cjs_in_scope:
+        for output in coinjoins_dupl[cjtx_id]['outputs'].values():
+            if 'wallet_name' in output and output['wallet_name'] in wallets_involved:  # Analyze only wallets which are having some input in the root transaction
+                # Nobody spent this utxo or its anon score already reached the mixing limit (artificial leave of mix for testing)
+                if 'spend_by_txid' not in output.keys() or output['anon_score'] > FORCE_LIMIT_ANON_SCORE:
+                    # This output is not spent in any of the subsequent mixing transactions
+                    wallet_leave_txs[output['wallet_name']].append(cjtx_id)
+                else:
+                    # This output is spent as input in some of the subsequent mixing transaction, ignore
+                    # do nothing
+                    break
+
+    for wallet_name in wallet_leave_txs.keys():
+        value_counts = Counter(wallet_leave_txs[wallet_name])
+        for item in value_counts.keys():
+            distance = sorted_cjs_in_scope.index(item) - sorted_cjs_in_scope.index(root_tx_id)
+            num_at_distance = value_counts[item]
+            if distance in wallet_leave_distribution[wallet_name]:
+                wallet_leave_distribution[wallet_name][distance] += num_at_distance
+            else:
+                wallet_leave_distribution[wallet_name][distance] = num_at_distance
+
+    return wallet_leave_distribution, wallet_leave_txs
 
 
 def generate_llm_inputs(cjtx_stats):
@@ -376,7 +596,6 @@ def generate_llm_inputs(cjtx_stats):
                     test_vectors_different_wallet += 1
 
                 results[start_cjtxid].append(test_item)
-
     print(' done')
 
     print('** CONFIGURATION USED **')
