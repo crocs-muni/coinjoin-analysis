@@ -399,31 +399,45 @@ if __name__ == "__main__":
     #
     # Generate LLM inputs
     #
+    #visualize_wallet_leave_distribution(cjtx_stats, [])
     events_vector = generate_llm_inputs(cjtx_stats)
-    events_file = os.path.join(WASABIWALLET_DATA_DIR, "cjtx_events_minwallets={}_depth={}.json".format(MIN_WALLETS_IN_COINJOIN, ANALYSIS_DEPTH_LIMIT))
+    visualize_wallet_leave_distribution(cjtx_stats, events_vector, target_base_path)
 
+    exit(1)
     # Save LLM inputs as json
+    events_file = os.path.join(WASABIWALLET_DATA_DIR, "cjtx_events_minwallets={}_depth={}.json".format(MIN_WALLETS_IN_COINJOIN, ANALYSIS_DEPTH_LIMIT))
     with open(events_file, "w") as file:
         file.write(json.dumps(dict(sorted(events_vector.items())), indent=4))
 
     #
     # Save LLM inputs as numpy binary format for training with separated labels
     #
-    tx_data = []
-    tx_data_same_wallet = []
-    test_inputs_counter = 0
-    for cjtxid in events_vector.keys():
-        for index in range(0, len(events_vector[cjtxid])):
-            test_input = events_vector[cjtxid][index]['coinjoin_sentence_plain_values']
-            tx_data.append(test_input)
-            test_input_answer = True if events_vector[cjtxid][index]['first_input_wallet'] == events_vector[cjtxid][index]['last_output_wallet'] else False
-            tx_data_same_wallet.append(test_input_answer)
-            test_inputs_counter += 1
+    GENERATE_NUMPY_BINARY = True
+    if GENERATE_NUMPY_BINARY:
+        tx_data = []
+        tx_data_same_wallet = []
+        tx_data_denom_groups = []
+        tx_data_denom_groups_answer = []
+        test_inputs_counter = 0
+        for cjtxid in events_vector.keys():
+            for index in range(0, len(events_vector[cjtxid])):
+                test_input = events_vector[cjtxid][index]['coinjoin_sentence_plain_values']
+                tx_data.append(test_input)
+                test_input_answer = True if events_vector[cjtxid][index]['first_input_wallet'] == events_vector[cjtxid][index]['last_output_wallet'] else False
+                tx_data_same_wallet.append(test_input_answer)
 
-    # Save llm values as numpy binary format
-    save_file = os.path.join(WASABIWALLET_DATA_DIR, "coinjoin_tx_info.json")
-    print('Total test inputs = {}'.format(test_inputs_counter))
-    np.save(os.path.join(WASABIWALLET_DATA_DIR, 'first_last_wallet_X.npy'), tx_data)
-    np.save(os.path.join(WASABIWALLET_DATA_DIR, 'first_last_wallet_Y.npy'), tx_data_same_wallet)
+                test_input = events_vector[cjtxid][index]['coinjoin_sentence_denom_groups_plain_values']
+                tx_data_denom_groups.append(test_input)
+                test_input_answer = events_vector[cjtxid][index]['first_input_wallet_mix_leave_distribution']
+                tx_data_denom_groups_answer.append(test_input_answer)
+                test_inputs_counter += 1
+
+        # Save llm values as numpy binary format
+        print('Total test inputs = {}'.format(test_inputs_counter))
+        np.save(os.path.join(WASABIWALLET_DATA_DIR, 'first_last_wallet_X.npy'), tx_data)
+        np.save(os.path.join(WASABIWALLET_DATA_DIR, 'first_last_wallet_Y.npy'), tx_data_same_wallet)
+
+        np.save(os.path.join(WASABIWALLET_DATA_DIR, 'denom_group_distrib_X.npy'), tx_data_denom_groups)
+        np.save(os.path.join(WASABIWALLET_DATA_DIR, 'denom_group_distrib_Y.npy'), tx_data_denom_groups_answer)
 
     print('LLM data generation finished')
