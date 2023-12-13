@@ -232,11 +232,11 @@ class RoundChecker():
                     # adding at the end to start indexing by 0
                     self.started_rounds_tracked += 1
             
-            if len(ended_rounds) > 0:
+            if len(ended_rounds) > 0 and global_constants.GLOBAL_CONSTANTS.network == "RegTest":
                 regtest_control.mine_block_regtest()
                 utils.log_and_print(" Mined new block, because at least one round ended")
 
-            time.sleep(2)
+            time.sleep(0.5)
         
         self.coin_join_wallet_manager.stop_all()
 
@@ -339,6 +339,8 @@ if __name__ == "__main__":
     # freshly loading all wallets
     try:
         subprocesses_handler.stop_client()
+
+        scenario_manager.set_wallet_configs()
 
         subprocesses_handler.run_client()
         for wallet in scenario_manager.used_wallets:
