@@ -225,6 +225,7 @@ def generate_llm_inputs(cjtx_stats):
 
     visualize_copy = copy.deepcopy(cjtx_stats)
 
+    # Process all coinjoins, check if they have enough wallets in root coinjoin and generate variations
     for start_cjtxid in cjtx_stats['coinjoins'].keys():
         tx_processed_counter += 1
         if tx_processed_counter % 80 == 0:
@@ -238,7 +239,7 @@ def generate_llm_inputs(cjtx_stats):
             continue
 
         print('.', end='')  # Print progress
-        coinjoin_txs_included +=1
+        coinjoin_txs_included += 1
 
         # Obtain subtree with connected coinjoin txs with up to ANALYSIS_DEPTH_LIMIT from the root tx
         # get coinjoins in scope (all connected from initial cjtxid)
@@ -273,18 +274,30 @@ def generate_llm_inputs(cjtx_stats):
         # Number inputs and outputs for all subsequent coinjoins in scope
         number_inputs_outputs_unique(sorted_cjs_in_scope, coinjoins_dupl)
 
-        # Assign number of skipped coinjoins for each output (how many coinjoins were created before the output was used as input to next one)
-        compute_output_distance_to_next_cj(sorted_cjs_in_scope, coinjoins_dupl)
+        # Assign number of skipped coinjoins for each output
+        # (how many coinjoins were created before the output was used as input to next one)
+        compute_output_distance_to_next_cj(coinjoins_dupl, sorted_cjs_in_scope)
 
         # Generate different variations with swapped inputs and outputs
         assert sorted_cjs_in_scope[0] == start_cjtxid
         root_tx_id = sorted_cjs_in_scope[0]
         last_tx_id = sorted_cjs_in_scope[-1]
 
+        # Compute distribution of outputs of root_tx_id for every wallet which are NOT mixed any longer
+        wallet_leave_distribution, wallet_leave_txs = compute_inputs_leave_distribution_fifo(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id)
+
+        # This compute_inputs_leave_distribution() assigns all *possible* outputs to given input
+        #wallet_leave_distribution, wallet_leave_txs = compute_inputs_leave_distribution(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id)
+
         results[start_cjtxid] = []
         num_inputs_first_tx = len(coinjoins_dupl[root_tx_id]['inputs'])
         num_outputs_last_tx = len(coinjoins_dupl[last_tx_id]['outputs'])
         num_variants = num_inputs_first_tx * num_outputs_last_tx
+
+        if not PERMUTATE_INPUTS:
+            num_inputs_first_tx = 1  # do not permutate inputs
+        if not PERMUTATE_OUTPUTS:
+            num_outputs_last_tx = 1  # do not permutate outputs
 
         # Serialize all coinjoins into single string with variations of the first and last transaction
         for input_variant in range(0, num_inputs_first_tx):
@@ -349,6 +362,8 @@ def generate_llm_inputs(cjtx_stats):
                 test_item['coinjoin_sentence_plain_values'] = coinjoin_sentence_values
                 test_item['first_input_wallet'] = first_input_wallet
                 test_item['last_output_wallet'] = last_output_wallet
+                test_item['first_input_wallet_mix_leave_distribution'] = wallet_leave_distribution[first_input_wallet]
+                test_item['all_wallets_mix_leave_distribution'] = wallet_leave_distribution
                 test_item['root_cj_tx'] = root_tx_id
                 test_item['last_cj_tx'] = last_tx_id
                 test_item['input_index_as_first'] = input_variant
@@ -378,16 +393,75 @@ def generate_llm_inputs(cjtx_stats):
     return results
 
 
+def visualize_wallet_leave_distribution(cjtx_stats, events_vector, base_path):
+    fig, ax = plt.subplots(figsize=(20, 16))
+    index = 0
+    for fraction_to_analyze in np.arange(0.1, 0.11, 0.1):
+        sorted_cjs_in_scope = sorted(cjtx_stats['coinjoins'].keys(), key=lambda txid: cjtx_stats['coinjoins'][txid]['broadcast_time'])
+        # Visualize distribution of wallet leave distribution for every wallet and every root transaction
+        aggregated_wallet_distribution_per_wallet = {}
+        for cjtxid in sorted_cjs_in_scope[0:int(len(sorted_cjs_in_scope) * fraction_to_analyze)]:
+            for wallet_name in events_vector[cjtxid][0]['all_wallets_mix_leave_distribution']:
+                aggregated_wallet_distribution_per_wallet[wallet_name] = {i: 0 for i in range(0, len(events_vector))}
+        aggregated_wallet_distribution = {i: 0 for i in range(0, len(events_vector))}
+        for cjtxid in sorted_cjs_in_scope[0:int(len(sorted_cjs_in_scope) * fraction_to_analyze)]:
+            # take only the first entry as others are just permutation of it
+            for wallet_name in events_vector[cjtxid][0]['all_wallets_mix_leave_distribution']:
+                for num_to_leave in events_vector[cjtxid][0]['all_wallets_mix_leave_distribution'][wallet_name].keys():
+                    aggregated_wallet_distribution[num_to_leave] += events_vector[cjtxid][0]['all_wallets_mix_leave_distribution'][wallet_name][num_to_leave]
+                    aggregated_wallet_distribution_per_wallet[wallet_name][num_to_leave] += events_vector[cjtxid][0]['all_wallets_mix_leave_distribution'][wallet_name][num_to_leave]
+
+        print(aggregated_wallet_distribution)
+
+        for wallet_name in aggregated_wallet_distribution_per_wallet.keys():
+            x_data = list(aggregated_wallet_distribution_per_wallet[wallet_name].keys())
+            y_data = list(aggregated_wallet_distribution_per_wallet[wallet_name].values())
+            ax.plot(x_data, y_data, label=f'{wallet_name}/{round(fraction_to_analyze, 1)}', alpha=1, linestyle=LINE_STYLES[index % len(LINE_STYLES)])
+            index += 1
+
+        # Display all wallets aggregated
+        x_all_wallets = list(aggregated_wallet_distribution.keys())
+        y_all_wallets = list(aggregated_wallet_distribution.values())
+        #y_values = normalized_y_values = np.array(y_values) / np.max(y_values) * 100
+        ax.plot(x_all_wallets, y_all_wallets, label=f'All wallets/{round(fraction_to_analyze, 1)}', alpha=0.2)
+        index += 1
+
+    ax.set_xlabel('Number of hops to leave mix')
+    ax.set_ylabel('Number of outputs to leave mix')
+    ax.set_yscale('log')
+    ax.set_title(f'Distribution of hops to leave mixing (FORCE_LIMIT_ANON_SCORE={FORCE_LIMIT_ANON_SCORE}')
+    ax.legend(ncol=3)
+    fig.show()
+    save_file = os.path.join(base_path, "coinjoin_leaving_distribution.png")
+    plt.savefig(save_file, dpi=300)
+    plt.close()
+
+
 if __name__ == "__main__":
-    MIN_WALLETS_IN_COINJOIN = 3  # If root coinjoin transaction does not reach this limit, it is not included in training data (inner txs can be below)
-    ANALYSIS_DEPTH_LIMIT = 1  # Depth of the assumed coinjoin transactions (number of next other connected coinjoins)
+    MIN_WALLETS_IN_COINJOIN = 1  # If root coinjoin transaction does not reach this limit, it is not included in training data (inner txs can be below)
+    ANALYSIS_DEPTH_LIMIT = 100  # Depth of the assumed coinjoin transactions (number of next other connected coinjoins)
     GENERATE_SUBPARTS_GRAPHS = False
 
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
+    # Settings primarily relevant for mix leave distribution setup
+    PERMUTATE_INPUTS = False  # If True, all inputs from the root cjtx will be permutated to take the first place
+    PERMUTATE_OUTPUTS = False  # If True, all outputs from the latest cjtx will be permutated to take the last place
+    #FORCE_LIMIT_ANON_SCORE = 1.2  # If anon score is higher than this value, we assume that output is not used as input in any other transaction
+    FORCE_LIMIT_ANON_SCORE = 100  # If anon score is higher than this value, we assume that output is not used as input in any other transaction
+
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\disbalanced-delayed-20_2023-11-23_14-47\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\debug\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231008_2000Rounds_1parallel_max5inputs_10wallets\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231019_1000Rounds_1parallel_max10inputs_10wallets_5x10Msats_noPrison\\'
-#
+
+    # Two experiments with exactly same settings
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\pareto-delayed-50_2023-11-23_22-28\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\pareto-delayed-50_2023-11-24_15-19\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-05_11-40_paretosum-static-50-30utxo\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-05_10-11_paretosum-static-50-30utxo\\'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-04_15-14_paretosum-static-50-30utxo\\'
+    #
+
     print('Path used = {}'.format(target_base_path))
     WASABIWALLET_DATA_DIR = target_base_path
 
