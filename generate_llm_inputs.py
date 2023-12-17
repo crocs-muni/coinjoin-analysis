@@ -6,6 +6,7 @@ from collections import Counter
 import parse_cj_logs
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 SATS_IN_BTC = 100000000
 VERBOSE = False
@@ -179,27 +180,6 @@ def number_inputs_outputs_unique(sorted_cjs_in_scope, coinjoins_dupl):
     return coinjoins_dupl
 
 
-def compute_link_between_inputs_and_outputs(coinjoins_dupl, sorted_cjs_in_scope):
-    all_outputs = {}
-    # Obtain all outputs as (address, value) tuples
-    for tx_index in range(0, len(sorted_cjs_in_scope)):
-        txid = sorted_cjs_in_scope[tx_index]
-        for index, output in coinjoins_dupl[txid]['outputs'].items():
-            all_outputs[output['address']] = (txid, index, output)  # (txid, output['address'], output['value'])
-
-    # Check if such combination is in inputs of any other transaction in the scope
-    for tx_index in range(0, len(sorted_cjs_in_scope)):
-        txid = sorted_cjs_in_scope[tx_index]
-        for index, input in coinjoins_dupl[txid]['inputs'].items():
-            if input['address'] in all_outputs.keys() and input['value'] == all_outputs[input['address']][2]['value']:
-                # we found corresponding input, mark it as used
-                target_output = all_outputs[input['address']]
-                coinjoins_dupl[target_output[0]]['outputs'][target_output[1]]['spend_by_txid'] = (txid, index)
-                coinjoins_dupl[txid]['inputs'][index]['spending_tx'] = (target_output[0], target_output[1])
-
-    return coinjoins_dupl
-
-
 def compute_output_distance_to_next_cj(coinjoins_dupl, sorted_cjs_in_scope):
     for tx_index in range(0, len(sorted_cjs_in_scope)):
         txid = sorted_cjs_in_scope[tx_index]
@@ -270,21 +250,6 @@ def get_inputs_entering_mix(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id):
     return wallet_enter_txs
 
 
-def get_input_name_string(input):
-    return f'vin_{input[0]}_{input[1]['vin']}'
-
-
-def get_output_name_string(output):
-    return f'vin_{output[1]['txid']}_{output[1]['vout']}'
-
-
-def extract_txid_from_inout_string(inout_string):
-    if inout_string.startswith('vin') or inout_string.startswith('vout'):
-        return inout_string[inout_string.find('_') + 1: inout_string.rfind('_')]
-    else:
-        assert False, f'Invalid inout string {inout_string}'
-
-
 def compute_inputs_leave_distribution_fifo(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id):
     """
 
@@ -303,7 +268,7 @@ def compute_inputs_leave_distribution_fifo(coinjoins_dupl, sorted_cjs_in_scope, 
     #      - outputs are assigned to single input as long as sum of outputs values is not more than input value
 
     # Assign link between inputs and outputs
-    compute_link_between_inputs_and_outputs(coinjoins_dupl, sorted_cjs_in_scope)
+    parse_cj_logs.compute_link_between_inputs_and_outputs(coinjoins_dupl, sorted_cjs_in_scope)
 
     inputs_enter = get_inputs_entering_mix(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id)
     outputs_leave = get_outputs_leaving_mix(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id)
@@ -330,7 +295,7 @@ def compute_inputs_leave_distribution_fifo(coinjoins_dupl, sorted_cjs_in_scope, 
                     if input[1]['to_fulfill'] > 0:
                         # we have some sats to fulfill for this input
 
-                        input_name = get_input_name_string(input)
+                        input_name = parse_cj_logs.get_input_name_string(input)
                         if input_name not in inputs_outputs_mapping[wallet_name].keys():
                             inputs_outputs_mapping[wallet_name][input_name] = []
                         inputs_outputs_mapping[wallet_name][input_name].append(output)
@@ -354,7 +319,7 @@ def compute_inputs_leave_distribution_fifo(coinjoins_dupl, sorted_cjs_in_scope, 
 
     for wallet_name in inputs_outputs_mapping.keys():
         for item_input in inputs_outputs_mapping[wallet_name].keys():
-            txid = extract_txid_from_inout_string(item_input)
+            txid = parse_cj_logs.extract_txid_from_inout_string(item_input)
             output_txids = [txid[0] for txid in inputs_outputs_mapping[wallet_name][item_input]]
             value_counts = Counter(output_txids)
             for item_output in value_counts.keys():
@@ -378,7 +343,7 @@ def compute_inputs_leave_distribution(coinjoins_dupl, sorted_cjs_in_scope, root_
     """
 
     # Assign link between inputs and outputs
-    compute_link_between_inputs_and_outputs(coinjoins_dupl, sorted_cjs_in_scope)
+    parse_cj_logs.compute_link_between_inputs_and_outputs(coinjoins_dupl, sorted_cjs_in_scope)
 
     # Idea: 1. Find all outputs, which are not used as input in any other transaction in the scope (leaving mix).
     #       2. Identify the controlling wallet and check if such wallet is present in the root transaction.
@@ -649,7 +614,7 @@ def visualize_wallet_leave_distribution(cjtx_stats, events_vector, base_path):
     ax.set_ylabel('Number of outputs to leave mix')
     ax.set_yscale('log')
     ax.set_title(f'Distribution of hops to leave mixing (FORCE_LIMIT_ANON_SCORE={FORCE_LIMIT_ANON_SCORE}')
-    ax.legend(ncol=3)
+    #ax.legend(ncol=3)
     fig.show()
     save_file = os.path.join(base_path, "coinjoin_leaving_distribution.png")
     plt.savefig(save_file, dpi=300)
@@ -676,9 +641,10 @@ if __name__ == "__main__":
     # Two experiments with exactly same settings
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\pareto-delayed-50_2023-11-23_22-28\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\pareto-delayed-50_2023-11-24_15-19\\'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-12-04_13-32_paretosum-static-30-30utxo\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-05_11-40_paretosum-static-50-30utxo\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-05_10-11_paretosum-static-50-30utxo\\'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-04_15-14_paretosum-static-50-30utxo\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-04_15-14_paretosum-static-50-30utxo\\'
     #
 
     print('Path used = {}'.format(target_base_path))
