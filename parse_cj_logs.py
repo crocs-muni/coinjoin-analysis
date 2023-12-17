@@ -1515,13 +1515,12 @@ def visualize_coinjoins(cjtx_stats, base_path='', output_name='coinjoin_graph', 
     dot2.render(save_file, view=view_pdf)
 
 
-
 def get_input_name_string(input):
     return f'vin_{input[0]}_{input[1]['vin']}'
 
 
 def get_output_name_string(output):
-    return f'vin_{output[1]['txid']}_{output[1]['vout']}'
+    return f'vout_{output[1]['txid']}_{output[1]['vout']}'
 
 
 def extract_txid_from_inout_string(inout_string):
