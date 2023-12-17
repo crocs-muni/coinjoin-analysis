@@ -252,7 +252,9 @@ def get_inputs_entering_mix(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id):
 
 def compute_inputs_leave_distribution_fifo(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id):
     """
-
+    Computes the distribution of utxos leaving the mix using first in first out principle.
+    The input of given wallet do firts mix coinjoin is linked to all subsequent coinjoin outputs (of this wallet),
+    until the original value of input is fulfilled. Shall result in smaller number of hops to leave coinjoin mix
     :param coinjoins_dupl:
     :param sorted_cjs_in_scope:
     :param root_tx_id:
