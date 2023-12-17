@@ -7,7 +7,6 @@ import json
 import sys
 import wcli
 from itertools import zip_longest
-import graphviz
 from graphviz import Digraph
 import numpy as np
 import matplotlib.pyplot as plt
@@ -329,7 +328,9 @@ def graphviz_insert_wallet(wallet_name, graphdot):
         graphdot.attr('node', penwidth='1')
         graphdot.attr('node', style='filled')
         graphdot.attr('node', fontsize='20')
-        graphdot.node(wallet_name)
+        graphdot.attr('node', id=wallet_name)
+        graphdot.attr('node', label='{}'.format(wallet_name))
+        graphdot.node() if GENERATE_COINJOIN_GRAPH_BLIND else graphdot.node(wallet_name)
 
 
 def graphviz_insert_address(addr, fill_color, graphdot):
@@ -342,7 +343,8 @@ def graphviz_insert_address(addr, fill_color, graphdot):
     graphdot.attr('node', style='filled')
     graphdot.attr('node', fontsize='20')
     graphdot.attr('node', id=addr)
-    graphdot.attr('node', label='{}'.format(addr))
+    if not GENERATE_COINJOIN_GRAPH_BLIND:
+        graphdot.attr('node', label='{}'.format(addr))
     graphdot.node(addr)
 
 
@@ -375,6 +377,8 @@ def graphviz_insert_cjtxid(coinjoin_tx, graphdot):
     else:
         graphdot.attr('node', label='coinjoin tx:\n{}\n{}\n{}\ntx_entropy={}\nnum_dlinks={}'.format(cjtxid, coinjoin_tx['round_start_time'],
                                                                  coinjoin_tx['broadcast_time'], tx_entropy_str, num_dlinks))
+    if GENERATE_COINJOIN_GRAPH_BLIND:
+        graphdot.attr('node', label='')
     graphdot.node(cjtxid)
 
 
@@ -405,13 +409,17 @@ def prepare_node_attribs(coinjoin_txid, addr, value_size):
 def graphviz_insert_address_cjtx_mapping(addr, coinjoin_txid, value_size, edge_color, vin_index, graphdot):
     coinjoin_txid, addr, width = prepare_node_attribs(coinjoin_txid, addr, value_size)
     label = "{}{:.8f}₿".format('[{}] '.format(vin_index), value_size if value_size > 0 else '')
-    graphdot.edge(addr, coinjoin_txid, color=edge_color, label=label, style='solid', penwidth=width)
+    if GENERATE_COINJOIN_GRAPH_BLIND:
+        label = ''
+    graphdot.edge(addr, coinjoin_txid, color=edge_color, label=label, style='solid', penwidth=width) \
 
 
 def graphviz_insert_cjtx_address_mapping(coinjoin_txid, addr, value_size, entropy, edge_color, vout_index, graphdot):
     coinjoin_txid, addr, width = prepare_node_attribs(coinjoin_txid, addr, value_size)
     label = "{}{:.8f}₿".format('[{}] '.format(vout_index), value_size if value_size > 0 else '')
     label += " e={}".format(round(entropy, 1)) if entropy > 0 else ''
+    if GENERATE_COINJOIN_GRAPH_BLIND:
+        label = ''
     graphdot.edge(coinjoin_txid, addr, color=edge_color, style='solid', label=label, penwidth=width)
 
 
@@ -796,11 +804,11 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
 
     ax_wallets_distrib.set_xticks(range(0, len(wallets_in_frequency_all_ordered)))
     ax_wallets_distrib.set_xticklabels(range(0, len(wallets_in_frequency_all_ordered)))
+    ax_wallets_distrib.tick_params(axis='x', labelsize=6)
     ax_wallets_distrib.set_xlabel('Number of distinct wallets')
     ax_wallets_distrib.set_ylabel('Number of coinjoins')
     ax_wallets_distrib.set_xlim(0.5)
     ax_wallets_distrib.set_title('Number of coinjoins with specific number of distinct wallets  (all transactions)')
-
     #
     # How many times given wallet participated in coinjoin?
     #
@@ -818,6 +826,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
             wallet_times_used = wallet_times_used + wallet_times_used_in_cjtx
         wallets_used.append(wallet_times_used)
 
+    print(f'Number of wallets with no inputs mixed: {len([wallet_times_used for wallet_times_used in wallets_used if wallet_times_used == 0])} out of {len(wallets_used)} total')
     ax_utxo_provided.bar(wallets_info.keys(), wallets_used)
     insert_percentages_annotations(wallets_used, ax_utxo_provided)
     ax_utxo_provided.set_xlabel('Wallet name')
@@ -825,6 +834,10 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_utxo_provided.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
     ax_utxo_provided.set_ylabel('Number of participations')
     ax_utxo_provided.set_title('Number of inputs given wallet provided to coinjoin txs (all transactions)')
+    if len(x_ticks) >= 100:
+        ax_utxo_provided.tick_params(axis='x', labelsize=4)
+    if len(x_ticks) >= 200:
+        ax_utxo_provided.tick_params(axis='x', labelsize=2)
 
     #
     # Transaction entropy analysis
@@ -991,7 +1004,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_anonscore_from_outputs.set_xlabel('Coinjoin in time')
     ax_anonscore_from_outputs.set_ylabel('Wasabi anonscore')
     ax_anonscore_from_outputs.ticklabel_format(style='plain', axis='y')
-    ax_anonscore_from_outputs.legend()
+    ax_anonscore_from_outputs.legend(ncol=5, fontsize='small')
     ax_anonscore_from_outputs.set_title('Wasabi Anonscore of outputs in time (all transactions)')
 
     #
@@ -1031,7 +1044,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_anonscore_distrib_wallets.set_xlabel('Anonscore')
     ax_anonscore_distrib_wallets.set_ylabel('Number of UTXOs')
     ax_anonscore_distrib_wallets.ticklabel_format(style='plain', axis='y')
-    ax_anonscore_distrib_wallets.legend()
+    ax_anonscore_distrib_wallets.legend(ncol=5, fontsize='small')
     ax_anonscore_distrib_wallets.set_title('Frequency of Wasabi anonscore of wallet outputs (all transactions)')
 
     #
@@ -1486,9 +1499,130 @@ def visualize_coinjoins(cjtx_stats, base_path='', output_name='coinjoin_graph', 
     graphviz_insert_wallet(UNKNOWN_WALLET_STRING, dot2)
     graphviz_insert_wallet(COORDINATOR_WALLET_STRING, dot2)
 
-    for cjtxid in cjtx_stats['coinjoins'].keys():
+    sorted_cjs = sorted(cjtx_stats['coinjoins'], key=lambda txid: cjtx_stats['coinjoins'][txid]['broadcast_time'])
+
+    # for cjtxid in cjtx_stats['coinjoins'].keys():
+    prev_cjtxid = None
+    for cjtxid in sorted_cjs:
         # Visualize into large connected graph
         visualize_cjtx_graph(cjtx_stats['coinjoins'], cjtxid, address_wallet_mapping, dot2)
+        if GENERATE_COINJOIN_GRAPH_LINEAR and prev_cjtxid:
+            dot2.edge(prepare_display_cjtxid(prev_cjtxid), prepare_display_cjtxid(cjtxid), constraint='true')
+        prev_cjtxid = cjtxid
+
+    # render resulting graphviz
+    save_file = os.path.join(base_path, output_name)
+    dot2.render(save_file, view=view_pdf)
+
+
+
+def get_input_name_string(input):
+    return f'vin_{input[0]}_{input[1]['vin']}'
+
+
+def get_output_name_string(output):
+    return f'vin_{output[1]['txid']}_{output[1]['vout']}'
+
+
+def extract_txid_from_inout_string(inout_string):
+    if inout_string.startswith('vin') or inout_string.startswith('vout'):
+        return inout_string[inout_string.find('_') + 1: inout_string.rfind('_')]
+    else:
+        assert False, f'Invalid inout string {inout_string}'
+
+
+def graphviz_insert_aggregated_connections(cjtx_stats, target_cjtxid, graphdot):
+    """
+    Insert connection colored by wallet and sized by sum of values from a same wallet to target_cjtxid inputs.
+    :param target_cjtxid:
+    :param graphdot:
+    :return:
+    """
+
+    # For every wallet, find all inputs coming from any other previous conjoin transactions used in target_cjtxid
+    # Insert edge (for every wallet) with thickness equivalent to sum of input values
+
+    # Wallets used in target_cjtxid
+    wallets_used = set([cjtx_stats[target_cjtxid]['inputs'][index]['wallet_name']
+                        for index in cjtx_stats[target_cjtxid]['inputs'].keys()])
+
+    cjtx = cjtx_stats[target_cjtxid]  # Shortcut for target_cjtxid transaction
+
+    for other_cjtxid in cjtx_stats.keys():
+        if other_cjtxid == target_cjtxid:  # Do not process itself
+            continue
+
+        # For every wallet, find sum of inputs between other_cjtxid and target_cjtxid
+        for wallet_name in wallets_used:
+            wallet_inputs_sum = 0
+            for index in cjtx['inputs'].keys():
+                if wallet_name == cjtx['inputs'][index]['wallet_name']:
+                    value = cjtx['inputs'][index]['value'] if 'value' in cjtx['inputs'][index] else 1
+                    if 'spending_tx' in cjtx['inputs'][index].keys():
+                        txid, index = cjtx['inputs'][index]['spending_tx']
+                        if txid == other_cjtxid:
+                            wallet_inputs_sum += value
+                    else:
+                        print(f'WARNING: Missing input specification for {target_cjtxid}[inputs]{index}')
+
+            # Insert single edge between target_cjtxid and other_cjtxid for shared inputs
+            if wallet_inputs_sum > 0:  # Plot connection only if at least some satoshies are transfered
+                width = math.log(int(wallet_inputs_sum * SATS_IN_BTC), 2)  # The sizes might be very different, use log
+                graphdot.edge(prepare_display_cjtxid(other_cjtxid), prepare_display_cjtxid(target_cjtxid),
+                              color=WALLET_COLORS[wallet_name], style='solid', dir='forward', penwidth=f'{width}')
+
+
+def visualize_coinjoins_aggregated(cjtx_stats, base_path='', output_name='coinjoin_graph', view_pdf=True):
+    """
+    Creates simplified graph of coinjoins where nodes are cj transactions and edges are inputs/outputs used.
+     Colored and sized according to wallet.
+    :param cjtx_stats: structure with all coinjoins
+    :param base_path: string with description of path with measurements used as label in graph
+    :param output_name: name of output file to save pdf
+    :param view_pdf: If True, the pdf is shown after its rendering
+    :return:
+    """
+    address_wallet_mapping = cjtx_stats['address_wallet_mapping']
+
+    # Prepare Graph
+    dot2 = Digraph(comment='CoinJoin={}'.format("XX"))
+    graph_label = ''
+    graph_label += 'Coinjoin visualization\n.'
+    dot2.attr(rankdir='LR', size='8,5')
+    dot2.attr(size='120,80')
+
+    # Generate wallet color mapping
+    color_ctr = 0
+    for wallet_name in cjtx_stats['wallets_info'].keys():
+        if color_ctr < len(COLORS):
+            WALLET_COLORS[wallet_name] = COLORS[color_ctr]
+        else:
+            WALLET_COLORS[wallet_name] = 'grey{}'.format((color_ctr * 5) % 100)
+        color_ctr = color_ctr + 1
+
+    # add special color for 'unknown' wallet
+    WALLET_COLORS[UNKNOWN_WALLET_STRING] = 'red'
+    WALLET_COLORS[COORDINATOR_WALLET_STRING] = 'grey30'
+
+    sorted_cjs = sorted(cjtx_stats['coinjoins'], key=lambda txid: cjtx_stats['coinjoins'][txid]['broadcast_time'])
+
+    # Insert coinjoin transactions as nodes (+ attempt to order it in single "line")
+    # Note: This does not seem to work perfectly - some ordering is enforced, but rendering engine
+    # may ignore to some extent
+    prev_cjtxid = None
+    for cjtxid in sorted_cjs:
+        # Visualize into large connected graph
+        dot2.attr('node', rank='same')  # Force same rand for all inserted nodes
+        graphviz_insert_cjtxid(cjtx_stats['coinjoins'][cjtxid], dot2)
+        # Insert strong linearizing connection between transactions sorted by time of occurence
+        if prev_cjtxid:
+            dot2.edge(prepare_display_cjtxid(prev_cjtxid), prepare_display_cjtxid(cjtxid),
+                      constraint='true', penwidth='10')
+        prev_cjtxid = cjtxid
+
+    # Insert edge according to wallet and size of its inputs
+    for cjtxid in sorted_cjs:
+        graphviz_insert_aggregated_connections(cjtx_stats['coinjoins'], cjtxid, dot2)
 
     # render resulting graphviz
     save_file = os.path.join(base_path, output_name)
@@ -1709,6 +1843,37 @@ def load_tx_database_from_btccore(base_tx_path):
     return tx_db
 
 
+def compute_link_between_inputs_and_outputs(coinjoins, sorted_cjs_in_scope):
+    """
+    Compute backward and forward connection between all transactions in sorted_cjs_in_scope list. As a result,
+    for every input, 'spending_tx' record is inserted pointing to transaction and index of its output spent.
+    For every output, 'spend_by_txid' is inserted pointing to transaction and its index which spents this output.
+    :param coinjoins: structure with coinjoins
+    :param sorted_cjs_in_scope: list of cj transactions to be used for calculating connections. Can be subset of
+    coinjoins parameter - in such case, not all inputs and outputs will have 'spending_tx' and spend_by_txid' filled.
+    :return: Updated structure with coinjoins
+    """
+    all_outputs = {}
+    # Obtain all outputs as (address, value) tuples
+    for tx_index in range(0, len(sorted_cjs_in_scope)):
+        txid = sorted_cjs_in_scope[tx_index]
+        for index, output in coinjoins[txid]['outputs'].items():
+            all_outputs[output['address']] = (txid, index, output)  # (txid, output['address'], output['value'])
+
+    # Check if such combination is in inputs of any other transaction in the scope
+    for tx_index in range(0, len(sorted_cjs_in_scope)):
+        txid = sorted_cjs_in_scope[tx_index]
+        for index, input in coinjoins[txid]['inputs'].items():
+            if input['address'] in all_outputs.keys() and input['value'] == all_outputs[input['address']][2]['value']:
+                # we found corresponding input, mark it as used (tuple (txid, index))
+                # Set also corresponding output 'spend_by_txid'
+                target_output = all_outputs[input['address']]
+                coinjoins[target_output[0]]['outputs'][target_output[1]]['spend_by_txid'] = (txid, index)
+                coinjoins[txid]['inputs'][index]['spending_tx'] = (target_output[0], target_output[1])
+
+    return coinjoins
+
+
 def process_experiment(base_path):
     WASABIWALLET_DATA_DIR = base_path
     print(f'INPUT PATH: {base_path}')
@@ -1856,7 +2021,12 @@ def process_experiment(base_path):
     with open(save_file, "w") as file:
         file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
-    # Visualize coinjoins (only tail coinjoins visualized to prevent graphviz overload)
+
+    # Visualize coinjoins in agrregated fashion
+    compute_link_between_inputs_and_outputs(cjtx_stats['coinjoins'], [cjtxid for cjtxid in cjtx_stats['coinjoins'].keys()])
+    visualize_coinjoins_aggregated(cjtx_stats, WASABIWALLET_DATA_DIR, 'coinjoin_graph_aggregated', False)
+
+    # Visualize coinjoins in verbose mode (possibly only subset of coinjoins visualized to prevent graphviz overload)
     to_visualize = dict(list(cjtx_stats['coinjoins'].items())[:])
     #to_visualize = dict(list(cjtx_stats['coinjoins'].items())[:64])
     #to_visualize = dict(list(cjtx_stats['coinjoins'].items())[100:121])
@@ -1993,7 +2163,9 @@ if __name__ == "__main__":
 
         target_base_path = '/home/xsvenda/coinjoin/'
 
-    #GENERATE_COINJOIN_GRAPH = True
+    GENERATE_COINJOIN_GRAPH = True
+    GENERATE_COINJOIN_GRAPH_BLIND = False
+    GENERATE_COINJOIN_GRAPH_LINEAR = False
     #FORCE_COMPUTE_COINJOIN_STATS = True
     #COMPUTE_COINJOIN_STATS = True
     #PARALLELIZE_COINJOIN_STATS = False
@@ -2023,8 +2195,31 @@ if __name__ == "__main__":
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231017_1000Rounds_1parallel_max30inputs_10wallets_5x10Msats\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231019_1000Rounds_1parallel_max10inputs_10wallets_5x10Msats_noPrison\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231020_1000Rounds_1parallel_max40inputs_10wallets_5x10Msats_noPrison\\'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231023_11Rounds_1parallel_max6inputs_10wallets_5x10Msats\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231017_1000Rounds_1parallel_max30inputs_10wallets_5x10Msats\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231018_1000Rounds_1parallel_max30inputs_10wallets_5x10Msats_noPrison\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol6\\test\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol6\\two-party_2023-11-21_16-30\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231023_11Rounds_1parallel_max6inputs_10wallets_5x10Msats\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\disbalanced-delayed-20_2023-11-23_14-47\\'
+
+    # Two experiments with exactly same settings
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\pareto-delayed-50_2023-11-23_22-28\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\pareto-delayed-50_2023-11-24_15-19\\'
+
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-11-24_17-09_normal-static-150\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-11-25_09-35_pareto-delayed-150\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-11-25_18-34_normal-delayed-150\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-12-01_14-50_pareto-static-200-5utxo\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-11-28_14-56_pareto-delayed-250\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-12-04_13-32_paretosum-static-30-30utxo\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-12-04_16-55_paretosum-static-100-30utxo\\'
+
+
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-04_15-14_paretosum-static-50-30utxo\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-05_10-11_paretosum-static-50-30utxo\\'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-05_11-40_paretosum-static-50-30utxo\\'
+
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\debug\\20231023_11Rounds_1parallel_max6inputs_10wallets_5x10Msats\\'
     #
 
     if PROFILE_PERFORMANCE:
@@ -2039,7 +2234,7 @@ if __name__ == "__main__":
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231012_500Rounds_1parallel_max20inputs_10wallets_daemon_shortPrison\\'
     target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231012_500Rounds_1parallel_max20inputs_10wallets_daemon_shortPrison\\'
 
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol6\\'
     #process_multiple_experiments(target_base_path)
 
 
