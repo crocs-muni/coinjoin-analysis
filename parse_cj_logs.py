@@ -1050,7 +1050,8 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     #
     # tx entropy versus input/output value size
     #
-    x_cat_in, y_cat_in, x_cat_out, y_cat_out, x_cat_out_every, y_cat_out_every = [], [], [], [], [], []
+    x_cat_in, y_cat_in, x_cat_out, y_cat_out, x_cat_out_every_txo, y_cat_out_every_txo, x_cat_out_every_utxo, y_cat_out_every_utxo = [], [], [], [], [], [], [], []
+    x_y_utxo, x_y_txo = [], []
     for cjtx in sorted_cj_time:
         tx_entropy = coinjoins[cjtx['txid']]['analysis2']['outputs_entropy']
         for index in coinjoins[cjtx['txid']]['inputs'].keys():
@@ -1061,9 +1062,19 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
             y_cat_out.append(tx_entropy)
         # Anonymity set for every output
         for index in coinjoins[cjtx['txid']]['analysis2']['outputs'].keys():
-            x_cat_out_every.append(coinjoins[cjtx['txid']]['analysis2']['outputs'][index]['value'] * SATS_IN_BTC)
-            y_cat_out_every.append(coinjoins[cjtx['txid']]['analysis2']['outputs'][index]['num_others_with_same_values']
+            coin_value = coinjoins[cjtx['txid']]['analysis2']['outputs'][index]['value'] * SATS_IN_BTC
+            ratio_entropy = (coinjoins[cjtx['txid']]['analysis2']['outputs'][index]['num_others_with_same_values']
                              / len(coinjoins[cjtx['txid']]['analysis2']['outputs']))
+            if 'spend_by_txid' not in coinjoins[cjtx['txid']]['outputs'][index].keys():
+                # This output is not spend by any other => utxo
+                x_cat_out_every_utxo.append(coin_value)
+                y_cat_out_every_utxo.append(ratio_entropy)
+                x_y_utxo.append((coin_value, ratio_entropy))
+            else:
+                # This output is already spend
+                x_cat_out_every_txo.append(coin_value)
+                y_cat_out_every_txo.append(ratio_entropy)
+                x_y_txo.append((coin_value, ratio_entropy))
 
     #ax_utxo_entropy_from_outputs_inoutsize.scatter(x_cat_in, y_cat_in, label='Tx inputs', color='green', s=1)
     #ax_utxo_entropy_from_outputs_inoutsize.scatter(x_cat_out, y_cat_out, label='Tx outputs', color='red', s=1)
@@ -1079,10 +1090,25 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
         10460353203, 17179869184, 20000000000, 20920706406, 31381059609, 34359738368, 50000000000, 62762119218,
         68719476736, 94143178827, 100000000000, 137438953472
     ]
-    ax_utxo_entropy_from_outputs_inoutsize.scatter(x_cat_out_every, y_cat_out_every, label='Tx outputs', color='blue', s=1)
+    # Add all outputs created in time
+    ax_utxo_entropy_from_outputs_inoutsize.scatter(x_cat_out_every_txo, y_cat_out_every_txo, label='Tx outputs (spend)', color='red', s=1)
+    # Insert proportinal size of outputs for spend outputs
+    # value_counts = Counter(x_y_txo)
+    # for coin in value_counts.keys():
+    #     ax_utxo_entropy_from_outputs_inoutsize.scatter([coin[0]], [coin[1]], color='red', s=10*value_counts[coin], alpha=0.1)
+
+    # Overlay with currently valid UTXOs
+    #ax_utxo_entropy_from_outputs_inoutsize.scatter(x_cat_out_every_utxo, y_cat_out_every_utxo, label='Tx outputs (unspend)', color='green', s=10, alpha=0.5)
+    # Make proportional size of utxos based on number of occurences
+    value_counts = Counter(x_y_utxo)
+    coin = value_counts.most_common()[int(len(value_counts)/2)]
+    ax_utxo_entropy_from_outputs_inoutsize.scatter([coin[0][0]], [coin[0][1]], label='Tx outputs (unspend,\nsized by occurence)', color='green', s=30*coin[1],
+                                                   alpha=0.1)
+    for coin in value_counts.keys():
+        ax_utxo_entropy_from_outputs_inoutsize.scatter([coin[0]], [coin[1]], color='green', s=30*value_counts[coin], alpha=0.1)
 
     for value in std_denoms:
-        if value <= max(x_cat_out_every):
+        if value <= max(x_cat_out_every_txo):
             ax_utxo_entropy_from_outputs_inoutsize.axvline(x=value, color='gray', linestyle='--', linewidth=0.1)
     if len(x_cat_in) > 0 or len(x_cat_out) > 0:  # logscale only if some data were inserted
         ax_utxo_entropy_from_outputs_inoutsize.set_xscale('log')
@@ -1842,6 +1868,17 @@ def load_tx_database_from_btccore(base_tx_path):
     return tx_db
 
 
+def remove_link_between_inputs_and_outputs(coinjoins):
+    for txid in coinjoins.keys():
+        for index, input in coinjoins[txid]['inputs'].items():
+            if 'spending_tx' in coinjoins[txid]['inputs'][index]:
+                coinjoins[txid]['inputs'][index].pop('spending_tx')
+        for index, output in coinjoins[txid]['outputs'].items():
+            if 'spend_by_txid' in coinjoins[txid]['outputs'][index]:
+                coinjoins[txid]['outputs'][index].pop('spend_by_txid')
+
+
+
 def compute_link_between_inputs_and_outputs(coinjoins, sorted_cjs_in_scope):
     """
     Compute backward and forward connection between all transactions in sorted_cjs_in_scope list. As a result,
@@ -2014,16 +2051,21 @@ def process_experiment(base_path):
     with open(save_file, "w") as file:
         file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
+    # Establish linkage between inputs and outputs for further analysis
+
+    remove_link_between_inputs_and_outputs(cjtx_stats['coinjoins'])
+    compute_link_between_inputs_and_outputs(cjtx_stats['coinjoins'],
+                                            [cjtxid for cjtxid in cjtx_stats['coinjoins'].keys()])
+
     # Analyze various coinjoins statistics
     analyze_coinjoin_stats(cjtx_stats, WASABIWALLET_DATA_DIR)
 
     with open(save_file, "w") as file:
         file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
-
     # Visualize coinjoins in agrregated fashion
-    compute_link_between_inputs_and_outputs(cjtx_stats['coinjoins'], [cjtxid for cjtxid in cjtx_stats['coinjoins'].keys()])
-    visualize_coinjoins_aggregated(cjtx_stats, WASABIWALLET_DATA_DIR, 'coinjoin_graph_aggregated', False)
+    if GENERATE_COINJOIN_GRAPH_BLIND:
+        visualize_coinjoins_aggregated(cjtx_stats, WASABIWALLET_DATA_DIR, 'coinjoin_graph_aggregated', False)
 
     # Visualize coinjoins in verbose mode (possibly only subset of coinjoins visualized to prevent graphviz overload)
     to_visualize = dict(list(cjtx_stats['coinjoins'].items())[:])
@@ -2162,7 +2204,7 @@ if __name__ == "__main__":
 
         target_base_path = '/home/xsvenda/coinjoin/'
 
-    GENERATE_COINJOIN_GRAPH = True
+    GENERATE_COINJOIN_GRAPH = False
     GENERATE_COINJOIN_GRAPH_BLIND = False
     GENERATE_COINJOIN_GRAPH_LINEAR = False
     #FORCE_COMPUTE_COINJOIN_STATS = True
@@ -2216,9 +2258,11 @@ if __name__ == "__main__":
 
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-04_15-14_paretosum-static-50-30utxo\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-05_10-11_paretosum-static-50-30utxo\\'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-05_11-40_paretosum-static-50-30utxo\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-05_11-40_paretosum-static-50-30utxo\\'
 
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\debug\\20231023_11Rounds_1parallel_max6inputs_10wallets_5x10Msats\\'
+
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\whirlpool\\'
     #
 
     if PROFILE_PERFORMANCE:
