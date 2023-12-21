@@ -997,6 +997,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
                 if 'wallet_name' in output.keys() and wallet_name == output['wallet_name'] and 'anon_score' in output.keys():
                     x_cat_out.append(cj_index)
                     y_cat_out.append(coinjoins[cjtx['txid']]['outputs'][index]['anon_score'])
+
             cj_index = cj_index + 1
 
         if len(x_cat_out) > 0:
@@ -1010,6 +1011,8 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     #
     # anonscore distribution for wallets
     #
+    hist_wallets = {}
+    bar_wallets = {}
     wallet_index = 0
     max_score = 1
     for wallet_name in wallets_info.keys():
@@ -1032,6 +1035,8 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
             x = (bins[:-1] + bins[1:]) / 2
             bar_positions = (bins[:-1] + bins[1:]) / 2
             linestyle = LINE_STYLES[wallet_index % len(LINE_STYLES)]
+            hist_wallets[wallet_name] = hist
+            bar_wallets[wallet_name] = bar_positions
 
             #ax_anonscore_distrib_wallets.bar(x + wallet_index * bar_width * 0.9, y, width=bar_width, align='center', alpha=0.5, label='{} outputs'.format(wallet_name))
             #ax_anonscore_distrib_wallets.plot(x_smooth, y_smooth, label='{} outputs'.format(wallet_name))
@@ -1041,6 +1046,12 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
 
         wallet_index = wallet_index + 1
 
+    # Insert average anonscore over all wallets (average from histograms and average from histogram bar positions is computed)
+    hist_sum = [sum(elements)/len(hist_wallets.keys()) for elements in zip(*hist_wallets.values())]
+    bar_positions_sum = [sum(elements)/len(bar_wallets.keys()) for elements in zip(*bar_wallets.values())]
+    ax_anonscore_distrib_wallets.plot(bar_positions_sum, np.array(hist_sum), label='AVERAGE', linestyle='solid',
+                                      color='red', linewidth=3)
+    # Finish subgraph
     ax_anonscore_distrib_wallets.set_xlabel('Anonscore')
     ax_anonscore_distrib_wallets.set_ylabel('Number of UTXOs')
     ax_anonscore_distrib_wallets.ticklabel_format(style='plain', axis='y')
@@ -2112,8 +2123,8 @@ if __name__ == "__main__":
 
     # Analysis type
     #cfg = ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL
-    #cfg = ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
-    cfg = ANALYSIS_TYPE.ANALYZE_COINJOIN_DATA_LOCAL
+    cfg = ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
+    #cfg = ANALYSIS_TYPE.ANALYZE_COINJOIN_DATA_LOCAL
     #cfg = ANALYSIS_TYPE.COMPUTE_COINJOIN_TXINFO_REMOTE
 
     print('Analysis configuration: {}'.format(cfg.name))
@@ -2256,13 +2267,16 @@ if __name__ == "__main__":
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-12-04_16-55_paretosum-static-100-30utxo\\'
 
 
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-04_15-14_paretosum-static-50-30utxo\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-05_10-11_paretosum-static-50-30utxo\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-05_11-40_paretosum-static-50-30utxo\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max100inputs\\2023-12-04_15-14_paretosum-static-50-30utxo\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max100inputs\\2023-12-05_10-11_paretosum-static-50-30utxo\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max100inputs\\2023-12-05_11-40_paretosum-static-50-30utxo\\'
+
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max500inputs\\2023-12-19_15-16_paretosum-dynamic-50-30utxo-special_5wallets1utxo_max500inputs\\'
+    #
 
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\debug\\20231023_11Rounds_1parallel_max6inputs_10wallets_5x10Msats\\'
 
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\whirlpool\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\whirlpool\\'
     #
 
     if PROFILE_PERFORMANCE:
@@ -2274,10 +2288,7 @@ if __name__ == "__main__":
             process_experiment(target_base_path)
         else:
             print(f'ERROR: Path {target_base_path} does not exist')
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231012_500Rounds_1parallel_max20inputs_10wallets_daemon_shortPrison\\'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231012_500Rounds_1parallel_max20inputs_10wallets_daemon_shortPrison\\'
-
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol6\\'
-    #process_multiple_experiments(target_base_path)
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max500inputs\\'
+    process_multiple_experiments(target_base_path)
 
 
