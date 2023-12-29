@@ -24,13 +24,13 @@ def extract_txid_from_inout_string(inout_string):
 
 def load_coinjoin_stats_from_file(target_file):
     cj_stats = {}
-
+    #print(f'Processing file {target_file}')
     with open(target_file, "r") as file:
         for line in file.readlines():
             parts = line.split(VerboseTransactionInfoLineSeparator)
             record = {}
-            id = None if parts[0] is None else parts[0]
-            record['txid'] = id
+            tx_id = None if parts[0] is None else parts[0]
+            record['txid'] = tx_id
             block_hash = None if parts[1] is None else parts[1]
             record['block_hash'] = block_hash
             block_index = None if parts[2] is None else int(parts[2])
@@ -71,7 +71,7 @@ def load_coinjoin_stats_from_file(target_file):
                 record['outputs'][f'{index}'] = this_output
                 index += 1
 
-            cj_stats[id] = record
+            cj_stats[tx_id] = record
 
     # backward reference to spending transaction output is already set ('spending_tx'), now set also forward link ('spend_by_tx')
     for txid in cj_stats.keys():
@@ -102,7 +102,7 @@ def load_coinjoin_stats(base_path):
     return coinjoin_stats
 
 
-def analyze_coinjoins(coinjoins):
+def analyze_coinjoins(coinjoins, postmix_spend):
     total_inputs = 0
     total_mix_entering = 0
     total_outputs = 0
@@ -113,51 +113,52 @@ def analyze_coinjoins(coinjoins):
             total_inputs += 1
             spending_tx, index = extract_txid_from_inout_string(coinjoins[cjtx]['inputs'][input]['spending_tx'])
             if spending_tx not in coinjoins.keys():
-                # Previous transaction is outside mix => new fresh liquidity
+                # Previous transaction is from outside the mix => new fresh liquidity entered
                 total_mix_entering += 1
 
         for output in coinjoins[cjtx]['outputs']:
             total_outputs += 1
             if 'spend_by_tx' not in coinjoins[cjtx]['outputs'][output].keys():
-                # This output is not spend by any => utxo
+                # This output is not spend by any tx => still utxo (stays within mixing pool)
                 total_utxos += 1
+                total_mix_leaving += 1
             else:
+                # This output is spend, figue out if by other mixing transaction or postmix spend
                 spend_by_tx, index = extract_txid_from_inout_string(coinjoins[cjtx]['outputs'][output]['spend_by_tx'])
                 if spend_by_tx not in coinjoins.keys():
-                    # The spending transaction is outside mix => liquidity out
+                    # Postmix spend: the spending transaction is outside mix => liquidity out
+                    assert spend_by_tx in postmix_spend.keys(), "could not find spend_by_tx"
                     total_mix_leaving += 1
-                #else: # The output is spent by next coinjoin tx => stay in mix
+                # else: # Mix spend: The output is spent by next coinjoin tx => stay in mix
 
-    print(f'Total inputs entering = {total_mix_entering}')
-    print(f'Total outputs leaving = {total_mix_leaving}')
-    print(f'Total inputs/outputs = {total_inputs}/{total_outputs}')
-    print(f'Total utxos = {total_utxos}')
+    print(f'Inputs entering mix / total inputs used by mix transactions = {total_mix_entering}/{total_inputs} ({round(total_mix_entering/float(total_inputs) * 100, 1)}%)')
+    print(f'Outputs leaving mix / total outputs created by mix transactions =  {total_mix_leaving}/{total_outputs} ({round(total_mix_leaving/float(total_outputs) * 100, 1)}%)')
+
+
+def analyze_coinjoins_file(target_path, mix_filename, postmix_filename, premix_filename=None):
+    data = {'wallets_info': {}, 'rounds': {}, 'filename': os.path.join(target_path, mix_filename),
+            'coinjoins': load_coinjoin_stats_from_file(os.path.join(target_path, mix_filename)),
+            'postmix': load_coinjoin_stats_from_file(os.path.join(target_path, postmix_filename))}
+    if premix_filename is not None:
+        data['premix'] = load_coinjoin_stats_from_file(os.path.join(target_path, premix_filename))
+    num_coinjoins = len(data['coinjoins'])
+
+    print('*******************************************')
+    print(f'{mix_filename} coinjoins: {num_coinjoins}')
+    analyze_coinjoins(data['coinjoins'], data['postmix'])
 
 
 if __name__ == "__main__":
+    FULL_TX_SET = True
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20231113\\'
-    target_path = os.path.join(target_base_path, 'Scanner', 'SamouraiCoinJoins.txt')
-    #target_path = os.path.join(target_base_path, 'Scanner', 'sam_test.txt')
-    whirlpool = {}
-    whirlpool['wallets_info'] = {}
-    whirlpool['rounds'] = {}
-    whirlpool['coinjoins'] = load_coinjoin_stats_from_file(target_path)
-    num_coinjoins = len(whirlpool['coinjoins'])
-    print(f'Whirlpool coinjoins: {num_coinjoins}')
+    target_path = os.path.join(target_base_path, 'Scanner')
 
-    #parse_cj_logs.compute_link_between_inputs_and_outputs(whirlpool, [cjtxid for cjtxid in whirlpool.keys()])
-
-    # with open(target_path + '.json', "w") as file:
-    #     file.write(json.dumps(dict(sorted(whirlpool.items())), indent=4))
-
-    # Analyze loaded data
-    analyze_coinjoins(whirlpool['coinjoins'])
-
-    # target_path = os.path.join(target_base_path, 'Scanner', 'Wasabi2CoinJoins.txt')
-    # wasabi2 = load_coinjoin_stats_from_file(target_path)
-    # print(f'Wasabi2 coinjoins: {len(wasabi2)}')
-    # with open(target_path + '.json', "w") as file:
-    #     file.write(json.dumps(dict(sorted(wasabi2.items())), indent=4))
-
-
-    #coinjoin_txs = load_coinjoin_stats(os.path.join(target_base_path, 'Scanner'))
+    if FULL_TX_SET:
+        analyze_coinjoins_file(target_path, 'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt')
+        analyze_coinjoins_file(target_path, 'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt')
+        analyze_coinjoins_file(target_path, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt')
+    else:
+        # Smaller set for debugging
+        analyze_coinjoins_file(target_path, 'wasabi_mix_test.txt', 'wasabi_postmix_test.txt')
+        analyze_coinjoins_file(target_path, 'sam_mix_test.txt', 'sam_postmix_test.txt')
+        analyze_coinjoins_file(target_path, 'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt')
