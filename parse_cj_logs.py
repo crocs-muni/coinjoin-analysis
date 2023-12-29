@@ -1203,18 +1203,16 @@ def build_address_wallet_mapping(cjtx_stats):
         for index in cjtx_stats['coinjoins'][cjtxid]['inputs'].keys():
             addr = cjtx_stats['coinjoins'][cjtxid]['inputs'][index]['address']
             for wallet_name in cjtx_stats['wallets_info'].keys():
-                for waddr in cjtx_stats['wallets_info'][wallet_name]:
-                    if addr == waddr['address']:
-                        address_wallet_mapping[addr] = wallet_name
-                        cjtx_stats['coinjoins'][cjtxid]['inputs'][index]['wallet_name'] = wallet_name
+                if addr in cjtx_stats['wallets_info'][wallet_name].keys():
+                    address_wallet_mapping[addr] = wallet_name
+                    cjtx_stats['coinjoins'][cjtxid]['inputs'][index]['wallet_name'] = wallet_name
 
         for index in cjtx_stats['coinjoins'][cjtxid]['outputs'].keys():
             addr = cjtx_stats['coinjoins'][cjtxid]['outputs'][index]['address']
             for wallet_name in cjtx_stats['wallets_info'].keys():
-                for waddr in cjtx_stats['wallets_info'][wallet_name]:
-                    if addr == waddr['address']:
-                        address_wallet_mapping[addr] = wallet_name
-                        cjtx_stats['coinjoins'][cjtxid]['outputs'][index]['wallet_name'] = wallet_name
+                if addr in cjtx_stats['wallets_info'][wallet_name].keys():
+                    address_wallet_mapping[addr] = wallet_name
+                    cjtx_stats['coinjoins'][cjtxid]['outputs'][index]['wallet_name'] = wallet_name
 
     return address_wallet_mapping
 
@@ -1508,7 +1506,8 @@ def load_wallets_info():
                 wallet_coins_all = wcli.wcli(['listcoins'])
                 wallet_coins_unspent = wcli.wcli(['listunspentcoins'])
                 if wallet_addresses is not None:
-                    wallets_info[wallet_name] = wallet_addresses
+                    wallets_info[wallet_name] = {addr_data['address']: addr_data for addr_data in wallet_addresses}
+                    #wallets_info[wallet_name] = wallet_addresses
             else:
                 print('Wallet `{}` not found.'.format(wallet_name))
         else:
@@ -1518,7 +1517,8 @@ def load_wallets_info():
             wallet_coins_all = wcli.wcli(['-wallet={}'.format(wallet_name), 'listcoins'])
             wallet_coins_unspent = wcli.wcli(['-wallet={}'.format(wallet_name), 'listunspentcoins'])
             if wallet_addresses is not None:
-                wallets_info[wallet_name] = wallet_addresses
+                wallets_info[wallet_name] = {addr_data['address']: addr_data for addr_data in wallet_addresses}
+                #wallets_info[wallet_name] = wallet_addresses
             else:
                 print('Wallet `{}` not found.'.format(wallet_name))
     return wallets_info, wallet_coins_all, wallet_coins_unspent
@@ -1719,7 +1719,8 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
                 # Wallet addresses (as obtained by 'listkeys' RPC) - now extracted from 'keys.json' file
                 with open(os.path.join(target_base_path, 'keys.json'), "r") as file:
                     wallet_keys = json.load(file)
-                    wallets_info[wallet_name] = wallet_keys
+                    wallets_info[wallet_name] = {addr_data['address']: addr_data for addr_data in wallet_keys}
+                    #wallets_info[wallet_name] = wallet_keys
 
                 # Code below partially reconstruct wallet_addresses from parsed_coins,
                 # but now we can read directly 'keys.json' so no longer in use
@@ -1764,18 +1765,18 @@ def fix_coordinator_wallet_addresses(cjtx_stats):
     COORDINATOR_WALLET_ADDR_LEN = 44
     #COORDINATOR_WALLET_ADDR_LEN = 64
     if COORDINATOR_WALLET_STRING not in cjtx_stats['wallets_info']:
-        cjtx_stats['wallets_info'][COORDINATOR_WALLET_STRING] = []
+        cjtx_stats['wallets_info'][COORDINATOR_WALLET_STRING] = {}
     for cjtxid in cjtx_stats['coinjoins'].keys():
         for index in cjtx_stats['coinjoins'][cjtxid]['inputs'].keys():
             target_addr = cjtx_stats['coinjoins'][cjtxid]['inputs'][index]['address']
             if 'wallet_name' not in cjtx_stats['coinjoins'][cjtxid]['inputs'][index] and len(target_addr) == COORDINATOR_WALLET_ADDR_LEN:
                 cjtx_stats['coinjoins'][cjtxid]['inputs'][index]['wallet_name'] = COORDINATOR_WALLET_STRING
-                cjtx_stats['wallets_info'][COORDINATOR_WALLET_STRING].append({'address': target_addr})
+                cjtx_stats['wallets_info'][COORDINATOR_WALLET_STRING][target_addr] = {'address': target_addr}
         for index in cjtx_stats['coinjoins'][cjtxid]['outputs'].keys():
             target_addr = cjtx_stats['coinjoins'][cjtxid]['outputs'][index]['address']
             if 'wallet_name' not in cjtx_stats['coinjoins'][cjtxid]['outputs'][index] and len(target_addr) == COORDINATOR_WALLET_ADDR_LEN:
                 cjtx_stats['coinjoins'][cjtxid]['outputs'][index]['wallet_name'] = COORDINATOR_WALLET_STRING
-                cjtx_stats['wallets_info'][COORDINATOR_WALLET_STRING].append({'address': target_addr})
+                cjtx_stats['wallets_info'][COORDINATOR_WALLET_STRING][target_addr] = {'address': target_addr}
 
     # Rebuild full wallet mapping
     cjtx_stats['address_wallet_mapping'] = build_address_wallet_mapping(cjtx_stats)
@@ -1940,6 +1941,22 @@ def compute_link_between_inputs_and_outputs(coinjoins, sorted_cjs_in_scope):
     return coinjoins
 
 
+def optimize_wallets_info(cjtx_stats):
+    """
+    Check if 'wallets_info' structure is realized as list. If yes, then change to more optimal dictionary
+    :param cjtx_stats:
+    :return: True if any optimization happened, False otherwise
+    """
+    optimized = False
+    for wallet_name in cjtx_stats['wallets_info'].keys():
+        if type(cjtx_stats['wallets_info'][wallet_name]) is list:
+            # change to dictionary
+            optimized = True
+            optimized_as_dict = {addr_data['address']: addr_data for addr_data in cjtx_stats['wallets_info'][wallet_name]}
+            cjtx_stats['wallets_info'][wallet_name] = optimized_as_dict
+    return optimized
+
+
 def process_experiment(base_path):
     WASABIWALLET_DATA_DIR = base_path
     print(f'INPUT PATH: {base_path}')
@@ -1985,6 +2002,12 @@ def process_experiment(base_path):
             parse_coinjoin_errors(cjtx_stats, coord_input_file)
 
         # Save parsed coinjoin transactions info into json
+        with open(save_file, "w") as file:
+            file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
+
+    # Older version of files used slow wallet address storage, optimize to dictionary
+    if optimize_wallets_info(cjtx_stats) is True:
+        # Save optimized coinjoin transactions info into json
         with open(save_file, "w") as file:
             file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
