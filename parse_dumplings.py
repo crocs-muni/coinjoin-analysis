@@ -50,7 +50,7 @@ def load_coinjoin_stats_from_file(target_file):
                 this_input = {}
                 this_input['spending_tx'] = get_output_name_string(segments[0], segments[1])
                 this_input['value'] = float(segments[2]) / SATS_IN_BTC  # BUGBUG:keep in sats and correct analyzis code instead
-                this_input['wallet_name'] = 'unknown'
+                this_input['wallet_name'] = 'real_unknown'
                 this_input['address'] = segments[3]
                 this_input['script_type'] = segments[4]
 
@@ -64,7 +64,7 @@ def load_coinjoin_stats_from_file(target_file):
                 segments = output.split('+')
                 this_output = {}
                 this_output['value'] = float(segments[0]) / SATS_IN_BTC  # BUGBUG:keep in sats and correct analyzis code instead
-                this_output['wallet_name'] = 'unknown'
+                this_output['wallet_name'] = 'real_unknown'
                 this_output['address'] = segments[1]  # BUGBUG: this is not address but likely script itself - needs for decoding
                 this_output['script_type'] = segments[2]
 
@@ -102,7 +102,7 @@ def load_coinjoin_stats(base_path):
     return coinjoin_stats
 
 
-def analyze_coinjoins(coinjoins, postmix_spend):
+def analyze_input_out_liquidity(coinjoins, postmix_spend):
     total_inputs = 0
     total_mix_entering = 0
     total_outputs = 0
@@ -135,30 +135,78 @@ def analyze_coinjoins(coinjoins, postmix_spend):
     print(f'Outputs leaving mix / total outputs created by mix transactions =  {total_mix_leaving}/{total_outputs} ({round(total_mix_leaving/float(total_outputs) * 100, 1)}%)')
 
 
-def analyze_coinjoins_file(target_path, mix_filename, postmix_filename, premix_filename=None):
-    data = {'wallets_info': {}, 'rounds': {}, 'filename': os.path.join(target_path, mix_filename),
+def extract_wallets_info(data):
+    wallets_info = {}
+    txs_data = data['coinjoins']
+    for cjtxid in txs_data.keys():
+        for index in txs_data[cjtxid]['inputs'].keys():
+            target_addr = txs_data[cjtxid]['inputs'][index]['address']
+            wallet_name = txs_data[cjtxid]['inputs'][index]['wallet_name']
+            if wallet_name not in wallets_info.keys():
+                wallets_info[wallet_name] = {}
+            wallets_info[wallet_name][target_addr] = {'address': target_addr}
+        for index in txs_data[cjtxid]['outputs'].keys():
+            target_addr = txs_data[cjtxid]['outputs'][index]['address']
+            wallet_name = txs_data[cjtxid]['outputs'][index]['wallet_name']
+            if wallet_name not in wallets_info.keys():
+                wallets_info[wallet_name] = {}
+            wallets_info[wallet_name][target_addr] = {'address': target_addr}
+    return wallets_info
+
+
+def extract_rounds_info(data):
+    rounds_info = {}
+    txs_data = data['coinjoins']
+    for cjtxid in txs_data.keys():
+        # Create basic round info from coinjoin data
+        rounds_info[cjtxid] = {"cj_tx_id": cjtxid, "round_start_timestamp": txs_data[cjtxid]['broadcast_time'],
+                               "logs": [{"round_id": cjtxid, "timestamp": txs_data[cjtxid]['broadcast_time'],
+                                         "type": "ROUND_STARTED"}]
+                               }
+    return rounds_info
+
+
+def load_coinjoins(target_path: str, mix_filename: str, postmix_filename: str, premix_filename: str =None) -> dict:
+    # All mixes are having mixing coinjoins and postmix spends
+    data = {'rounds': {}, 'filename': os.path.join(target_path, mix_filename),
             'coinjoins': load_coinjoin_stats_from_file(os.path.join(target_path, mix_filename)),
             'postmix': load_coinjoin_stats_from_file(os.path.join(target_path, postmix_filename))}
+
+    # Only Samourai Whirlpool is having premix tx (TX0)
     if premix_filename is not None:
         data['premix'] = load_coinjoin_stats_from_file(os.path.join(target_path, premix_filename))
-    num_coinjoins = len(data['coinjoins'])
+
+    data['wallets_info'] = extract_wallets_info(data)
+    data['rounds'] = extract_rounds_info(data)
+
+    return data
+
+
+def process_coinjoins(target_path, mix_filename, postmix_filename, premix_filename=None):
+    data = load_coinjoins(target_path, mix_filename, postmix_filename, premix_filename)
 
     print('*******************************************')
-    print(f'{mix_filename} coinjoins: {num_coinjoins}')
-    analyze_coinjoins(data['coinjoins'], data['postmix'])
+    print(f'{mix_filename} coinjoins: {len(data['coinjoins'])}')
+    analyze_input_out_liquidity(data['coinjoins'], data['postmix'])
+
+    return data
 
 
 if __name__ == "__main__":
-    FULL_TX_SET = True
+    FULL_TX_SET = False
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20231113\\'
     target_path = os.path.join(target_base_path, 'Scanner')
 
     if FULL_TX_SET:
-        analyze_coinjoins_file(target_path, 'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt')
-        analyze_coinjoins_file(target_path, 'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt')
-        analyze_coinjoins_file(target_path, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt')
+        # All transactions
+        process_coinjoins(target_path, 'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt')
+        process_coinjoins(target_path, 'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt')
+        process_coinjoins(target_path, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt')
     else:
         # Smaller set for debugging
-        analyze_coinjoins_file(target_path, 'wasabi_mix_test.txt', 'wasabi_postmix_test.txt')
-        analyze_coinjoins_file(target_path, 'sam_mix_test.txt', 'sam_postmix_test.txt')
-        analyze_coinjoins_file(target_path, 'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt')
+        process_coinjoins(target_path, 'wasabi_mix_test.txt', 'wasabi_postmix_test.txt')
+        data = process_coinjoins(target_path, 'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt')
+        with open(os.path.join(target_path, 'wasabi2.json'), "w") as file:
+            file.write(json.dumps(dict(sorted(data.items())), indent=4))
+        process_coinjoins(target_path, 'sam_mix_test.txt', 'sam_postmix_test.txt')
+
