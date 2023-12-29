@@ -40,7 +40,7 @@ VERBOSE = False
 NUM_THREADS = 1
 SATS_IN_BTC = 100000000
 PRE_2_0_4_VERSION = False
-
+MAX_NUM_DISPLAY_UTXO = 1000
 
 class CJ_LOG_TYPES(Enum):
     ROUND_STARTED = 'ROUND_STARTED'
@@ -622,7 +622,10 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
                         print(f'Overly mixed output: {get_output_name_string(cjtx, index)}, {output['anon_score']}')
                         num_overmixed_utxos += 1
                     total_utxos += 1
-    print(f'Total overmixed outputs: {num_overmixed_utxos} / {total_utxos} ({round(num_overmixed_utxos/total_utxos, 1)*100}%)')
+    if total_utxos > 0:
+        print(f'Total overmixed outputs: {num_overmixed_utxos} / {total_utxos} ({round(num_overmixed_utxos/total_utxos, 1)*100}%)')
+    else:
+        print('Total overmixed outputs: nothing found.')
 
     # Create four subplots with their own axes
     fig = plt.figure(figsize=(48, 24))
@@ -1130,7 +1133,10 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     coin = value_counts.most_common()[int(len(value_counts)/2)]
     ax_utxo_entropy_from_outputs_inoutsize.scatter([coin[0][0]], [coin[0][1]], label='Tx outputs (unspend,\nsized by occurence)', color='green', s=30*coin[1],
                                                    alpha=0.1)
-    for coin in value_counts.keys():
+    # Display only up to MAX_NUM_DISPLAY_UTXO utxos
+    if len(value_counts) > MAX_NUM_DISPLAY_UTXO:
+        print(f'Limiting number of UTXOs displayed from {len(value_counts)} to {MAX_NUM_DISPLAY_UTXO} (MAX_NUM_DISPLAY_UTXO)')
+    for coin in list(value_counts.keys())[0:min(MAX_NUM_DISPLAY_UTXO, len(value_counts))]:
         ax_utxo_entropy_from_outputs_inoutsize.scatter([coin[0]], [coin[1]], color='green', s=30*value_counts[coin], alpha=0.1)
 
     for value in std_denoms:
