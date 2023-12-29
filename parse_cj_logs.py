@@ -609,6 +609,21 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
                     coinjoins[cjtx]['analysis2']['mining_and_coinjoin_fee_payed'] = {}
                 coinjoins[cjtx]['analysis2']['mining_and_coinjoin_fee_payed'][wallet_name] = int(mining_and_coinjoin_fee_payed)
 
+    # Detect inputs which achieved base anonscore, yet were used again in mixing
+    BASE_ANONSCORE_LIMIT = 5  # TODO: Extract exact value from configuration files
+    num_overmixed_utxos = 0
+    total_utxos = 0
+    for wallet_name in wallets_info.keys():
+        for cjtx in coinjoins:
+            for index in coinjoins[cjtx]['outputs'].keys():
+                output = coinjoins[cjtx]['outputs'][index]
+                if 'wallet_name' in output.keys() and wallet_name == output['wallet_name'] and 'anon_score' in output.keys():
+                    if output['anon_score'] >= BASE_ANONSCORE_LIMIT and 'spend_by_txid' in output:
+                        print(f'Overly mixed output: {get_output_name_string(cjtx, index)}, {output['anon_score']}')
+                        num_overmixed_utxos += 1
+                    total_utxos += 1
+    print(f'Total overmixed outputs: {num_overmixed_utxos} / {total_utxos} ({round(num_overmixed_utxos/total_utxos, 1)*100}%)')
+
     # Create four subplots with their own axes
     fig = plt.figure(figsize=(48, 24))
     ax1 = fig.add_subplot(4, 4, 1)
@@ -1557,7 +1572,11 @@ def get_input_name_string(input):
 
 
 def get_output_name_string(output):
-    return f'vout_{output[1]['txid']}_{output[1]['vout']}'
+    return get_output_name_string(output[1]['txid'], output[1]['vout'])
+
+
+def get_output_name_string(txid, output_index):
+    return f'vout_{txid}_{output_index}'
 
 
 def extract_txid_from_inout_string(inout_string):
