@@ -1,10 +1,28 @@
+import copy
 import os
 from datetime import datetime
+from enum import Enum
+from collections import defaultdict
 from jsonpickle import json
 
 SATS_IN_BTC = 100000000
 VerboseTransactionInfoLineSeparator = ':::'
 VerboseInOutInfoInLineSeparator = '}'
+
+
+class MIX_EVENT_TYPE(Enum):
+    MIX_ENTER = 'MIX_ENTER'  # New liquidity coming to mix
+    MIX_LEAVE = 'MIX_LEAVE'  # Liquidity leaving mix (postmix spend)
+    MIX_REMIX = 'MIX_REMIX'  # Remixed value within mix
+    MIX_STAY = 'MIX_STAY'    # Mix output not yet spend (may be remixed or leave mix later)
+
+
+def get_ratio_string(numerator, denominator) -> str:
+    if denominator != 0:
+        return f'{numerator}/{denominator} ({round(numerator/float(denominator) * 100, 1)}%)'
+    else:
+        return f'{numerator}/{0} (0%)'
+
 
 
 def get_input_name_string(txid, index):
@@ -103,10 +121,12 @@ def load_coinjoin_stats(base_path):
 
 
 def analyze_input_out_liquidity(coinjoins, postmix_spend):
+    liquidity_events = []
     total_inputs = 0
     total_mix_entering = 0
     total_outputs = 0
     total_mix_leaving = 0
+    total_mix_staying = 0
     total_utxos = 0
     for cjtx in coinjoins:
         for input in coinjoins[cjtx]['inputs']:
@@ -115,24 +135,32 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend):
             if spending_tx not in coinjoins.keys():
                 # Previous transaction is from outside the mix => new fresh liquidity entered
                 total_mix_entering += 1
+                coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_ENTER.name
+            else:
+                coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX.name
 
         for output in coinjoins[cjtx]['outputs']:
             total_outputs += 1
             if 'spend_by_tx' not in coinjoins[cjtx]['outputs'][output].keys():
                 # This output is not spend by any tx => still utxo (stays within mixing pool)
                 total_utxos += 1
-                total_mix_leaving += 1
+                total_mix_staying += 1
+                coinjoins[cjtx]['outputs'][output]['mix_event_type'] = MIX_EVENT_TYPE.MIX_STAY.name
             else:
-                # This output is spend, figue out if by other mixing transaction or postmix spend
+                # This output is spend, figure out if by other mixing transaction or postmix spend
                 spend_by_tx, index = extract_txid_from_inout_string(coinjoins[cjtx]['outputs'][output]['spend_by_tx'])
                 if spend_by_tx not in coinjoins.keys():
                     # Postmix spend: the spending transaction is outside mix => liquidity out
                     assert spend_by_tx in postmix_spend.keys(), "could not find spend_by_tx"
                     total_mix_leaving += 1
-                # else: # Mix spend: The output is spent by next coinjoin tx => stay in mix
+                    coinjoins[cjtx]['outputs'][output]['mix_event_type'] = MIX_EVENT_TYPE.MIX_LEAVE.name
+                else:
+                    # Mix spend: The output is spent by next coinjoin tx => stays in mix
+                    coinjoins[cjtx]['outputs'][output]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX.name
 
-    print(f'Inputs entering mix / total inputs used by mix transactions = {total_mix_entering}/{total_inputs} ({round(total_mix_entering/float(total_inputs) * 100, 1)}%)')
-    print(f'Outputs leaving mix / total outputs created by mix transactions =  {total_mix_leaving}/{total_outputs} ({round(total_mix_leaving/float(total_outputs) * 100, 1)}%)')
+    print(f'  {get_ratio_string(total_mix_entering, total_inputs)} Inputs entering mix / total inputs used by mix transactions')
+    print(f'  {get_ratio_string(total_mix_leaving, total_outputs)} Outputs leaving mix / total outputs by mix transactions')
+    print(f'  {get_ratio_string(total_mix_staying, total_outputs)} Outputs staying in mix / total outputs by mix transactions')
 
 
 def extract_wallets_info(data):
@@ -166,6 +194,26 @@ def extract_rounds_info(data):
     return rounds_info
 
 
+def compute_mix_postmix_link(data: dict):
+    """
+    Set explicit link between mix transactions (coinjoins) and postmix txs
+    :param data: dictionary with all transactions
+    :return: modified dictionary with all transactions
+    """
+    # backward reference to spending transaction output is already set ('spending_tx'),
+    # now set also forward link ('spend_by_tx')
+    for txid in data['postmix'].keys():
+        for index in data['postmix'][txid]['inputs'].keys():
+            input = data['postmix'][txid]['inputs'][index]
+            if 'spending_tx' in input.keys():
+                tx, vout = extract_txid_from_inout_string(input['spending_tx'])
+                # Try to find transaction in mix (coinjoins) and set its record
+                if tx in data['coinjoins'].keys() and vout in data['coinjoins'][tx]['outputs'].keys():
+                    data['coinjoins'][tx]['outputs'][vout]['spend_by_tx'] = get_input_name_string(txid, index)
+
+    return data
+
+
 def load_coinjoins(target_path: str, mix_filename: str, postmix_filename: str, premix_filename: str =None) -> dict:
     # All mixes are having mixing coinjoins and postmix spends
     data = {'rounds': {}, 'filename': os.path.join(target_path, mix_filename),
@@ -176,10 +224,73 @@ def load_coinjoins(target_path: str, mix_filename: str, postmix_filename: str, p
     if premix_filename is not None:
         data['premix'] = load_coinjoin_stats_from_file(os.path.join(target_path, premix_filename))
 
+    # Set spending transactions also between mix and postmix
+    data = compute_mix_postmix_link(data)
+
     data['wallets_info'] = extract_wallets_info(data)
     data['rounds'] = extract_rounds_info(data)
 
     return data
+
+
+def propagate_cluster_name_for_all_inputs(cluster_name, postmix_txs, txid, mix_txs):
+    # Set same cluster id for all inputs
+    for input in postmix_txs[txid]['inputs']:
+        postmix_txs[txid]['inputs'][input]['cluster_id'] = cluster_name
+        if 'spending_tx' in postmix_txs[txid]['inputs'][input]:
+            tx, vout = extract_txid_from_inout_string(postmix_txs[txid]['inputs'][input]['spending_tx'])
+            # Try to find transaction and set its record (postmix txs, coinjoin txs)
+            if tx in postmix_txs.keys() and vout in postmix_txs[tx]['outputs'].keys():
+                postmix_txs[tx]['outputs'][vout]['cluster_id'] = cluster_name
+            if tx in mix_txs.keys() and vout in mix_txs[tx]['outputs'].keys():
+                mix_txs[tx]['outputs'][vout]['cluster_id'] = cluster_name
+
+
+def analyze_postmix_spends(tx_dict: dict) -> dict:
+    """
+    Simple chain analysis heuristics:
+    1. N:1 Merges (many inputs, single output)
+    2. 1:1 Resend (one input, one output)
+    :param tx_dict: input dict with transactions
+    :return: updated dict with transactions
+    """
+    postmix_txs = tx_dict['postmix']
+    mix_txs = tx_dict['coinjoins']
+
+    print('### Simple chain analysis')
+    # N:1 Merge (many inputs, one output), including # 1:1 Resend (one input, one output)
+    new_cluster_index = 0   # Unique cluster index (used if not already set)
+    cluster_name = 'unassigned'  # Index to use
+    offset = new_cluster_index  # starting offset of cluster index used to compute number of assigned indexes
+    for txid in postmix_txs.keys():
+        if len(postmix_txs[txid]['outputs']) == 1:
+            # Find or use existing cluster index
+            if 'cluster_id' in postmix_txs[txid]['outputs']['0']:
+                cluster_name = postmix_txs[txid]['outputs']['0']['cluster_id']
+            else:
+                # New cluster index
+                new_cluster_index += 1
+                cluster_name = f'c_{new_cluster_index}'
+
+            # Set output cluster id
+            postmix_txs[txid]['outputs']['0']['cluster_id'] = cluster_name
+            # Set same cluster id for all merged inputs
+            propagate_cluster_name_for_all_inputs(cluster_name, postmix_txs, txid, mix_txs)
+
+    # Compute total number of inputs used in postmix spending
+    total_inputs = sum([len(postmix_txs[txid]['inputs']) for txid in postmix_txs.keys()])
+    print(f' {get_ratio_string(new_cluster_index - offset, total_inputs)} N:1 postmix merges detected')
+
+    return tx_dict
+
+
+def analyze_coinjoin_blocks(data):
+    same_block_coinjoins = defaultdict(list)
+    for txid in data['coinjoins'].keys():
+        same_block_coinjoins[data['coinjoins'][txid]['block_hash']].append(txid)
+    filtered_dict = {key: value for key, value in same_block_coinjoins.items() if len(value) > 1}
+    print(f' {get_ratio_string(len(filtered_dict), len(data['coinjoins']))} coinjoins in same block')
+    #print(f'{filtered_dict}')
 
 
 def process_coinjoins(target_path, mix_filename, postmix_filename, premix_filename=None):
@@ -187,26 +298,75 @@ def process_coinjoins(target_path, mix_filename, postmix_filename, premix_filena
 
     print('*******************************************')
     print(f'{mix_filename} coinjoins: {len(data['coinjoins'])}')
+
     analyze_input_out_liquidity(data['coinjoins'], data['postmix'])
+
+    analyze_postmix_spends(data)
+
+    analyze_coinjoin_blocks(data)
 
     return data
 
 
+def filter_liquidity_events(data):
+    events = {}
+    for txid in data['coinjoins']:
+        events[txid] = copy.deepcopy(data['coinjoins'][txid])
+        events[txid].pop('block_hash')
+        # Process inputs
+        events[txid]['num_inputs'] = len(events[txid]['inputs'])
+        for input in list(events[txid]['inputs'].keys()):
+            if ('mix_event_type' not in events[txid]['inputs'][input]
+                    or events[txid]['inputs'][input]['mix_event_type'] not in [MIX_EVENT_TYPE.MIX_ENTER.name, MIX_EVENT_TYPE.MIX_LEAVE.name]):
+                # Remove whole given input
+                events[txid]['inputs'].pop(input)
+            else:
+                # Remove all unnecessary data
+                for item in events[txid]['inputs'][input].copy():
+                    if item not in ['value', 'wallet_name', 'mix_event_type']:
+                        events[txid]['inputs'][input].pop(item)
+        # Process outputs
+        events[txid]['num_outputs'] = len(events[txid]['outputs'])
+        for output in list(events[txid]['outputs'].keys()):
+            if ('mix_event_type' not in events[txid]['outputs'][output]
+                    or events[txid]['outputs'][output]['mix_event_type'] not in [MIX_EVENT_TYPE.MIX_ENTER.name, MIX_EVENT_TYPE.MIX_LEAVE.name]):
+                # Remove whole given output
+                events[txid]['outputs'].pop(output)
+            else:
+                # Remove all unnecessary data
+                for item in events[txid]['outputs'][output].copy():
+                    if item not in ['value', 'wallet_name', 'mix_event_type']:
+                        events[txid]['outputs'][output].pop(item)
+    return events
+
+
+def process_and_save_coinjoins(mix_id: str, target_path: os.path, mix_filename: str, postmix_filename: str, premix_filename: str=None):
+    # Process and save full conjoin information
+    data = process_coinjoins(target_path, mix_filename, postmix_filename, premix_filename)
+    if SAVE_BASE_FILES:
+        with open(os.path.join(target_path, f'{mix_id}_txs.json'), "w") as file:
+            file.write(json.dumps(dict(sorted(data.items())), indent=4))
+
+    # Filter only liquidity-relevant events to maintain smaller file
+    events = filter_liquidity_events(data)
+    with open(os.path.join(target_path, f'{mix_id}_events.json'), "w") as file:
+        file.write(json.dumps(dict(sorted(events.items())), indent=4))
+
+
 if __name__ == "__main__":
-    FULL_TX_SET = False
+    FULL_TX_SET = True
+    SAVE_BASE_FILES = False
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20231113\\'
     target_path = os.path.join(target_base_path, 'Scanner')
 
     if FULL_TX_SET:
         # All transactions
-        process_coinjoins(target_path, 'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt')
-        process_coinjoins(target_path, 'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt')
-        process_coinjoins(target_path, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt')
+        process_and_save_coinjoins('whirlpool', target_path, 'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt')
+        process_and_save_coinjoins('wasabi', target_path, 'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt')
+        process_and_save_coinjoins('wasabi2', target_path, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt')
     else:
         # Smaller set for debugging
-        process_coinjoins(target_path, 'wasabi_mix_test.txt', 'wasabi_postmix_test.txt')
-        data = process_coinjoins(target_path, 'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt')
-        with open(os.path.join(target_path, 'wasabi2.json'), "w") as file:
-            file.write(json.dumps(dict(sorted(data.items())), indent=4))
-        process_coinjoins(target_path, 'sam_mix_test.txt', 'sam_postmix_test.txt')
+        process_and_save_coinjoins('wasabi_test', target_path, 'wasabi_mix_test.txt', 'wasabi_postmix_test.txt')
+        process_and_save_coinjoins('wasabi2_test', target_path, 'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt')
+        process_and_save_coinjoins('whirlpool_test', target_path, 'sam_mix_test.txt', 'sam_postmix_test.txt')
 
