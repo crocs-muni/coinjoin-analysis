@@ -592,16 +592,16 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
 
     # Compute mining fee contribution in given coinjoin by seperate wallets
     for cjtx in coinjoins.keys():
-        sum_inputs = sum(coinjoins[cjtx]['inputs'][index]['value'] * SATS_IN_BTC for index in coinjoins[cjtx]['inputs'].keys())
-        sum_outputs = sum(coinjoins[cjtx]['outputs'][index]['value'] * SATS_IN_BTC for index in coinjoins[cjtx]['outputs'].keys())
+        sum_inputs = sum(coinjoins[cjtx]['inputs'][index]['value'] for index in coinjoins[cjtx]['inputs'].keys())
+        sum_outputs = sum(coinjoins[cjtx]['outputs'][index]['value'] for index in coinjoins[cjtx]['outputs'].keys())
         mining_fee = sum_inputs - sum_outputs
         coinjoins[cjtx]['analysis2']['mining_fee'] = mining_fee
 
         for wallet_name in cjtx_stats['wallets_info'].keys():
             sum_inputs = sum(
-                coinjoins[cjtx]['inputs'][index]['value'] * SATS_IN_BTC for index in coinjoins[cjtx]['inputs'].keys() if wallet_name == coinjoins[cjtx]['inputs'][index]['wallet_name'])
+                coinjoins[cjtx]['inputs'][index]['value'] for index in coinjoins[cjtx]['inputs'].keys() if wallet_name == coinjoins[cjtx]['inputs'][index]['wallet_name'])
             sum_outputs = sum(
-                coinjoins[cjtx]['outputs'][index]['value'] * SATS_IN_BTC for index in coinjoins[cjtx]['outputs'].keys() if wallet_name == coinjoins[cjtx]['outputs'][index]['wallet_name'])
+                coinjoins[cjtx]['outputs'][index]['value'] for index in coinjoins[cjtx]['outputs'].keys() if wallet_name == coinjoins[cjtx]['outputs'][index]['wallet_name'])
             mining_and_coinjoin_fee_payed = sum_inputs - sum_outputs
 
             if sum_inputs > 0:  # save only if some value was found
@@ -1084,14 +1084,14 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     for cjtx in sorted_cj_time:
         tx_entropy = coinjoins[cjtx['txid']]['analysis2']['outputs_entropy']
         for index in coinjoins[cjtx['txid']]['inputs'].keys():
-            x_cat_in.append(coinjoins[cjtx['txid']]['inputs'][index]['value'] * SATS_IN_BTC)
+            x_cat_in.append(coinjoins[cjtx['txid']]['inputs'][index]['value'])
             y_cat_in.append(tx_entropy)
         for index in coinjoins[cjtx['txid']]['outputs'].keys():
-            x_cat_out.append(coinjoins[cjtx['txid']]['outputs'][index]['value'] * SATS_IN_BTC)
+            x_cat_out.append(coinjoins[cjtx['txid']]['outputs'][index]['value'])
             y_cat_out.append(tx_entropy)
         # Anonymity set for every output
         for index in coinjoins[cjtx['txid']]['analysis2']['outputs'].keys():
-            coin_value = coinjoins[cjtx['txid']]['analysis2']['outputs'][index]['value'] * SATS_IN_BTC
+            coin_value = coinjoins[cjtx['txid']]['analysis2']['outputs'][index]['value']
             ratio_entropy = (coinjoins[cjtx['txid']]['analysis2']['outputs'][index]['num_others_with_same_values']
                              / len(coinjoins[cjtx['txid']]['analysis2']['outputs']))
             if 'spend_by_txid' not in coinjoins[cjtx['txid']]['outputs'][index].keys():
@@ -1628,7 +1628,7 @@ def graphviz_insert_aggregated_connections(cjtx_stats, target_cjtxid, graphdot):
 
             # Insert single edge between target_cjtxid and other_cjtxid for shared inputs
             if wallet_inputs_sum > 0:  # Plot connection only if at least some satoshies are transfered
-                width = math.log(int(wallet_inputs_sum * SATS_IN_BTC), 2)  # The sizes might be very different, use log
+                width = math.log(int(wallet_inputs_sum), 2)  # The sizes might be very different, use log
                 graphdot.edge(prepare_display_cjtxid(other_cjtxid), prepare_display_cjtxid(target_cjtxid),
                               color=WALLET_COLORS[wallet_name], style='solid', dir='forward', penwidth=f'{width}')
 
@@ -1963,6 +1963,40 @@ def optimize_wallets_info(cjtx_stats):
     return optimized
 
 
+def optimize_txvalue_info(cjtx_stats):
+    """
+    Check if tx value is realized as an integer. If not, change from float to integer
+    :param cjtx_stats:
+    :return: True if any optimization happened, False otherwise
+    """
+    optimized = False
+    float_value_detected = False
+    for txid in cjtx_stats['coinjoins'].keys():
+        for input in cjtx_stats['coinjoins'][txid]['inputs'].keys():
+            if type(cjtx_stats['coinjoins'][txid]['inputs'][input]['value']) is float:
+                float_value_detected = True
+                break
+        else:
+            continue
+        break
+
+    if float_value_detected:
+        # Change all computed values to integer sats instead of float (imprecise)
+        optimized = True
+        for txid in cjtx_stats['coinjoins'].keys():
+            for input in cjtx_stats['coinjoins'][txid]['inputs'].keys():
+                assert type(cjtx_stats['coinjoins'][txid]['inputs'][input]['value']) is float, 'non-float value'
+                cjtx_stats['coinjoins'][txid]['inputs'][input]['value'] \
+                    = int(cjtx_stats['coinjoins'][txid]['inputs'][input]['value'] * SATS_IN_BTC)
+            for output in cjtx_stats['coinjoins'][txid]['outputs'].keys():
+                assert type(cjtx_stats['coinjoins'][txid]['outputs'][output]['value']) is float, 'non-float value'
+                cjtx_stats['coinjoins'][txid]['outputs'][output]['value'] \
+                    = int(cjtx_stats['coinjoins'][txid]['outputs'][output]['value'] * SATS_IN_BTC)
+
+    return optimized
+
+
+
 def process_experiment(base_path):
     WASABIWALLET_DATA_DIR = base_path
     print(f'INPUT PATH: {base_path}')
@@ -2011,8 +2045,10 @@ def process_experiment(base_path):
         with open(save_file, "w") as file:
             file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
-    # Older version of files used slow wallet address storage, optimize to dictionary
-    if optimize_wallets_info(cjtx_stats) is True:
+    # Older version of files used slow wallet address storage and float for sats, optimize and save if changed
+    updated_cjtx_stats = optimize_wallets_info(cjtx_stats)
+    updated_cjtx_stats |= optimize_txvalue_info(cjtx_stats)
+    if updated_cjtx_stats is True:
         # Save optimized coinjoin transactions info into json
         with open(save_file, "w") as file:
             file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
