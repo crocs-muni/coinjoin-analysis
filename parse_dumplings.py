@@ -5,7 +5,6 @@ from enum import Enum
 from collections import defaultdict
 from jsonpickle import json
 
-SATS_IN_BTC = 100000000
 VerboseTransactionInfoLineSeparator = ':::'
 VerboseInOutInfoInLineSeparator = '}'
 
@@ -67,7 +66,7 @@ def load_coinjoin_stats_from_file(target_file):
 
                 this_input = {}
                 this_input['spending_tx'] = get_output_name_string(segments[0], segments[1])
-                this_input['value'] = float(segments[2]) / SATS_IN_BTC  # BUGBUG:keep in sats and correct analyzis code instead
+                this_input['value'] = int(segments[2])
                 this_input['wallet_name'] = 'real_unknown'
                 this_input['address'] = segments[3]
                 this_input['script_type'] = segments[4]
@@ -81,7 +80,7 @@ def load_coinjoin_stats_from_file(target_file):
             for output in outputs:
                 segments = output.split('+')
                 this_output = {}
-                this_output['value'] = float(segments[0]) / SATS_IN_BTC  # BUGBUG:keep in sats and correct analyzis code instead
+                this_output['value'] = int(segments[0])
                 this_output['wallet_name'] = 'real_unknown'
                 this_output['address'] = segments[1]  # BUGBUG: this is not address but likely script itself - needs for decoding
                 this_output['script_type'] = segments[2]
