@@ -471,10 +471,10 @@ def generate_llm_inputs(cjtx_stats):
         last_tx_id = sorted_cjs_in_scope[-1]
 
         # Compute distribution of outputs of root_tx_id for every wallet which are NOT mixed any longer
-        wallet_leave_distribution, wallet_leave_txs = compute_inputs_leave_distribution_fifo(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id)
+        #wallet_leave_distribution, wallet_leave_txs = compute_inputs_leave_distribution_fifo(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id)
 
         # This compute_inputs_leave_distribution() assigns all *possible* outputs to given input
-        #wallet_leave_distribution, wallet_leave_txs = compute_inputs_leave_distribution(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id)
+        wallet_leave_distribution, wallet_leave_txs = compute_inputs_leave_distribution(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id)
 
         results[start_cjtxid] = []
         num_inputs_first_tx = len(coinjoins_dupl[root_tx_id]['inputs'])
@@ -579,10 +579,11 @@ def generate_llm_inputs(cjtx_stats):
     return results
 
 
-def visualize_wallet_leave_distribution(cjtx_stats, events_vector, base_path):
+def visualize_wallet_leave_distribution(cjtx_stats, events_vector, base_path, filter_wallets=[]):
     fig, ax = plt.subplots(figsize=(20, 16))
     index = 0
-    for fraction_to_analyze in np.arange(0.1, 0.11, 0.1):
+    #for fraction_to_analyze in np.arange(0.1, 0.11, 0.1):  # Fraction of wallets to be analyzed (0.1 => only first 10% are analyzed)
+    for fraction_to_analyze in [1]:
         sorted_cjs_in_scope = sorted(cjtx_stats['coinjoins'].keys(), key=lambda txid: cjtx_stats['coinjoins'][txid]['broadcast_time'])
         # Visualize distribution of wallet leave distribution for every wallet and every root transaction
         aggregated_wallet_distribution_per_wallet = {}
@@ -600,6 +601,8 @@ def visualize_wallet_leave_distribution(cjtx_stats, events_vector, base_path):
         print(aggregated_wallet_distribution)
 
         for wallet_name in aggregated_wallet_distribution_per_wallet.keys():
+            if len(filter_wallets) > 0 and wallet_name not in filter_wallets:
+                continue
             x_data = list(aggregated_wallet_distribution_per_wallet[wallet_name].keys())
             y_data = list(aggregated_wallet_distribution_per_wallet[wallet_name].values())
             ax.plot(x_data, y_data, label=f'{wallet_name}/{round(fraction_to_analyze, 1)}', alpha=1, linestyle=LINE_STYLES[index % len(LINE_STYLES)])
@@ -617,10 +620,37 @@ def visualize_wallet_leave_distribution(cjtx_stats, events_vector, base_path):
     ax.set_yscale('log')
     ax.set_title(f'Distribution of hops to leave mixing (FORCE_LIMIT_ANON_SCORE={FORCE_LIMIT_ANON_SCORE}')
     #ax.legend(ncol=3)
-    fig.show()
     save_file = os.path.join(base_path, "coinjoin_leaving_distribution.png")
     plt.savefig(save_file, dpi=300)
+#    fig.show()
     plt.close()
+
+
+def compute_distance_single_wallet(cjtx_stats):
+    sorted_cjs_in_scope = sorted(cjtx_stats['coinjoins'], key=lambda txid: cjtx_stats['coinjoins'][txid]['broadcast_time'])
+
+    # Filter only coinjoins for specific wallets
+    #filter_wallets = ['wallet-004', 'wallet-005', 'wallet-008', 'wallet-031', 'wallet-039']
+    for target_wallet in cjtx_stats['wallets_info'].keys():
+        # Filter only coinjoins which have at least one input from target_wallet
+        filter_coinjoin = {}
+        filter_coinjoin['coinjoins'] = {}
+        for txid in cjtx_stats['coinjoins'].keys():
+            if target_wallet in [cjtx_stats['coinjoins'][txid]['inputs'][vin]['wallet_name'] for vin in cjtx_stats['coinjoins'][txid]['inputs']]:
+                filter_coinjoin['coinjoins'][txid] = cjtx_stats['coinjoins'][txid]
+        print(f'Found {len(filter_coinjoin['coinjoins'])} cjtxs for {target_wallet}')
+
+        # Compute distance from first and last coinjoin
+        if len(filter_coinjoin['coinjoins']) > 0:
+            distance = 0
+            for txid in sorted_cjs_in_scope:
+                distance += 1
+                if txid == list(filter_coinjoin['coinjoins'].keys())[0]:
+                    distance = 0  # Start computing distance from this one
+                if txid == list(filter_coinjoin['coinjoins'].keys())[-1]:  # Up to last one
+                    print(f'  distance from first to last coinjoin: {distance}')
+                    break
+    print('done')
 
 
 if __name__ == "__main__":
@@ -643,10 +673,11 @@ if __name__ == "__main__":
     # Two experiments with exactly same settings
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\pareto-delayed-50_2023-11-23_22-28\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\pareto-delayed-50_2023-11-24_15-19\\'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-12-04_13-32_paretosum-static-30-30utxo\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-12-04_13-32_paretosum-static-30-30utxo\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-05_11-40_paretosum-static-50-30utxo\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-05_10-11_paretosum-static-50-30utxo\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\2023-12-04_15-14_paretosum-static-50-30utxo\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max100inputs\\2023-12-04_15-14_paretosum-static-50-30utxo\\'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max500inputs\\2023-12-19_15-16_paretosum-dynamic-50-30utxo-special\\'
     #
 
     print('Path used = {}'.format(target_base_path))
@@ -657,11 +688,15 @@ if __name__ == "__main__":
     with open(save_file, "r") as file:
         cjtx_stats = json.load(file)
 
+    # Compute distance for first input to all outputs for single wallets
+    compute_distance_single_wallet(cjtx_stats)
+
     #
     # Generate LLM inputs
     #
     #visualize_wallet_leave_distribution(cjtx_stats, [])
     events_vector = generate_llm_inputs(cjtx_stats)
+
     visualize_wallet_leave_distribution(cjtx_stats, events_vector, target_base_path)
 
     exit(1)
