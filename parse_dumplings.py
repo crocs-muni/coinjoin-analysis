@@ -8,6 +8,28 @@ from jsonpickle import json
 VerboseTransactionInfoLineSeparator = ':::'
 VerboseInOutInfoInLineSeparator = '}'
 
+# If True, difference between assigned and existing cluster id is checked and failed upon if different
+# If False, only warning is printed, but execution continues.
+# TODO: Systematic solution requires merging and resolvning different cluster ids
+CLUSTER_ID_CHECK_HARD_ASSERT = False
+
+
+class ClusterIndex:
+    NEW_CLUSTER_INDEX = 0
+
+    def __init__(self, initial_cluster_index):
+        self.NEW_CLUSTER_INDEX = initial_cluster_index
+
+    def get_new_index(self):
+        self.NEW_CLUSTER_INDEX += 1
+        return self.NEW_CLUSTER_INDEX
+
+    def get_current_index(self):
+        return self.NEW_CLUSTER_INDEX
+
+
+CLUSTER_INDEX = ClusterIndex(0)
+
 
 class MIX_EVENT_TYPE(Enum):
     MIX_ENTER = 'MIX_ENTER'  # New liquidity coming to mix
@@ -16,12 +38,23 @@ class MIX_EVENT_TYPE(Enum):
     MIX_STAY = 'MIX_STAY'    # Mix output not yet spend (may be remixed or leave mix later)
 
 
+def set_key_value_assert(data, key, value, hard_assert):
+    if key in data:
+        if hard_assert:
+            assert data[key] == value, f"Key '{key}' already exists with a different value {data[key]} vs. {value}."
+        else:
+            if data[key] != value:
+                print(f"Key '{key}' already exists with a different value {data[key]} vs. {value}.")
+
+    else:
+        data[key] = value
+
+
 def get_ratio_string(numerator, denominator) -> str:
     if denominator != 0:
         return f'{numerator}/{denominator} ({round(numerator/float(denominator) * 100, 1)}%)'
     else:
         return f'{numerator}/{0} (0%)'
-
 
 
 def get_input_name_string(txid, index):
@@ -150,7 +183,8 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend):
                 spend_by_tx, index = extract_txid_from_inout_string(coinjoins[cjtx]['outputs'][output]['spend_by_tx'])
                 if spend_by_tx not in coinjoins.keys():
                     # Postmix spend: the spending transaction is outside mix => liquidity out
-                    assert spend_by_tx in postmix_spend.keys(), "could not find spend_by_tx"
+                    if spend_by_tx not in postmix_spend.keys():
+                        print(f'Could not find spend_by_tx {spend_by_tx} in postmix_spend txs')
                     total_mix_leaving += 1
                     coinjoins[cjtx]['outputs'][output]['mix_event_type'] = MIX_EVENT_TYPE.MIX_LEAVE.name
                 else:
@@ -210,6 +244,18 @@ def compute_mix_postmix_link(data: dict):
                 if tx in data['coinjoins'].keys() and vout in data['coinjoins'][tx]['outputs'].keys():
                     data['coinjoins'][tx]['outputs'][vout]['spend_by_tx'] = get_input_name_string(txid, index)
 
+    if 'premix' in data.keys():
+        # backward reference from coinjoin to premix is already set ('spending_tx')
+        # now set also forward link ('spend_by_tx')
+        for txid in data['coinjoins'].keys():
+            for index in data['coinjoins'][txid]['inputs'].keys():
+                input = data['coinjoins'][txid]['inputs'][index]
+                if 'spending_tx' in input.keys():
+                    tx, vout = extract_txid_from_inout_string(input['spending_tx'])
+                    # Try to find transaction in mix (coinjoins) and set its record
+                    if tx in data['premix'].keys() and vout in data['premix'][tx]['outputs'].keys():
+                        data['premix'][tx]['outputs'][vout]['spend_by_tx'] = get_input_name_string(txid, index)
+
     return data
 
 
@@ -222,6 +268,12 @@ def load_coinjoins(target_path: str, mix_filename: str, postmix_filename: str, p
     # Only Samourai Whirlpool is having premix tx (TX0)
     if premix_filename is not None:
         data['premix'] = load_coinjoin_stats_from_file(os.path.join(target_path, premix_filename))
+        for txid in list(data['premix'].keys()):
+            if is_whirlpool_coinjoin_tx(data['premix'][txid]):
+                # Misclassified mix transaction, move between groups
+                data['coinjoins'][txid] = data['premix'][txid]
+                data['premix'].pop(txid)
+                print(f'{txid} is mix transaction, removing from premix and putting to mix')
 
     # Set spending transactions also between mix and postmix
     data = compute_mix_postmix_link(data)
@@ -235,14 +287,36 @@ def load_coinjoins(target_path: str, mix_filename: str, postmix_filename: str, p
 def propagate_cluster_name_for_all_inputs(cluster_name, postmix_txs, txid, mix_txs):
     # Set same cluster id for all inputs
     for input in postmix_txs[txid]['inputs']:
-        postmix_txs[txid]['inputs'][input]['cluster_id'] = cluster_name
+        set_key_value_assert(postmix_txs[txid]['inputs'][input], 'cluster_id', cluster_name, CLUSTER_ID_CHECK_HARD_ASSERT)
+        # Set also for outputs connected to these inputs
         if 'spending_tx' in postmix_txs[txid]['inputs'][input]:
             tx, vout = extract_txid_from_inout_string(postmix_txs[txid]['inputs'][input]['spending_tx'])
             # Try to find transaction and set its record (postmix txs, coinjoin txs)
             if tx in postmix_txs.keys() and vout in postmix_txs[tx]['outputs'].keys():
-                postmix_txs[tx]['outputs'][vout]['cluster_id'] = cluster_name
+                # This is suspicious, one premix propagates to another premix (maybe badbank merged into next TX0?)
+                print(f'Potentially suspicious link between two premixes (badbank/peelchain?) from {postmix_txs[txid]['inputs'][input]['spending_tx']} to {get_input_name_string(txid, input)}')
+                set_key_value_assert(postmix_txs[tx]['outputs'][vout], 'cluster_id', cluster_name, CLUSTER_ID_CHECK_HARD_ASSERT)
             if tx in mix_txs.keys() and vout in mix_txs[tx]['outputs'].keys():
-                mix_txs[tx]['outputs'][vout]['cluster_id'] = cluster_name
+                set_key_value_assert(mix_txs[tx]['outputs'][vout], 'cluster_id', cluster_name, CLUSTER_ID_CHECK_HARD_ASSERT)
+
+
+def propagate_cluster_name_for_all_outputs(cluster_name, premix_txs, txid, mix_txs):
+    # Set same cluster id for all outputs
+    for output in premix_txs[txid]['outputs']:
+        # Set for output
+        set_key_value_assert(premix_txs[txid]['outputs'][output], 'cluster_id', cluster_name, CLUSTER_ID_CHECK_HARD_ASSERT)
+
+        # set for inputs which are spending this output
+        if 'spend_by_tx' in premix_txs[txid]['outputs'][output]:
+            tx, vin = extract_txid_from_inout_string(premix_txs[txid]['outputs'][output]['spend_by_tx'])
+            # Try to find transaction and set its record (premix txs, coinjoin txs)
+            if tx in premix_txs.keys() and vin in premix_txs[tx]['inputs'].keys():
+                # This is suspicious, one premix propagates to another premix
+                # (maybe badbank/peelchain merged into next TX0?)
+                print(f'Potentially suspicious link between two premixes (badbank/peelchain?) from {premix_txs[txid]['outputs'][output]['spend_by_tx']} to {get_output_name_string(txid, output)}')
+                set_key_value_assert(premix_txs[tx]['inputs'][vin], 'cluster_id', cluster_name, CLUSTER_ID_CHECK_HARD_ASSERT)
+            if tx in mix_txs.keys() and vin in mix_txs[tx]['inputs'].keys():
+                set_key_value_assert(mix_txs[tx]['inputs'][vin], 'cluster_id', cluster_name, CLUSTER_ID_CHECK_HARD_ASSERT)
 
 
 def analyze_postmix_spends(tx_dict: dict) -> dict:
@@ -256,11 +330,9 @@ def analyze_postmix_spends(tx_dict: dict) -> dict:
     postmix_txs = tx_dict['postmix']
     mix_txs = tx_dict['coinjoins']
 
-    print('### Simple chain analysis')
     # N:1 Merge (many inputs, one output), including # 1:1 Resend (one input, one output)
-    new_cluster_index = 0   # Unique cluster index (used if not already set)
     cluster_name = 'unassigned'  # Index to use
-    offset = new_cluster_index  # starting offset of cluster index used to compute number of assigned indexes
+    offset = CLUSTER_INDEX.get_current_index()   # starting offset of cluster index used to compute number of assigned indexes
     for txid in postmix_txs.keys():
         if len(postmix_txs[txid]['outputs']) == 1:
             # Find or use existing cluster index
@@ -268,8 +340,7 @@ def analyze_postmix_spends(tx_dict: dict) -> dict:
                 cluster_name = postmix_txs[txid]['outputs']['0']['cluster_id']
             else:
                 # New cluster index
-                new_cluster_index += 1
-                cluster_name = f'c_{new_cluster_index}'
+                cluster_name = f'c_{CLUSTER_INDEX.get_new_index()}'
 
             # Set output cluster id
             postmix_txs[txid]['outputs']['0']['cluster_id'] = cluster_name
@@ -278,7 +349,64 @@ def analyze_postmix_spends(tx_dict: dict) -> dict:
 
     # Compute total number of inputs used in postmix spending
     total_inputs = sum([len(postmix_txs[txid]['inputs']) for txid in postmix_txs.keys()])
-    print(f' {get_ratio_string(new_cluster_index - offset, total_inputs)} N:1 postmix merges detected')
+    print(f' {get_ratio_string(CLUSTER_INDEX.get_current_index() - offset, total_inputs)} N:1 postmix merges detected')
+
+    return tx_dict
+
+
+def is_whirlpool_coinjoin_tx(premix_tx):
+    # The transaction is whirlpool coinjoin transaction if number of inputs is bigger than 4
+    if len(premix_tx['inputs']) >= 5:
+        # ... number of inputs and outputs is the same
+        if len(premix_tx['inputs']) == len(premix_tx['outputs']):
+            # ... all outputs are the same value
+            if all(premix_tx['outputs'][vout]['value'] == premix_tx['outputs']['0']['value']
+                   for vout in premix_tx['outputs'].keys()):
+                return True
+
+    return False
+
+
+def analyze_premix_spends(tx_dict: dict) -> dict:
+    """
+    Assign cluster information for outputs of Whirlpool's premix TX0
+    1. N:M preparation of mix utxos (many inputs, many outputs), assume same user
+    :param tx_dict: input dict with transactions
+    :return: updated dict with transactions
+    """
+    if 'premix' not in tx_dict.keys():  # No analysis if premix not present
+        return tx_dict
+
+    premix_txs = tx_dict['premix']
+    mix_txs = tx_dict['coinjoins']
+
+    # N:M preparation of mix utxos
+    offset = CLUSTER_INDEX.get_current_index()  # starting offset of cluster index used to compute number of assigned indexes
+    for txid in premix_txs.keys():
+        # Check if any of the premix inputs are labeled with cluster id. If yes, use it, generate new otherwise
+        cluster_name = None
+        for input in premix_txs[txid]['inputs']:
+            if 'cluster_id' in premix_txs[txid]['inputs'][input]:
+                cluster_name = premix_txs[txid]['inputs'][input]['cluster_id']
+                break
+        for output in premix_txs[txid]['outputs']:
+            if 'cluster_id' in premix_txs[txid]['outputs'][output]:
+                cluster_name = premix_txs[txid]['outputs'][output]['cluster_id']
+                break
+        if cluster_name is None:
+            # New cluster index
+            cluster_name = f'c_{CLUSTER_INDEX.get_new_index()}'
+
+        # Set cluster id for all inputs (assuming same owner of premix tx inputs)
+        for input in premix_txs[txid]['inputs']:
+            set_key_value_assert(premix_txs[txid]['inputs'][input], 'cluster_id', cluster_name,
+                                 CLUSTER_ID_CHECK_HARD_ASSERT)
+        # Propagate to all outputs and spending inputs
+        propagate_cluster_name_for_all_outputs(cluster_name, premix_txs, txid, mix_txs)
+
+    # Compute total number of new premix clusters
+    total_outputs = sum([len(premix_txs[txid]['outputs']) for txid in premix_txs.keys()])
+    print(f' {get_ratio_string(CLUSTER_INDEX.get_current_index() - offset, total_outputs)} N:M new premix clusters detected')
 
     return tx_dict
 
@@ -298,10 +426,10 @@ def process_coinjoins(target_path, mix_filename, postmix_filename, premix_filena
     print('*******************************************')
     print(f'{mix_filename} coinjoins: {len(data['coinjoins'])}')
 
+    print('### Simple chain analysis')
     analyze_input_out_liquidity(data['coinjoins'], data['postmix'])
-
     analyze_postmix_spends(data)
-
+    analyze_premix_spends(data)
     analyze_coinjoin_blocks(data)
 
     return data
@@ -365,7 +493,6 @@ if __name__ == "__main__":
         process_and_save_coinjoins('wasabi2', target_path, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt')
     else:
         # Smaller set for debugging
+        process_and_save_coinjoins('whirlpool_test', target_path, 'sam_mix_test.txt', 'sam_postmix_test.txt', 'sam_premix_test.txt')
         process_and_save_coinjoins('wasabi_test', target_path, 'wasabi_mix_test.txt', 'wasabi_postmix_test.txt')
         process_and_save_coinjoins('wasabi2_test', target_path, 'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt')
-        process_and_save_coinjoins('whirlpool_test', target_path, 'sam_mix_test.txt', 'sam_postmix_test.txt')
-
