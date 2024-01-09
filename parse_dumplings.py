@@ -451,8 +451,7 @@ def analyze_coinjoin_blocks(data):
     SM.print(f'  {get_ratio_string(len(filtered_dict), len(data['coinjoins']))} coinjoins in same block')
 
 
-def visualize_coinjoins(data, base_path, experiment_name):
-
+def visualize_coinjoins_in_time(data, base_path, experiment_name):
     fig = plt.figure(figsize=(12, 10))
     ax_coinjoins = fig.add_subplot(1, 1, 1)
 
@@ -498,6 +497,68 @@ def visualize_coinjoins(data, base_path, experiment_name):
     print('Basic coinjoins statistics saved into {}'.format(save_file))
 
 
+def visualize_liquidity_in_time(events, base_path, experiment_name):
+    fig = plt.figure(figsize=(12, 10))
+    ax_coinjoins = fig.add_subplot(1, 1, 1)
+
+    #
+    # Number of coinjoins per given time interval (e.g., day)
+    #
+    coinjoins = events
+    SLOT_WIDTH_SECONDS = 600 * 24 * 7
+    broadcast_times = [datetime.strptime(coinjoins[item]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for item in
+                       coinjoins.keys()]
+    experiment_start_time = min(broadcast_times)
+    slot_start_time = experiment_start_time
+    slot_last_time = max(broadcast_times)
+    diff_seconds = (slot_last_time - slot_start_time).total_seconds()
+    num_slots = int(diff_seconds // SLOT_WIDTH_SECONDS)
+    inputs_cjtx_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
+    outputs_cjtx_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
+    for cjtx in coinjoins.keys():  # go over all coinjoin transactions
+        timestamp = datetime.strptime(coinjoins[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")
+        cjtx_hour = int((timestamp - slot_start_time).total_seconds() // SLOT_WIDTH_SECONDS)
+        inputs_cjtx_in_slot[cjtx_hour].append(len(coinjoins[cjtx]['inputs']))
+        outputs_cjtx_in_slot[cjtx_hour].append(len(coinjoins[cjtx]['outputs']))
+    if not inputs_cjtx_in_slot[len(inputs_cjtx_in_slot.keys()) - 1]:  # remove last slot if no coinjoins are available there
+        del inputs_cjtx_in_slot[len(inputs_cjtx_in_slot.keys()) - 1]
+    if not outputs_cjtx_in_slot[len(outputs_cjtx_in_slot.keys()) - 1]:  # remove last slot if no coinjoins are available there
+        del outputs_cjtx_in_slot[len(outputs_cjtx_in_slot.keys()) - 1]
+
+    ax_coinjoins.plot(range(0, len(inputs_cjtx_in_slot)), [sum(inputs_cjtx_in_slot[cjtx_hour]) for cjtx_hour in inputs_cjtx_in_slot.keys()],
+                      label='New inputs entering mix', color='green', alpha=0.5)
+    ax_coinjoins.plot(range(0, len(outputs_cjtx_in_slot)), [sum(outputs_cjtx_in_slot[cjtx_hour]) for cjtx_hour in outputs_cjtx_in_slot.keys()],
+                      label='Outputs leaving mix', color='red', alpha=0.5)
+
+    ax_coinjoins.legend()
+    x_ticks = []
+    for slot in inputs_cjtx_in_slot.keys():
+        time_delta_format = "%Y-%m-%d %H:%M:%S" if SLOT_WIDTH_SECONDS < 600 * 24 else "%Y-%m-%d"
+        x_ticks.append(
+            (experiment_start_time + slot * timedelta(seconds=SLOT_WIDTH_SECONDS)).strftime(time_delta_format))
+    ax_coinjoins.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=16)
+    num_xticks = 30
+    plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=num_xticks))
+    ax_coinjoins.set_ylim(0)
+    ax_coinjoins.set_ylabel('Number of new inputs / outputs', fontsize=16)
+    ax_coinjoins.set_title('Number of liquidity utxos (inputs/outputs) entering and leaving mix in given time period')
+
+    plt.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
+    plt.subplots_adjust(bottom=0.1, wspace=0.1, hspace=0.5)
+    save_file = os.path.join(base_path, f'{experiment_name}_liquidity_stats.png')
+    plt.savefig(save_file, dpi=100)
+    plt.close()
+    print('Basic liquidity statistics saved into {}'.format(save_file))
+
+
+def visualize_coinjoins(data, events, base_path, experiment_name):
+    # Coinjoins in time
+    visualize_coinjoins_in_time(data, base_path, experiment_name)
+
+    # Liquidity in/out of mix
+    visualize_liquidity_in_time(events, base_path, experiment_name)
+
+
 def process_coinjoins(target_path, mix_filename, postmix_filename, premix_filename=None):
     data = load_coinjoins(target_path, mix_filename, postmix_filename, premix_filename)
 
@@ -512,9 +573,6 @@ def process_coinjoins(target_path, mix_filename, postmix_filename, premix_filena
     analyze_postmix_spends(data)
     analyze_premix_spends(data)
     analyze_coinjoin_blocks(data)
-
-    # Visualize coinjoins
-    visualize_coinjoins(data, target_path, mix_filename)
 
     return data
 
@@ -562,6 +620,9 @@ def process_and_save_coinjoins(mix_id: str, target_path: os.path, mix_filename: 
     events = filter_liquidity_events(data)
     with open(os.path.join(target_path, f'{mix_id}_events.json'), "w") as file:
         file.write(json.dumps(dict(sorted(events.items())), indent=4))
+
+    # Visualize coinjoins
+    visualize_coinjoins(data, events, target_path, mix_filename)
 
 
 if __name__ == "__main__":
