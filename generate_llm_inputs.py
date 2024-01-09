@@ -646,8 +646,10 @@ def compute_distance_single_wallet(cjtx_stats):
             for txid in sorted_cjs_in_scope:
                 distance += 1
                 if txid == list(filter_coinjoin['coinjoins'].keys())[0]:
+                    print(f'  first input at: {sorted_cjs_in_scope.index(txid)}')
                     distance = 0  # Start computing distance from this one
                 if txid == list(filter_coinjoin['coinjoins'].keys())[-1]:  # Up to last one
+                    print(f'  last output at: {sorted_cjs_in_scope.index(txid)}')
                     print(f'  distance from first to last coinjoin: {distance}')
                     break
     print('done')
