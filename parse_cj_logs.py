@@ -155,7 +155,6 @@ def find_round_ids(filename, regex_pattern, group_names):
                     if key_name not in hits.keys():
                         hits[key_name] = []
                     hits[key_name].append(hit_group)
-                    #hits[key_name] = hit_group  # FIXME: we need to store all hits, not only the last one
 
     except FileNotFoundError:
         print(f"File '{filename}' not found.")
@@ -659,8 +658,9 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
 
     ax_utxo_entropy_from_outputs = ax9
     ax_utxo_entropy_from_outputs_inoutsize = ax10
+    ax_initial_final_utxos = ax11
 
-    ax_mining_fees = ax11
+    #ax_mining_fees = ax11
 
     ax_boltzmann_entropy_inoutsize = ax12
     ax_boltzmann_entropy = ax13
@@ -1149,6 +1149,73 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_utxo_entropy_from_outputs_inoutsize.ticklabel_format(style='plain', axis='y')
     ax_utxo_entropy_from_outputs_inoutsize.legend()
     ax_utxo_entropy_from_outputs_inoutsize.set_title('Dependency of UTXO entropy on size of inputs / outputs (all transactions)')
+
+
+    #
+    # Initial and final output sizes for every wallet
+    #
+    x_txo_initial, y_txo_initial, x_txo_final, y_txo_final = [], [], [], []
+    x_y_txo_initial, x_y_txo_final = [], []
+
+    for cjtx in sorted_cj_time:
+        # Every wallet's utxo as it was before mixing ('spending_tx' does not exist)
+        for index in coinjoins[cjtx['txid']]['inputs'].keys():
+            coin_value = coinjoins[cjtx['txid']]['inputs'][index]['value']
+            wallet_name = coinjoins[cjtx['txid']]['inputs'][index]['wallet_name']
+            if 'spending_tx' not in coinjoins[cjtx['txid']]['inputs'][index].keys():
+                # This output is not spend by any other => output from the mix in the wallet
+                x_txo_initial.append(wallet_name)
+                y_txo_initial.append(coin_value)
+                x_y_txo_initial.append((wallet_name, coin_value))
+
+        # Every for every wallet as it was after mixing ('spend_by' does not exist)
+        for index in coinjoins[cjtx['txid']]['analysis2']['outputs'].keys():
+            coin_value = coinjoins[cjtx['txid']]['analysis2']['outputs'][index]['value']
+            wallet_name = coinjoins[cjtx['txid']]['analysis2']['outputs'][index]['wallet_name']
+            if 'spend_by_txid' not in coinjoins[cjtx['txid']]['outputs'][index].keys():
+                # This output is not spend by any other => output from the mix in the wallet
+                x_txo_final.append(wallet_name)
+                y_txo_final.append(coin_value)
+                x_y_txo_final.append((wallet_name, coin_value))
+
+    # Add all outputs created in time
+    SORT_WALLETS = False
+    if SORT_WALLETS:
+        combined_data = list(zip(x_txo_initial, y_txo_initial))
+        sorted_data = sorted(combined_data, key=lambda x: x[0])
+        x_txo_initial, y_txo_initial = zip(*sorted_data)
+    ax_initial_final_utxos.scatter(x_txo_initial, y_txo_initial, label='Initial mix inputs', color='red', s=30, alpha=0.1)
+    if SORT_WALLETS:
+        combined_data = list(zip(x_txo_final, y_txo_final))
+        sorted_data = sorted(combined_data, key=lambda x: x[0])
+        x_txo_final, y_txo_final = zip(*sorted_data)
+    ax_initial_final_utxos.scatter(x_txo_final, y_txo_final, label='Final mix outputs', color='green', s=30, alpha=0.1)
+    stripped_wallet_names = [value.split('-')[1] for value in list(set(x_txo_initial))]
+    ax_initial_final_utxos.set_xticks(range(0, len(stripped_wallet_names)), stripped_wallet_names, rotation=45, fontsize=6)
+
+    # Make proportional size of utxos based on number of occurences
+    # value_counts = Counter(x_y_txo_initial)
+    # coin = value_counts.most_common()[int(len(value_counts)/2)]
+    # ax_initial_final_utxos.scatter([coin[0][0]], [coin[0][1]], label='Initial mix inputs,\nsized by occurence)', color='red', s=30*coin[1],
+    #                                                alpha=0.1)
+    # value_counts = Counter(x_y_txo_final)
+    # coin = value_counts.most_common()[int(len(value_counts)/2)]
+    # ax_initial_final_utxos.scatter([coin[0][0]], [coin[0][1]], label='Final mix outputs,\nsized by occurence)', color='green', s=30*coin[1],
+    #                                                alpha=0.1)
+
+    # Plot lines corresponding to standard denominations
+    for value in std_denoms:
+        if value <= max(y_txo_initial):
+            ax_initial_final_utxos.axhline(y=value, color='gray', linestyle='--', linewidth=0.1)
+
+    if len(y_txo_initial) > 0 or len(y_txo_final) > 0:  # logscale only if some data were inserted
+        ax_initial_final_utxos.set_yscale('log')
+    ax_initial_final_utxos.set_ylabel('Value (sats) (log scale)')
+    ax_initial_final_utxos.set_xlabel('Wallet name')
+    ax_initial_final_utxos.legend()
+    ax_initial_final_utxos.set_title('Presence of wallet utxos at beginning and end of mixing')
+
+
 
     #
     # Wallet efficiency in time
@@ -1713,6 +1780,7 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
             target_base_path = os.path.join(base_path_wasabi, file)
             # processs wallets one by one
             if os.path.isdir(target_base_path) and file.startswith('wasabi-client-'):
+                print(f'Processing {target_base_path}')
                 wallet_name = 'wallet-' + file[len('wasabi-client-'):]
 
                 # Wallet coins (as obtained by 'listcoins' RPC)
@@ -1725,8 +1793,10 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
                 # Wallet addresses (as obtained by 'listkeys' RPC) - now extracted from 'keys.json' file
                 with open(os.path.join(target_base_path, 'keys.json'), "r") as file:
                     wallet_keys = json.load(file)
-                    wallets_info[wallet_name] = {addr_data['address']: addr_data for addr_data in wallet_keys}
-                    #wallets_info[wallet_name] = wallet_keys
+                    if isinstance(wallet_keys, str) and wallet_keys.lower() == 'timeout':
+                        print(f'Loading wallet keys failed with {wallet_keys} for {target_base_path}')
+                    else:
+                        wallets_info[wallet_name] = {addr_data['address']: addr_data for addr_data in wallet_keys}
 
                 # Code below partially reconstruct wallet_addresses from parsed_coins,
                 # but now we can read directly 'keys.json' so no longer in use
@@ -2231,7 +2301,7 @@ if __name__ == "__main__":
         PARSE_ERRORS = True
         # If True, transaction info is retrieved from Bitcoin Core via RPC
         RETRIEVE_TRANSACTION_INFO = True
-        # If True, subfolder 'tx' is searched for existence of alreday computed transaction analysis results
+        # If True, subfolder 'tx' is searched for existence of already computed transaction analysis results
         # (tx_analysis_*.json). Used when tx analysis is performed externally and not all at once
         # (e.g., with high paralellism)
         LOAD_COMPUTED_TRANSACTION_INFO = False
