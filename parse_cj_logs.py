@@ -1190,7 +1190,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
         sorted_data = sorted(combined_data, key=lambda x: x[0])
         x_txo_final, y_txo_final = zip(*sorted_data)
     ax_initial_final_utxos.scatter(x_txo_final, y_txo_final, label='Final mix outputs', color='green', s=30, alpha=0.1)
-    stripped_wallet_names = [value.split('-')[1] for value in list(set(x_txo_initial))]
+    stripped_wallet_names = [value.split('-')[-1] for value in list(set(x_txo_initial))]
     ax_initial_final_utxos.set_xticks(range(0, len(stripped_wallet_names)), stripped_wallet_names, rotation=45, fontsize=6)
 
     # Make proportional size of utxos based on number of occurences
