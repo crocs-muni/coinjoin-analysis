@@ -1786,9 +1786,12 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
                 # Wallet coins (as obtained by 'listcoins' RPC)
                 with open(os.path.join(target_base_path, 'coins.json'), "r") as file:
                     wallet_coins = json.load(file)
-                    parsed_coins = anonymity_score.parse_wallet_coins(wallet_name, wallet_coins)
-                    for coin in parsed_coins:
-                        anonymity_by_address[coin.address] = coin
+                    if isinstance(wallet_coins, str) and wallet_coins.lower() == 'timeout':
+                        print(f'Loading wallet keys failed with {wallet_coins} for {target_base_path}')
+                    else:
+                        parsed_coins = anonymity_score.parse_wallet_coins(wallet_name, wallet_coins)
+                        for coin in parsed_coins:
+                            anonymity_by_address[coin.address] = coin
 
                 # Wallet addresses (as obtained by 'listkeys' RPC) - now extracted from 'keys.json' file
                 with open(os.path.join(target_base_path, 'keys.json'), "r") as file:
