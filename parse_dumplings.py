@@ -565,7 +565,7 @@ def process_coinjoins(target_path, mix_filename, postmix_filename, premix_filena
     SM.print('*******************************************')
     SM.print(f'{mix_filename} coinjoins: {len(data['coinjoins'])}')
     min_date = min([data['coinjoins'][txid]['broadcast_time'] for txid in data['coinjoins'].keys()])
-    max_date = min([data['coinjoins'][txid]['broadcast_time'] for txid in data['coinjoins'].keys()])
+    max_date = max([data['coinjoins'][txid]['broadcast_time'] for txid in data['coinjoins'].keys()])
     SM.print(f'Dates from {min_date} to {max_date}')
 
     SM.print('### Simple chain analysis')
