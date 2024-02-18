@@ -842,11 +842,14 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
                 else:
                     print('Missing wallet name for cjtx {}, input: {}'.format(cjtx, index))
             wallet_times_used = wallet_times_used + wallet_times_used_in_cjtx
-        wallets_used.append(wallet_times_used)
+        wallets_used.append((wallet_name, wallet_times_used))
 
-    print(f'Number of wallets with no inputs mixed: {len([wallet_times_used for wallet_times_used in wallets_used if wallet_times_used == 0])} out of {len(wallets_used)} total')
-    ax_utxo_provided.bar(wallets_info.keys(), wallets_used)
-    insert_percentages_annotations(wallets_used, ax_utxo_provided)
+    unused_wallets = [wallet_times_used[0] for wallet_times_used in wallets_used if wallet_times_used[1] == 0]
+    wallets_used_times = [wallet_times_used[1] for wallet_times_used in wallets_used]
+    print(f'Number of wallets with no inputs mixed: {len(unused_wallets)} out of {len(wallets_used)} total')
+    print(f'  {unused_wallets}')
+    ax_utxo_provided.bar(wallets_info.keys(), wallets_used_times)
+    insert_percentages_annotations(wallets_used_times, ax_utxo_provided)
     ax_utxo_provided.set_xlabel('Wallet name')
     x_ticks = list(wallets_info.keys())
     ax_utxo_provided.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
@@ -873,14 +876,35 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     x = range(1, len(outputs_data))
     outputs_data_avg10 = sliding_window_average(outputs_data, 10)
     outputs_data_avg100 = sliding_window_average(outputs_data, 100)
-    ax_num_inoutputs.plot(outputs_data, label='Number of outputs')
+    ax_num_inoutputs.plot(outputs_data, label='Number of outputs', linestyle='-.', color='red', )
     #ax_num_inoutputs.plot(x[10 - 2:], outputs_data_avg10, label='Number of outputs avg(10)', linewidth=2)
-    ax_num_inoutputs.plot(x[100 - 2:], outputs_data_avg100, label='Number of outputs avg(100)', linewidth=3, color='red')
-    ax_num_inoutputs.plot([len(coinjoins[cjtx['txid']]['inputs']) for cjtx in sorted_cj_time], label='Number of inputs', color='magenta')
+    ax_num_inoutputs.plot(x[100 - 2:], outputs_data_avg100, label='Number of outputs avg(100)', linewidth=3, color='red', linestyle='-.')
+    ax_num_inoutputs.plot([len(coinjoins[cjtx['txid']]['inputs']) for cjtx in sorted_cj_time], label='Number of inputs', color='blue')
+
+    # Number of different wallets involved time
+    num_wallets_in_time_data = [coinjoins[cjtx['txid']]['num_wallets_involved'] for cjtx in sorted_cj_time]
+    num_wallets_in_time_data_avg100 = sliding_window_average(num_wallets_in_time_data, 100)
+    x = range(1, len(num_wallets_in_time_data))
+    ax_num_inoutputs.plot(num_wallets_in_time_data, label='Number of participating wallets', color='orange', linestyle='--')
+    ax_num_inoutputs.plot(x[100-2:], num_wallets_in_time_data_avg100, label='Number of participating wallets avg(100)', linewidth=3, color='orange', linestyle='--')
+
     ax_num_inoutputs.set_xlabel('Coinjoin in time')
-    ax_num_inoutputs.set_ylabel('Number of inputs/outputs')
+    ax_num_inoutputs.set_ylabel('Number of inputs/outputs/wallets')
     ax_num_inoutputs.legend()
-    ax_num_inoutputs.set_title('Number of inputs and outputs of cj transactions (all transactions)')
+    ax_num_inoutputs.set_title('Number of inputs/outputs/wallets of cj transactions (all transactions)')
+
+    #
+    # Number of different wallets involved time
+    #
+    num_wallets_in_time_data = [coinjoins[cjtx['txid']]['num_wallets_involved'] for cjtx in sorted_cj_time]
+    num_wallets_in_time_data_avg100 = sliding_window_average(num_wallets_in_time_data, 100)
+    x = range(1, len(num_wallets_in_time_data))
+    ax_num_participating_wallets.plot(num_wallets_in_time_data, label='Number of participating wallets')
+    ax_num_participating_wallets.plot(x[100-2:], num_wallets_in_time_data_avg100, label='Number of participating wallets avg(100)', linewidth=3, color='red')
+    ax_num_participating_wallets.set_xlabel('Coinjoin in time')
+    ax_num_participating_wallets.set_ylabel('Number of wallets')
+    ax_num_participating_wallets.legend()
+    ax_num_participating_wallets.set_title('Number of wallets participating in coinjoin transaction (all transactions)')
 
     #
     # Wallet efficiency in time
@@ -912,19 +936,6 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_boltzmann_entropy.set_xlabel('Coinjoin in time')
     ax_boltzmann_entropy.legend()
     ax_boltzmann_entropy.set_title('Transaction entropy and deterministic links (Boltzmann, only successfully analyzed transactions! {}/{})'.format(num_boltzmann_analyzed, len(coinjoins.keys())))
-
-    #
-    # Number of different wallets involved time
-    #
-    num_wallets_in_time_data = [coinjoins[cjtx['txid']]['num_wallets_involved'] for cjtx in sorted_cj_time]
-    num_wallets_in_time_data_avg100 = sliding_window_average(num_wallets_in_time_data, 100)
-    x = range(1, len(num_wallets_in_time_data))
-    ax_num_participating_wallets.plot(num_wallets_in_time_data, label='Number of participating wallets')
-    ax_num_participating_wallets.plot(x[100-2:], num_wallets_in_time_data_avg100, label='Number of participating wallets avg(100)', linewidth=3, color='red')
-    ax_num_participating_wallets.set_xlabel('Coinjoin in time')
-    ax_num_participating_wallets.set_ylabel('Number of wallets')
-    ax_num_participating_wallets.legend()
-    ax_num_participating_wallets.set_title('Number of wallets participating in coinjoin transaction (all transactions)')
 
     #
     # tx entropy versus coinjoin round start-broadcast time
@@ -2070,7 +2081,6 @@ def optimize_txvalue_info(cjtx_stats):
     return optimized
 
 
-
 def process_experiment(base_path):
     WASABIWALLET_DATA_DIR = base_path
     print(f'INPUT PATH: {base_path}')
@@ -2253,6 +2263,7 @@ def process_experiment(base_path):
 
 
 def process_multiple_experiments(base_path):
+    print(f'Starting analysis of multiple folders in {base_path}')
     files = []
     if os.path.exists(base_path):
         files = os.listdir(base_path)
