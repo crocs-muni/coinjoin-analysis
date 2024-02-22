@@ -570,22 +570,26 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     wallets_info = cjtx_stats['wallets_info']
     rounds = cjtx_stats['rounds']
 
+    # Add placeholder for analytics computed
+    if 'analysis' not in cjtx_stats.keys():
+        cjtx_stats['analysis'] = {}
+
     # Compute same output size statistics
     for cjtx in coinjoins.keys():
         if 'analysis2' not in coinjoins[cjtx]:
             coinjoins[cjtx]['analysis2'] = {}
         out_values = [coinjoins[cjtx]['outputs'][index]['value'] for index in coinjoins[cjtx]['outputs'].keys()]
-        value_counts = Counter(out_values)
-        coinjoins[cjtx]['analysis2']['outputs_frequency'] = value_counts
-        coinjoins[cjtx]['analysis2']['outputs_different_values'] = len(value_counts)
+        utxo_value_counts = Counter(out_values)
+        coinjoins[cjtx]['analysis2']['outputs_frequency'] = utxo_value_counts
+        coinjoins[cjtx]['analysis2']['outputs_different_values'] = len(utxo_value_counts)
         # If all outputs are equal, then sameness ratio is 1. If all different, then 1/num_outputs
-        coinjoins[cjtx]['analysis2']['outputs_sameness_ratio'] = value_counts[max(value_counts, key=lambda k: value_counts[k])] / len(coinjoins[cjtx]['outputs'])
+        coinjoins[cjtx]['analysis2']['outputs_sameness_ratio'] = utxo_value_counts[max(utxo_value_counts, key=lambda k: utxo_value_counts[k])] / len(coinjoins[cjtx]['outputs'])
         coinjoins[cjtx]['analysis2']['outputs_entropy'], coinjoins[cjtx]['analysis2']['outputs_min_entropy'] = calculate_entropy(out_values)
 
         # Store number of other same output values for every output
         coinjoins[cjtx]['analysis2']['outputs'] = coinjoins[cjtx]['outputs']
         for index in coinjoins[cjtx]['outputs'].keys():
-            coinjoins[cjtx]['analysis2']['outputs'][index]['num_others_with_same_values'] = value_counts[coinjoins[cjtx]['analysis2']['outputs'][index]['value']]
+            coinjoins[cjtx]['analysis2']['outputs'][index]['num_others_with_same_values'] = utxo_value_counts[coinjoins[cjtx]['analysis2']['outputs'][index]['value']]
 
     num_boltzmann_analyzed = sum([1 for cjtxid in coinjoins.keys() if 'analysis' in coinjoins[cjtxid] and coinjoins[cjtxid]['analysis']['processed']['successfully_analyzed'] is True])
 
@@ -669,7 +673,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_boltzmann_entropy_roundtime_wallets = ax16
 
     #
-    # Number of coinjoins per given time interval (e.g., hour)
+    # Number of coinjoins per given time interval (e.g., hour or 10 minutes)
     #
     SLOT_WIDTH_SECONDS = 600
     broadcast_times = [datetime.strptime(coinjoins[item]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for item in
@@ -736,6 +740,13 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_coinjoins.set_ylim(0)
     ax_coinjoins.set_ylabel('Number of coinjoin transactions')
     ax_coinjoins.set_title('Number of coinjoin transactions in given time period')
+
+    # SAVE_ANALYTICS
+    cjtx_stats['analysis']['rounds_started_all'] = [x_ticks, [len(rounds_started_in_hours[hour]) for hour in rounds_started_in_hours.keys()]]
+    cjtx_stats['analysis']['coinjoins_finished_all'] = [x_ticks, [len(cjtx_in_hours[hour]) for hour in cjtx_in_hours.keys()]]
+    cjtx_stats['analysis']['coinjoins_finished_blame'] = [x_ticks, [len(cjtx_blame_in_hours[hour]) for hour in cjtx_blame_in_hours.keys()]]
+    cjtx_stats['analysis']['utxos_in_prison'] = [x_ticks, [len(logs_in_hours[CJ_LOG_TYPES.UTXO_IN_PRISON.name][hour]) for hour in logs_in_hours[CJ_LOG_TYPES.UTXO_IN_PRISON.name].keys()]]
+
 
     #
     # Number of coinjoin logs per given time interval (e.g., hour)
@@ -827,6 +838,11 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_wallets_distrib.set_ylabel('Number of coinjoins')
     ax_wallets_distrib.set_xlim(0.5)
     ax_wallets_distrib.set_title('Number of coinjoins with specific number of distinct wallets  (all transactions)')
+
+    # SAVE_ANALYTICS
+    cjtx_stats['analysis']['coinjoin_number_different_wallets'] = [list(range(0, len(wallets_in_frequency_all_ordered))), wallets_in_frequency_all_ordered]
+
+
     #
     # How many times given wallet participated in coinjoin?
     #
@@ -848,6 +864,11 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     wallets_used_times = [wallet_times_used[1] for wallet_times_used in wallets_used]
     print(f'Number of wallets with no inputs mixed: {len(unused_wallets)} out of {len(wallets_used)} total')
     print(f'  {unused_wallets}')
+
+    # SAVE_ANALYTICS
+    cjtx_stats['analysis']['wallets_no_input_mixed'] = [[], unused_wallets]
+    cjtx_stats['analysis']['wallets_times_used_as_input'] = [x_ticks, wallets_used_times]
+
     ax_utxo_provided.bar(wallets_info.keys(), wallets_used_times)
     insert_percentages_annotations(wallets_used_times, ax_utxo_provided)
     ax_utxo_provided.set_xlabel('Wallet name')
@@ -879,7 +900,9 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_num_inoutputs.plot(outputs_data, label='Number of outputs', linestyle='-.', color='red', )
     #ax_num_inoutputs.plot(x[10 - 2:], outputs_data_avg10, label='Number of outputs avg(10)', linewidth=2)
     ax_num_inoutputs.plot(x[100 - 2:], outputs_data_avg100, label='Number of outputs avg(100)', linewidth=3, color='red', linestyle='-.')
-    ax_num_inoutputs.plot([len(coinjoins[cjtx['txid']]['inputs']) for cjtx in sorted_cj_time], label='Number of inputs', color='blue')
+    inputs_data = [len(coinjoins[cjtx['txid']]['inputs']) for cjtx in sorted_cj_time]
+    ax_num_inoutputs.plot(inputs_data, label='Number of inputs', color='blue')
+
 
     # Number of different wallets involved time
     num_wallets_in_time_data = [coinjoins[cjtx['txid']]['num_wallets_involved'] for cjtx in sorted_cj_time]
@@ -893,18 +916,24 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_num_inoutputs.legend()
     ax_num_inoutputs.set_title('Number of inputs/outputs/wallets of cj transactions (all transactions)')
 
+    # SAVE_ANALYTICS
+    cjtx_stats['analysis']['coinjoin_number_inputs_in_time'] = [list(range(0, len(inputs_data))), inputs_data]
+    cjtx_stats['analysis']['coinjoin_number_outputs_in_time'] = [list(range(0, len(inputs_data))), outputs_data]
+    cjtx_stats['analysis']['coinjoin_number_wallets_involved_in_time'] = [list(range(0, len(inputs_data))), num_wallets_in_time_data]
+
     #
     # Number of different wallets involved time
     #
-    num_wallets_in_time_data = [coinjoins[cjtx['txid']]['num_wallets_involved'] for cjtx in sorted_cj_time]
-    num_wallets_in_time_data_avg100 = sliding_window_average(num_wallets_in_time_data, 100)
-    x = range(1, len(num_wallets_in_time_data))
-    ax_num_participating_wallets.plot(num_wallets_in_time_data, label='Number of participating wallets')
-    ax_num_participating_wallets.plot(x[100-2:], num_wallets_in_time_data_avg100, label='Number of participating wallets avg(100)', linewidth=3, color='red')
-    ax_num_participating_wallets.set_xlabel('Coinjoin in time')
-    ax_num_participating_wallets.set_ylabel('Number of wallets')
-    ax_num_participating_wallets.legend()
-    ax_num_participating_wallets.set_title('Number of wallets participating in coinjoin transaction (all transactions)')
+    # Now redundant, moved to ax_num_inoutputs
+    # num_wallets_in_time_data = [coinjoins[cjtx['txid']]['num_wallets_involved'] for cjtx in sorted_cj_time]
+    # num_wallets_in_time_data_avg100 = sliding_window_average(num_wallets_in_time_data, 100)
+    # x = range(1, len(num_wallets_in_time_data))
+    # ax_num_participating_wallets.plot(num_wallets_in_time_data, label='Number of participating wallets')
+    # ax_num_participating_wallets.plot(x[100-2:], num_wallets_in_time_data_avg100, label='Number of participating wallets avg(100)', linewidth=3, color='red')
+    # ax_num_participating_wallets.set_xlabel('Coinjoin in time')
+    # ax_num_participating_wallets.set_ylabel('Number of wallets')
+    # ax_num_participating_wallets.legend()
+    # ax_num_participating_wallets.set_title('Number of wallets participating in coinjoin transaction (all transactions)')
 
     #
     # Wallet efficiency in time
@@ -1015,7 +1044,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_boltzmann_entropy_inoutsize.set_title('Dependency of tx entropy on size of inputs / outputs (Boltzmann, only successfully analyzed transactions! {}/{})'.format(num_boltzmann_analyzed, len(coinjoins.keys())))
 
     #
-    # anonscore versus input/output value size
+    # anonscore versus coijoin in time (how is anonscore of utxos evolving with more coinjoins in time executed?)
     #
     for wallet_name in wallets_info.keys():
         x_cat_out, y_cat_out = [], []
@@ -1036,6 +1065,9 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_anonscore_from_outputs.ticklabel_format(style='plain', axis='y')
     ax_anonscore_from_outputs.legend(ncol=5, fontsize='small')
     ax_anonscore_from_outputs.set_title('Wasabi Anonscore of outputs in time (all transactions)')
+
+    # SAVE_ANALYTICS
+    # Nothing
 
     #
     # anonscore distribution for wallets
@@ -1087,6 +1119,12 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_anonscore_distrib_wallets.legend(ncol=5, fontsize='small')
     ax_anonscore_distrib_wallets.set_title('Frequency of Wasabi anonscore of wallet outputs (all transactions)')
 
+    # SAVE_ANALYTICS:
+    anonscore_histogram = []
+    for index in range(0, len(hist_sum)):
+        anonscore_histogram.append((hist_sum[index], bar_positions_sum[index]))
+    cjtx_stats['analysis']['wallets_anonscore_histogram_avg'] = [bar_positions_sum, hist_sum]
+
     #
     # tx entropy versus input/output value size
     #
@@ -1137,21 +1175,27 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     # for coin in value_counts.keys():
     #     ax_utxo_entropy_from_outputs_inoutsize.scatter([coin[0]], [coin[1]], color='red', s=10*value_counts[coin], alpha=0.1)
 
-    # Overlay with currently valid UTXOs
-    #ax_utxo_entropy_from_outputs_inoutsize.scatter(x_cat_out_every_utxo, y_cat_out_every_utxo, label='Tx outputs (unspend)', color='green', s=10, alpha=0.5)
-    # Make proportional size of utxos based on number of occurences
-    value_counts = Counter(x_y_utxo)
-    coin = value_counts.most_common()[int(len(value_counts)/2)]
+    # Overlay with currently valid UTXOs, make proportional size of utxos based on number of occurrences
+    utxo_value_counts = Counter(x_y_utxo)
+
+    # For nice legend entry, pick the most common utxo (wrt occurrences) and plot single one to have it shown in legend
+    coin = utxo_value_counts.most_common()[int(len(utxo_value_counts)/2)]
     ax_utxo_entropy_from_outputs_inoutsize.scatter([coin[0][0]], [coin[0][1]], label='Tx outputs (unspend,\nsized by occurence)', color='green', s=30*coin[1],
                                                    alpha=0.1)
-    # Display only up to MAX_NUM_DISPLAY_UTXO utxos
-    if len(value_counts) > MAX_NUM_DISPLAY_UTXO:
-        print(f'Limiting number of UTXOs displayed from {len(value_counts)} to {MAX_NUM_DISPLAY_UTXO} (MAX_NUM_DISPLAY_UTXO)')
-    for coin in list(value_counts.keys())[0:min(MAX_NUM_DISPLAY_UTXO, len(value_counts))]:
-        ax_utxo_entropy_from_outputs_inoutsize.scatter([coin[0]], [coin[1]], color='green', s=30*value_counts[coin], alpha=0.1)
+    # Now display all utxos (possibly limited up to MAX_NUM_DISPLAY_UTXO utxos if required)
+    if len(utxo_value_counts) > MAX_NUM_DISPLAY_UTXO:
+        print(f'Limiting number of UTXOs displayed from {len(utxo_value_counts)} to {MAX_NUM_DISPLAY_UTXO} (MAX_NUM_DISPLAY_UTXO)')
+    for coin in list(utxo_value_counts.keys())[0:min(MAX_NUM_DISPLAY_UTXO, len(utxo_value_counts))]:
+        ax_utxo_entropy_from_outputs_inoutsize.scatter([coin[0]], [coin[1]], color='green', s=30*utxo_value_counts[coin], alpha=0.1)
 
+    max_value_used = 0
+    if len(x_cat_out_every_txo) > 0:
+        max_value_used = max(x_cat_out_every_txo)
+    if len(x_cat_out_every_utxo) > 0:
+        if max(x_cat_out_every_utxo) > max_value_used:
+            max_value_used = max(x_cat_out_every_utxo)
     for value in std_denoms:
-        if value <= max(x_cat_out_every_txo):
+        if value <= max_value_used:
             ax_utxo_entropy_from_outputs_inoutsize.axvline(x=value, color='gray', linestyle='--', linewidth=0.1)
     if len(x_cat_in) > 0 or len(x_cat_out) > 0:  # logscale only if some data were inserted
         ax_utxo_entropy_from_outputs_inoutsize.set_xscale('log')
@@ -1160,6 +1204,10 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_utxo_entropy_from_outputs_inoutsize.ticklabel_format(style='plain', axis='y')
     ax_utxo_entropy_from_outputs_inoutsize.legend()
     ax_utxo_entropy_from_outputs_inoutsize.set_title('Dependency of UTXO entropy on size of inputs / outputs (all transactions)')
+
+    # SAVE_ANALYTICS
+    cjtx_stats['analysis']['coinjoin_txos_entropy_in_time'] = [x_cat_out_every_txo, y_cat_out_every_txo]
+    cjtx_stats['analysis']['coinjoin_utxos_entropy_in_time'] = [[], utxo_value_counts]
 
 
     #
@@ -1265,6 +1313,12 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_utxo_entropy_from_outputs.legend()
     ax_utxo_entropy_from_outputs.set_title('Entropy of outputs of coinjoin transactions (all transactions)')
 
+    # SAVE_ANALYTICS
+    cjtx_stats['analysis']['coinjoin_utxos_entropy_in_time'] = [list(range(0, len(entropy_in_time_data))), entropy_in_time_data]
+    cjtx_stats['analysis']['coinjoin_utxos_minentropy_in_time'] = [list(range(0, len(min_entropy_in_time_data))), min_entropy_in_time_data]
+
+    #!!! Add how many coinjoins given wallet participated in. Weighted number by number of input txos.
+
     experiment_name = os.path.basename(base_path)
     plt.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
     plt.subplots_adjust(bottom=0.1, wspace=0.1, hspace=0.5)
@@ -1272,6 +1326,103 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     plt.savefig(save_file, dpi=300)
     plt.close()
     print('Basic coinjoins statistics saved into {}'.format(save_file))
+
+
+def visualize_scatter_num_wallets(fig, multi_cjtx_stats: dict, dataset_name: str, dataset_name_index: int, funct_eval, normalize: bool, x_label: str, y_label: str, graph_title: str):
+    for experiment in multi_cjtx_stats:
+        # Establish number of wallets overall, remove wallets which did not participated
+        num_wallets = len(multi_cjtx_stats[experiment]['wallets_info'].keys()) - len(multi_cjtx_stats[experiment]['analysis']['wallets_no_input_mixed'][1])
+        result = funct_eval(multi_cjtx_stats[experiment]['analysis'][dataset_name][dataset_name_index])
+        if normalize:
+            result /= len(multi_cjtx_stats[experiment]['analysis'][dataset_name][dataset_name_index])
+        fig.scatter([num_wallets], [result], label=os.path.basename(experiment), alpha=0.5, s=20)
+    fig.set_xlabel(x_label)
+    fig.set_ylabel(y_label)
+    fig.legend(ncol=5, fontsize='6')
+    fig.set_title(graph_title)
+
+
+def visualize_scatter_num_wallets_weighted(fig, multi_cjtx_stats: dict, dataset_name: str, funct_eval, normalize: bool, x_label: str, y_label: str, graph_title: str):
+    for experiment in multi_cjtx_stats:
+        # Establish number of wallets overall, remove wallets which did not participated
+        num_wallets = len(multi_cjtx_stats[experiment]['wallets_info'].keys()) - len(multi_cjtx_stats[experiment]['analysis']['wallets_no_input_mixed'][1])
+        inputs = multi_cjtx_stats[experiment]['analysis'][dataset_name]
+        weighted_input_data = [inputs[0][index] * inputs[1][index] for index in range(0, len(inputs[0]))]
+        result = funct_eval(weighted_input_data)
+        if normalize is True:
+            result /= len(multi_cjtx_stats[experiment]['analysis'][dataset_name][0])
+        fig.scatter([num_wallets], [result], label=os.path.basename(experiment), alpha=0.5, s=20)
+    fig.set_xlabel(x_label)
+    fig.set_ylabel(y_label)
+    fig.legend(ncol=5, fontsize='6')
+    fig.set_title(graph_title)
+
+
+def analyze_aggregated_coinjoin_stats(multi_cjtx_stats, base_path):
+    """
+    Analyze and visualize aggregated coinjoin transactions statistics
+    :param multi_cjtx_stats: statistics from multiple separate coinjoin experiments
+    :param base_path:  base path for analysis
+    :return:
+    """
+
+    print("Starting analyze_aggregated_coinjoin_stats() analysis")
+
+    # Create four subplots with their own axes
+    fig = plt.figure(figsize=(48, 24))
+    ax1 = fig.add_subplot(3, 3, 1)
+    ax2 = fig.add_subplot(3, 3, 2)
+    ax3 = fig.add_subplot(3, 3, 3)
+    ax4 = fig.add_subplot(3, 3, 4)
+    ax5 = fig.add_subplot(3, 3, 5)
+    ax6 = fig.add_subplot(3, 3, 6)
+    ax7 = fig.add_subplot(3, 3, 7)
+    ax8 = fig.add_subplot(3, 3, 8)
+    ax9 = fig.add_subplot(3, 3, 9)
+
+    # Basic principle:
+    #   1. Compute one (or more) data points per single experiment
+    #   2. Visualize all data points as scatterplot
+
+
+    #
+    # Weighted results computations FUNCT[item[0] * item[1] for item in data]
+    #
+    # Average anonscore for different base parameter (number of wallets participating)
+    visualize_scatter_num_wallets_weighted(ax1, multi_cjtx_stats, 'wallets_anonscore_histogram_avg', np.median,
+                                           False, 'Number of wallets in mix', 'Median anonscore',
+                                  f'Dependency of {'wallets_anonscore_histogram_avg'} on number of wallets')
+
+    # Histogram of number of wallets participating in coinjoins (normalized)
+    visualize_scatter_num_wallets_weighted(ax4, multi_cjtx_stats, 'coinjoin_number_different_wallets', sum,
+                                           True, 'Number of wallets in mix', 'Fraction of different wallets in coinjoins',
+                                           f'Dependency of {'coinjoin_number_different_wallets'} on number of wallets')
+
+    #
+    # Absolute number computations FUNCT[data[data_index]]
+    # Relative number computations FUNCT[data[data_index]] / len(data[data_index])
+    #
+
+    # Number of coinjoins finished for different base parameter (number of wallets participating)
+    visualize_scatter_num_wallets(ax2, multi_cjtx_stats, 'coinjoins_finished_all',
+                                  1, sum, False, 'Number of wallets in mix', 'Number of coinjoins',
+                                  f'Dependency of {'coinjoins_finished_all'} on number of wallets')
+
+    # Number of utxos in prison
+    visualize_scatter_num_wallets(ax3, multi_cjtx_stats, 'utxos_in_prison',
+                                  1, sum, False, 'Number of wallets in mix', 'Number of utxos in prison',
+                                  f'Dependency of {'utxos_in_prison'} on number of wallets')
+
+
+
+    # Save results into file
+    experiment_name = os.path.basename(base_path)
+    plt.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
+    plt.subplots_adjust(bottom=0.1, wspace=0.1, hspace=0.5)
+    save_file = os.path.join(base_path, "aggregated_coinjoin_stats.png")
+    plt.savefig(save_file, dpi=300)
+    plt.close()
+    print('Aggregated coinjoins statistics saved into {}'.format(save_file))
 
 
 def build_address_wallet_mapping(cjtx_stats):
@@ -2264,6 +2415,8 @@ def process_experiment(base_path):
 
 def process_multiple_experiments(base_path):
     print(f'Starting analysis of multiple folders in {base_path}')
+
+    results = {}  # Aggregated results
     files = []
     if os.path.exists(base_path):
         files = os.listdir(base_path)
@@ -2277,7 +2430,17 @@ def process_multiple_experiments(base_path):
                     or os.path.exists(os.path.join(target_base_path, 'data'))):
                 print('****************************')
                 print('Analyzing experiment {}'.format(target_base_path))
-                process_experiment(target_base_path)
+                results[target_base_path] = process_experiment(target_base_path)
+
+    return results
+
+
+def analyze_multiple_experiments(results: dict, base_path: str):
+    print(f'Starting analysis of multiple experiments {results.keys()}')
+
+    analyze_aggregated_coinjoin_stats(results, base_path)
+
+    return results
 
 
 class ANALYSIS_TYPE(Enum):
