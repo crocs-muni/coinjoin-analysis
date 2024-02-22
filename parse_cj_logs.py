@@ -2455,8 +2455,8 @@ if __name__ == "__main__":
 
     # Analysis type
     #cfg = ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL
-    cfg = ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
-    #cfg = ANALYSIS_TYPE.ANALYZE_COINJOIN_DATA_LOCAL
+    #cfg = ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
+    cfg = ANALYSIS_TYPE.ANALYZE_COINJOIN_DATA_LOCAL
     #cfg = ANALYSIS_TYPE.COMPUTE_COINJOIN_TXINFO_REMOTE
 
     print('Analysis configuration: {}'.format(cfg.name))
@@ -2599,28 +2599,86 @@ if __name__ == "__main__":
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-12-04_16-55_paretosum-static-100-30utxo\\'
 
 
+    # 50 wallets, max 100 inputs cjtx
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max100inputs\\2023-12-04_15-14_paretosum-static-50-30utxo\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max100inputs\\2023-12-05_10-11_paretosum-static-50-30utxo\\'
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max100inputs\\2023-12-05_11-40_paretosum-static-50-30utxo\\'
 
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max500inputs\\2023-12-19_15-16_paretosum-dynamic-50-30utxo-special_5wallets1utxo_max500inputs\\'
-    #
+    # 50 wallets, max 500 inputs cjtx
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max500inputs\\2023-12-19_15-16_paretosum-dynamic-50-30utxo-special_5wallets1utxo_max500inputs\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max500inputs\\2024-01-03_20-31_paretosum-dynamic-50-30utxo-special\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max500inputs\\2023-12-19_15-19_paretosum-dynamic-50-30utxo-special\\'
 
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\debug\\20231023_11Rounds_1parallel_max6inputs_10wallets_5x10Msats\\'
 
+    # real coinjoins imported
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\whirlpool\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\wasabi\\'
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\wasabi2\\'
     #
 
-    if PROFILE_PERFORMANCE:
-        with Profile() as profile:
-            process_experiment(target_base_path)
-            Stats(profile).strip_dirs().sort_stats(SortKey.TIME).print_stats()
-    else:
-        if os.path.exists(target_base_path):
-            process_experiment(target_base_path)
-        else:
-            print(f'ERROR: Path {target_base_path} does not exist')
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max500inputs\\'
-    process_multiple_experiments(target_base_path)
+    # 500 wallets simulation, 500 inputs, kubernetes
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-05_08-40_pareto-static-500\\'
+    target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-05_14-04_paretosum-dynamic-50-30utxo-special\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-07_01-39_pareto-dynamic-500\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-07_13-21_pareto-dynamic-500\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-07_16-20_paretosum-dynamic-500-5utxo\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-07_19-20_paretosum-dynamic-500-5utxo\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-08_01-23_paretosum-dynamic-500-5utxo\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-08_15-52_paretosum-dynamic-500-5utxo\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-09_01-03_paretosum-dynamic-500-5utxo\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-09_19-02_paretosum-dynamic-200-5utxo\\')
 
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-09_22-06_paretosum-dynamic-500-5utxo\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-10_01-00_paretosum-dynamic-500-5utxo\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-11_00-02_paretosum-dynamic-500-30utxo-special\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-10_17-46_paretosum-dynamic-500-30utxo-special\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-12_12-03_uniform-static-500-30utxo\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-12_20-47_uniform-static-500-30utxo\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-17_11-55_uniform-static-500-30utxo\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-17_15-38_paretosum-dynamic-500-30utxo-special\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-18_11-48_uniform-static-500-30utxo\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-12-04_13-32_paretosum-static-30-30utxo\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\grid_uniform-static\\')
+    target_base_path = None
+    #
+
+    if target_base_path is not None:
+        if PROFILE_PERFORMANCE:
+            with Profile() as profile:
+                process_experiment(target_base_path)
+                Stats(profile).strip_dirs().sort_stats(SortKey.TIME).print_stats()
+        else:
+            if os.path.exists(target_base_path):
+                process_experiment(target_base_path)
+            else:
+                print(f'ERROR: Path {target_base_path} does not exist')
+
+    # Aggregated analysis of multiple folders with experiments
+    # Assumption: given base path contains one or more subfolders (experiments for related settings) with each containing 'data' subfolder (one experiment)
+    # super_base_path is path where aggregated results from all
+
+    super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    target_base_paths = [os.path.join(super_base_path, 'grid_paretosum-static_30utxo'),
+                         os.path.join(super_base_path, 'grid_paretosum-static_5utxo'),
+                         os.path.join(super_base_path, 'grid_uniformsum-static_1utxo'),
+                         os.path.join(super_base_path, 'grid_uniformsum-static_5utxo'),
+                         os.path.join(super_base_path, 'grid_uniformsum-static_30utxo')]
+
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2')]
+
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'unproccesed')]
+
+    all_results = {}
+    for base_path in target_base_paths:
+        # Analyze one batch of experiments under 'base_path'
+        results = process_multiple_experiments(base_path)
+        analyze_multiple_experiments(results, base_path)
+
+        all_results.update(results)
+
+    # Analyze all batches together
+    analyze_multiple_experiments(all_results, super_base_path)
 
