@@ -9,6 +9,8 @@ import wcli
 from itertools import zip_longest
 from graphviz import Digraph
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from collections import Counter
 from datetime import datetime, timedelta
@@ -577,6 +579,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     # Add placeholder for analytics computed
     if 'analysis' not in cjtx_stats.keys():
         cjtx_stats['analysis'] = {}
+    cjtx_stats['analysis']['path'] = base_path
 
     # Compute same output size statistics
     for cjtx in coinjoins.keys():
@@ -871,7 +874,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
 
     # SAVE_ANALYTICS
     cjtx_stats['analysis']['wallets_no_input_mixed'] = [[], unused_wallets]
-    cjtx_stats['analysis']['wallets_times_used_as_input'] = [x_ticks, wallets_used_times]
+    cjtx_stats['analysis']['wallets_times_used_as_input'] = [list(wallets_info.keys()), wallets_used_times]
 
     ax_utxo_provided.bar(wallets_info.keys(), wallets_used_times)
     insert_percentages_annotations(wallets_used_times, ax_utxo_provided)
@@ -1210,8 +1213,8 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     ax_utxo_entropy_from_outputs_inoutsize.set_title('Dependency of UTXO entropy on size of inputs / outputs (all transactions)')
 
     # SAVE_ANALYTICS
-    cjtx_stats['analysis']['coinjoin_txos_entropy_in_time'] = [x_cat_out_every_txo, y_cat_out_every_txo]
-    cjtx_stats['analysis']['coinjoin_utxos_entropy_in_time'] = [[], utxo_value_counts]
+    cjtx_stats['analysis']['coinjoin_txos_entropy_on_size'] = [x_cat_out_every_txo, y_cat_out_every_txo]
+    cjtx_stats['analysis']['coinjoin_utxos_entropy_in_time'] = [[], utxo_value_counts]  # BUGBUG
 
 
     #
@@ -1346,13 +1349,18 @@ def get_marker_style(experiment_name: str, mapping_set: dict) -> str:
     return 'o'  # return standard circle if nothing matched
 
 
-def visualize_scatter_num_wallets(fig, multi_cjtx_stats: dict, dataset_name: str, dataset_name_index: int, funct_eval, normalize: bool, x_label: str, y_label: str, graph_title: str):
+def visualize_scatter_num_wallets(fig, multi_cjtx_stats: dict, dataset_name: str, dataset_name_index: int, funct_eval, normalize_x: bool, normalize_y: bool, x_label: str, y_label: str, graph_title: str):
     for experiment in multi_cjtx_stats:
         # Establish number of wallets overall, remove wallets which did not participated
         num_wallets = len(multi_cjtx_stats[experiment]['wallets_info'].keys()) - len(multi_cjtx_stats[experiment]['analysis']['wallets_no_input_mixed'][1])
-        result = funct_eval(multi_cjtx_stats[experiment]['analysis'][dataset_name][dataset_name_index])
-        if normalize:
-            result /= len(multi_cjtx_stats[experiment]['analysis'][dataset_name][dataset_name_index])
+        inputs = multi_cjtx_stats[experiment]['analysis'][dataset_name][dataset_name_index]
+        # Normalize y axis values
+        if normalize_y:  # Normalize by size of values
+            sum_values = sum(inputs)
+            inputs = [value / sum_values for value in inputs]
+        result = funct_eval(inputs)
+        if normalize_x:  # Normalize by number of values
+            result /= len(inputs)
         marker_style = get_marker_style(experiment, SCENARIO_MARKER_MAPPINGS)
         fig.scatter([num_wallets], [result], label=os.path.basename(experiment), alpha=0.8, s=20, marker=marker_style)
     fig.set_xlabel(x_label)
@@ -1513,7 +1521,7 @@ def analyze_aggregated_coinjoin_stats(multi_cjtx_stats, base_path):
                                            False, 'Number of wallets in mix', 'Median anonscore',
                                   f'Dependency of {'wallets_anonscore_histogram_avg'} on number of wallets')
 
-    # Histogram of number of wallets participating in coinjoins (normalized)
+    # DONE: Histogram of number of wallets participating in coinjoins (normalized)
     weighted_wallets_participating(ax4, multi_cjtx_stats, 'coinjoin_number_different_wallets', sum,
                                            True, 'Number of wallets in mix', 'Fraction of different wallets in coinjoins',
                                            f'Dependency of {'coinjoin_number_different_wallets'} on number of wallets')
@@ -1523,17 +1531,37 @@ def analyze_aggregated_coinjoin_stats(multi_cjtx_stats, base_path):
     # Relative number computations FUNCT[data[data_index]] / len(data[data_index])
     #
 
-    # Number of coinjoins finished for different base parameter (number of wallets participating)
+    # DONE: Number of coinjoins finished for different base parameter (number of wallets participating)
     visualize_scatter_num_wallets(ax2, multi_cjtx_stats, 'coinjoins_finished_all',
-                                  1, sum, False, 'Number of wallets in mix', 'Number of coinjoins',
+                                  1, sum, False, False, 'Number of wallets in mix', 'Number of coinjoins',
                                   f'Dependency of {'coinjoins_finished_all'} on number of wallets')
 
-    # Number of utxos in prison
+    # DONE: Number of utxos in prison
     visualize_scatter_num_wallets(ax3, multi_cjtx_stats, 'utxos_in_prison',
-                                  1, sum, False, 'Number of wallets in mix', 'Number of utxos in prison',
+                                  1, sum, False, False, 'Number of wallets in mix', 'Number of utxos in prison',
                                   f'Dependency of {'utxos_in_prison'} on number of wallets')
 
+    # Median frequency a wallet was used in mix
+    visualize_scatter_num_wallets(ax5, multi_cjtx_stats, 'wallets_times_used_as_input',
+                                  1, np.median, True, True, 'Number of wallets in mix', 'Fraction of participation',
+                                  f'Dependency of {'wallets_times_used_as_input'} on number of wallets')
 
+    # Average number of inputs into cjtxs
+    visualize_scatter_num_wallets(ax6, multi_cjtx_stats, 'coinjoin_number_inputs_in_time',
+                                  1, sum, True, False, 'Number of wallets in mix', 'Number of inputs of cjtx',
+                                  f'Dependency of {'coinjoin_number_inputs_in_time'} (average number of inputs) on number of wallets')
+
+    # Average number of outputs into cjtxs
+    visualize_scatter_num_wallets(ax7, multi_cjtx_stats, 'coinjoin_number_outputs_in_time',
+                                  1, sum, True, False, 'Number of wallets in mix', 'Number of outputs of cjtx',
+                                  f'Dependency of {'coinjoin_number_outputs_in_time'} (average number of outputs) on number of wallets')
+
+    # Average entropy of coinjoins
+    visualize_scatter_num_wallets(ax8, multi_cjtx_stats, 'coinjoin_utxos_entropy_in_time',
+                                  1, sum, True, False, 'Number of wallets in mix', 'Entropy',
+                                  f'Dependency of {'coinjoin_utxos_entropy_in_time'} (average entropy of coinjoin round) on number of wallets')
+
+    # coinjoin_txos_entropy_in_time
 
     # Save results into file
     experiment_name = os.path.basename(base_path)
@@ -2533,7 +2561,7 @@ def process_experiment(base_path):
     return cjtx_stats
 
 
-def process_multiple_experiments(base_path):
+def process_multiple_experiments(base_path: str, num_threads=-1):
     print(f'Starting analysis of multiple folders in {base_path}')
 
     results = {}  # Aggregated results
@@ -2543,16 +2571,54 @@ def process_multiple_experiments(base_path):
     else:
         print('Path {} does not exists'.format(base_path))
 
+    # Search all paths to be processed
+    paths_to_process = []
     for file in files:
         target_base_path = os.path.join(base_path, file)
         if os.path.isdir(target_base_path):
             if (os.path.exists(os.path.join(target_base_path, 'WalletWasabi'))
                     or os.path.exists(os.path.join(target_base_path, 'data'))):
-                print('****************************')
-                print('Analyzing experiment {}'.format(target_base_path))
-                results[target_base_path] = process_experiment(target_base_path)
+                paths_to_process.append(target_base_path)
+
+    if num_threads == -1:  # If not provided, create separate threat for every experiment
+        num_threads = len(paths_to_process)
+
+    # Execute process_experiment in parallel
+    with tqdm(total=len(paths_to_process)) as progress:
+        for result in ThreadPool(num_threads).imap(process_experiment, paths_to_process):
+            progress.update(1)
+            print(result['analysis']['path'])
+            results[result['analysis']['path']] = result
+
+    # for file in paths_to_process:
+    #     target_base_path = os.path.join(base_path, file)
+    #     if os.path.isdir(target_base_path):
+    #         if (os.path.exists(os.path.join(target_base_path, 'WalletWasabi'))
+    #                 or os.path.exists(os.path.join(target_base_path, 'data'))):
+    #             print('****************************')
+    #             print('Analyzing experiment {}'.format(target_base_path))
+    #             results[target_base_path] = process_experiment(target_base_path)
 
     return results
+
+
+def gather_paths_with_experiments(base_path):
+    files = []
+    if os.path.exists(base_path):
+        files = os.listdir(base_path)
+    else:
+        print('Path {} does not exists'.format(base_path))
+
+    # Search all paths to be processed
+    paths_to_process = []
+    for file in files:
+        target_base_path = os.path.join(base_path, file)
+        if os.path.isdir(target_base_path):
+            if (os.path.exists(os.path.join(target_base_path, 'WalletWasabi'))
+                    or os.path.exists(os.path.join(target_base_path, 'data'))):
+                paths_to_process.append(target_base_path)
+
+    return paths_to_process
 
 
 def analyze_multiple_experiments(results: dict, base_path: str):
@@ -2778,25 +2844,29 @@ if __name__ == "__main__":
     # Assumption: given base path contains one or more subfolders (experiments for related settings) with each containing 'data' subfolder (one experiment)
     # super_base_path is path where aggregated results from all
 
+    # super_base_path = ''
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'grid_paretosum-static-30utxo'),
+    #                      os.path.join(super_base_path, 'grid_paretosum-static-5utxo'),
+    #                      os.path.join(super_base_path, 'grid_uniformsum-static-1utxo'),
+    #                      os.path.join(super_base_path, 'grid_uniformsum-static-5utxo'),
+    #                      os.path.join(super_base_path, 'grid_uniformsum-static-30utxo')]
+
     super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    target_base_paths = [os.path.join(super_base_path, 'grid_paretosum-static_30utxo'),
-                         os.path.join(super_base_path, 'grid_paretosum-static_5utxo'),
-                         os.path.join(super_base_path, 'grid_uniformsum-static_1utxo'),
-                         os.path.join(super_base_path, 'grid_uniformsum-static_5utxo'),
-                         os.path.join(super_base_path, 'grid_uniformsum-static_30utxo')]
+    target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2')]
+    # target_base_paths = [os.path.join(super_base_path, 'grid_uniformsum-static-30utxo')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'unproccesed')]
 
+    NUM_THREADS = -1
     all_results = {}
     for base_path in target_base_paths:
         # Analyze one batch of experiments under 'base_path'
-        results = process_multiple_experiments(base_path)
+        results = process_multiple_experiments(base_path, NUM_THREADS)
         analyze_multiple_experiments(results, base_path)
-
         all_results.update(results)
 
     # Analyze all batches together
