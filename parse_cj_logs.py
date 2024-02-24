@@ -731,7 +731,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
                     if log_hour in logs_in_hours[entry['type']].keys():
                         logs_in_hours[entry['type']][log_hour].append(log_hour)
                     else:
-                        print('ERROR: missing log entry time slot {} for {}/{}, ignoring it'.format(log_hour, entry['type'], timestamp))
+                        print('WARNING: missing log entry time slot {} for {}/{}, ignoring it'.format(log_hour, entry['type'], timestamp))
     ax_coinjoins.plot([len(logs_in_hours[CJ_LOG_TYPES.UTXO_IN_PRISON.name][log_hour]) for log_hour in logs_in_hours[CJ_LOG_TYPES.UTXO_IN_PRISON.name].keys()],
                          label='(UTXOs in prison)', color='lightgray', linestyle='--')
 
@@ -777,7 +777,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
                 if log_hour in logs_in_hours[entry['type']].keys():
                     logs_in_hours[entry['type']][log_hour].append(log_hour)
                 else:
-                    print('ERROR: missing log entry time slot {} for {}/{}, ignoring it'.format(log_hour, entry['type'],
+                    print('WARNING: missing log entry time slot {} for {}/{}, ignoring it'.format(log_hour, entry['type'],
                                                                                                 timestamp))
 
     index = 0
@@ -858,7 +858,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
             for index in coinjoins[cjtx]['inputs']:
                 if 'wallet_name' in coinjoins[cjtx]['inputs'][index]:
                     if coinjoins[cjtx]['inputs'][index]['wallet_name'] == wallet_name:
-                        wallet_times_used_in_cjtx = wallet_times_used_in_cjtx + 1
+                        wallet_times_used_in_cjtx += 1
                 else:
                     print('Missing wallet name for cjtx {}, input: {}'.format(cjtx, index))
             wallet_times_used = wallet_times_used + wallet_times_used_in_cjtx
