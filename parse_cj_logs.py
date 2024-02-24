@@ -71,6 +71,10 @@ COLORS = ['darkorange', 'green', 'lightblue', 'gray', 'aquamarine', 'darkorchid1
 LINE_STYLES = ['-', '--', '-.', ':']
 
 
+def float_equals(a, b, tolerance=1e-9):
+    return abs(a - b) < tolerance
+
+
 # Define a custom JSON encoder that handles Decimal objects
 class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -1328,6 +1332,20 @@ def analyze_coinjoin_stats(cjtx_stats, base_path):
     print('Basic coinjoins statistics saved into {}'.format(save_file))
 
 
+# 'os^vD'
+SCENARIO_MARKER_MAPPINGS = {'paretosum-static-.*-30utxo': '*', 'paretosum-static-.*-5utxo': '^',
+                            'uniformsum-static-.*-30utxo': 'D', 'uniformsum-static-.*-5utxo': 's'}
+
+
+def get_marker_style(experiment_name: str, mapping_set: dict) -> str:
+    for pattern, marker in mapping_set.items():
+        match = re.search(pattern, experiment_name)
+        if match:
+            return marker
+
+    return 'o'  # return standard circle if nothing matched
+
+
 def visualize_scatter_num_wallets(fig, multi_cjtx_stats: dict, dataset_name: str, dataset_name_index: int, funct_eval, normalize: bool, x_label: str, y_label: str, graph_title: str):
     for experiment in multi_cjtx_stats:
         # Establish number of wallets overall, remove wallets which did not participated
@@ -1335,10 +1353,11 @@ def visualize_scatter_num_wallets(fig, multi_cjtx_stats: dict, dataset_name: str
         result = funct_eval(multi_cjtx_stats[experiment]['analysis'][dataset_name][dataset_name_index])
         if normalize:
             result /= len(multi_cjtx_stats[experiment]['analysis'][dataset_name][dataset_name_index])
-        fig.scatter([num_wallets], [result], label=os.path.basename(experiment), alpha=0.5, s=20)
+        marker_style = get_marker_style(experiment, SCENARIO_MARKER_MAPPINGS)
+        fig.scatter([num_wallets], [result], label=os.path.basename(experiment), alpha=0.8, s=20, marker=marker_style)
     fig.set_xlabel(x_label)
     fig.set_ylabel(y_label)
-    fig.legend(ncol=5, fontsize='6')
+    fig.legend(ncol=5, fontsize='4')
     fig.set_title(graph_title)
 
 
@@ -1346,15 +1365,116 @@ def visualize_scatter_num_wallets_weighted(fig, multi_cjtx_stats: dict, dataset_
     for experiment in multi_cjtx_stats:
         # Establish number of wallets overall, remove wallets which did not participated
         num_wallets = len(multi_cjtx_stats[experiment]['wallets_info'].keys()) - len(multi_cjtx_stats[experiment]['analysis']['wallets_no_input_mixed'][1])
+
+        # Obtain desired dataset to be processed
         inputs = multi_cjtx_stats[experiment]['analysis'][dataset_name]
-        weighted_input_data = [inputs[0][index] * inputs[1][index] for index in range(0, len(inputs[0]))]
-        result = funct_eval(weighted_input_data)
+
+        # If required, normalize the dataset (all lists separately)
         if normalize is True:
-            result /= len(multi_cjtx_stats[experiment]['analysis'][dataset_name][0])
-        fig.scatter([num_wallets], [result], label=os.path.basename(experiment), alpha=0.5, s=20)
+            normalized_lists = []
+            for data_list in inputs:
+                normalized_list = [x / sum(data_list) for x in data_list]
+                normalized_lists.append(normalized_list)
+            inputs = normalized_lists
+
+        # Weight datasets
+        weighted_input_data = [inputs[0][index] * inputs[1][index] for index in range(0, len(inputs[0]))]
+
+        # Apply evaluation function
+        result = funct_eval(weighted_input_data)
+
+        # Plot result with dedicated marker
+        marker_style = get_marker_style(experiment, SCENARIO_MARKER_MAPPINGS)
+        fig.scatter([num_wallets], [result], label=os.path.basename(experiment), alpha=0.5, s=20, marker=marker_style)
     fig.set_xlabel(x_label)
     fig.set_ylabel(y_label)
-    fig.legend(ncol=5, fontsize='6')
+    fig.legend(ncol=5, fontsize='4')
+    fig.set_title(graph_title)
+
+
+def interpolate_values(original_list, new_length):
+    ratio = new_length / len(original_list)
+    interpolated_list = []
+
+    # Case 1: list expansion : ratio > 1
+    if ratio >= 1:
+        remaining_previous_ratio = 0
+        for orig_index in range(len(original_list)):
+            value_to_distribute = original_list[orig_index]
+
+            num_cells_to_fill = math.ceil(ratio + remaining_previous_ratio)
+            remaining_previous_ratio = (ratio + remaining_previous_ratio) - num_cells_to_fill
+            for i in range(num_cells_to_fill):
+                if len(interpolated_list) < new_length:  # condition to prevent +1 overflow due to rounding errors
+                    interpolated_list.append(float(value_to_distribute) / num_cells_to_fill)
+                else:
+                    # add to the last item (do not expand further)
+                    interpolated_list[-1] += float(value_to_distribute) / num_cells_to_fill
+
+    # Case 2: list compression : ratio < 1
+    if ratio < 1:
+        remaining_previous_cells = 0
+        orig_index = 0
+        while orig_index < len(original_list):
+            num_cells_to_sum = math.floor(1 / ratio + remaining_previous_cells)
+            remaining_previous_cells = 1 / ratio - num_cells_to_sum
+            sum_value = 0
+            for i in range(num_cells_to_sum):
+                if orig_index + i < len(original_list):
+                    sum_value += original_list[orig_index + i]
+            orig_index += num_cells_to_sum
+            if len(interpolated_list) < new_length:
+                # Add new item
+                interpolated_list.append(sum_value)
+            else:
+                # add to the last item (do not expand further)
+                interpolated_list[-1] += sum_value
+
+    assert len(interpolated_list) == new_length, f'Wrong resulting length of interpolated list, {new_length} vs. {len(interpolated_list)}'
+    assert float_equals(sum(original_list), sum(interpolated_list)), f'Sum of values in interpolated list not preserved, {sum(original_list)} vs. {sum(interpolated_list)}'
+    return interpolated_list
+
+
+def weighted_wallets_participating(fig, multi_cjtx_stats: dict, dataset_name: str, funct_eval, normalize: bool, x_label: str, y_label: str, graph_title: str):
+    # 1. Set normalized number of bins NUM_BINS (e.g., 100)
+    # 2. Interpolate existing input list (e.g., number of cjtxs with specific number of wallets) to NUM_BINS for comparisond
+    # 3. Compute weighted sum of bins (more the higher, the highest result is when all coinjoins had all wallets participating)
+
+    # 1. Standardized number of bins
+    NUM_BINS = 100
+
+    for experiment in multi_cjtx_stats:
+        # Establish number of wallets overall, remove wallets which did not participated
+        num_wallets = len(multi_cjtx_stats[experiment]['wallets_info'].keys()) - len(multi_cjtx_stats[experiment]['analysis']['wallets_no_input_mixed'][1])
+
+        # Obtain desired dataset to be processed
+        inputs_orig = multi_cjtx_stats[experiment]['analysis'][dataset_name]
+        inputs = inputs_orig
+
+        # 2. Recompute to given number of bins (two cases 1. num_wallets > num_bins and 2. num_wallets <= num_bins)
+        inputs[1] = interpolate_values(inputs[1], NUM_BINS)
+        inputs[0] = [index for index in range(0, NUM_BINS)]
+
+        # If required, normalize the dataset (all lists separately)
+        if normalize is True:
+            inputs[1] = [x / sum(inputs[1]) for x in inputs[1]]
+
+        # Weight datasets
+        weighted_input_data = [inputs[0][index] * inputs[1][index] for index in range(0, len(inputs[0]))]
+
+        # Apply evaluation function
+        result = funct_eval(weighted_input_data)
+
+        # Normalize
+        if normalize is True:
+            result = result / NUM_BINS
+
+        # Plot result with dedicated marker
+        marker_style = get_marker_style(experiment, SCENARIO_MARKER_MAPPINGS)
+        fig.scatter([num_wallets], [result], label=os.path.basename(experiment), alpha=0.5, s=20, marker=marker_style)
+    fig.set_xlabel(x_label)
+    fig.set_ylabel(y_label)
+    fig.legend(ncol=5, fontsize='4')
     fig.set_title(graph_title)
 
 
@@ -1394,7 +1514,7 @@ def analyze_aggregated_coinjoin_stats(multi_cjtx_stats, base_path):
                                   f'Dependency of {'wallets_anonscore_histogram_avg'} on number of wallets')
 
     # Histogram of number of wallets participating in coinjoins (normalized)
-    visualize_scatter_num_wallets_weighted(ax4, multi_cjtx_stats, 'coinjoin_number_different_wallets', sum,
+    weighted_wallets_participating(ax4, multi_cjtx_stats, 'coinjoin_number_different_wallets', sum,
                                            True, 'Number of wallets in mix', 'Fraction of different wallets in coinjoins',
                                            f'Dependency of {'coinjoin_number_different_wallets'} on number of wallets')
 
