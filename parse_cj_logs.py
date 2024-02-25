@@ -596,30 +596,12 @@ class CoinJoinPlots:
         self.plot = plot
         self.clear()
 
-
     def new_figure(self, subplots_rows=4, subplots_columns=4, set_default_layout=True):
         # Create four subplots with their own axes
         SCALE_FACTOR = 6
         self.fig = self.plot.figure(figsize=(subplots_columns*SCALE_FACTOR*2, subplots_rows*SCALE_FACTOR))
         for index in range(1, subplots_rows * subplots_columns + 1):
             self.axes.append(self.fig.add_subplot(subplots_rows, subplots_columns, index))
-
-        # self.axes.append(fig.add_subplot(4, 4, 1))
-        # self.axes.append(fig.add_subplot(4, 4, 2))
-        # self.axes.append(fig.add_subplot(4, 4, 3))
-        # self.axes.append(fig.add_subplot(4, 4, 4))
-        # self.axes.append(fig.add_subplot(4, 4, 5))
-        # self.axes.append(fig.add_subplot(4, 4, 6))
-        # self.axes.append(fig.add_subplot(4, 4, 7))
-        # self.axes.append(fig.add_subplot(4, 4, 8))
-        # self.axes.append(fig.add_subplot(4, 4, 9))
-        # self.axes.append(fig.add_subplot(4, 4, 10))
-        # self.axes.append(fig.add_subplot(4, 4, 11))
-        # self.axes.append(fig.add_subplot(4, 4, 12))
-        # self.axes.append(fig.add_subplot(4, 4, 13))
-        # self.axes.append(fig.add_subplot(4, 4, 14))
-        # self.axes.append(fig.add_subplot(4, 4, 15))
-        # self.axes.append(fig.add_subplot(4, 4, 16))
 
         # Set default layout suitable for analysis of single experiment
         if set_default_layout:
@@ -754,56 +736,13 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
                 output = coinjoins[cjtx]['outputs'][index]
                 if 'wallet_name' in output.keys() and wallet_name == output['wallet_name'] and 'anon_score' in output.keys():
                     if output['anon_score'] >= BASE_ANONSCORE_LIMIT and 'spend_by_txid' in output:
-                        print(f'Overly mixed output: {get_output_name_string(cjtx, index)}, {output['anon_score']}')
+                        #print(f'Overly mixed output: {get_output_name_string(cjtx, index)}, {output['anon_score']}')
                         num_overmixed_utxos += 1
                     total_utxos += 1
     if total_utxos > 0:
         print(f'Total overmixed outputs: {num_overmixed_utxos} / {total_utxos} ({round(num_overmixed_utxos/total_utxos, 1)*100}%)')
     else:
         print('Total overmixed outputs: nothing found.')
-
-    # # Create four subplots with their own axes
-    # fig = plt.figure(figsize=(48, 24))
-    # #fig, ((ax1, ax2, ax3, ax4), (ax5, ax6, ax7, ax8), (ax9, ax10, ax11, ax12), (ax13, ax14, ax15, ax16)) = plt.subplots(4, 4, figsize=(48, 24))
-    # ax1 = fig.add_subplot(4, 4, 1)
-    # ax2 = fig.add_subplot(4, 4, 2)
-    # ax3 = fig.add_subplot(4, 4, 3)
-    # ax4 = fig.add_subplot(4, 4, 4)
-    # ax5 = fig.add_subplot(4, 4, 5)
-    # ax6 = fig.add_subplot(4, 4, 6)
-    # ax7 = fig.add_subplot(4, 4, 7)
-    # ax8 = fig.add_subplot(4, 4, 8)
-    # ax9 = fig.add_subplot(4, 4, 9)
-    # ax10 = fig.add_subplot(4, 4, 10)
-    # ax11 = fig.add_subplot(4, 4, 11)
-    # ax12 = fig.add_subplot(4, 4, 12)
-    # ax13 = fig.add_subplot(4, 4, 13)
-    # ax14 = fig.add_subplot(4, 4, 14)
-    # ax15 = fig.add_subplot(4, 4, 15)
-    # ax16 = fig.add_subplot(4, 4, 16)
-    #
-    # ax_coinjoins = ax1
-    # ax_logs = ax2
-    # ax_num_inoutputs = ax3
-    # ax_num_participating_wallets = ax4
-    # ax_wallets_distrib = ax5
-    #
-    # ax_utxo_provided = ax6
-    #
-    # ax_anonscore_distrib_wallets = ax7
-    # ax_anonscore_from_outputs = ax8
-    #
-    # ax_utxo_entropy_from_outputs = ax9
-    # ax_utxo_entropy_from_outputs_inoutsize = ax10
-    # ax_initial_final_utxos = ax11
-    #
-    # #ax_mining_fees = ax11
-    #
-    # ax_boltzmann_entropy_inoutsize = ax12
-    # ax_boltzmann_entropy = ax13
-    # ax_boltzmann_entropy_roundtime = ax14
-    # ax_boltzmann_txcombinations = ax15
-    # ax_boltzmann_entropy_roundtime_wallets = ax16
 
     #
     # Number of coinjoins per given time interval (e.g., hour or 10 minutes)
@@ -1214,7 +1153,8 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         cjplt.ax_anonscore_from_outputs.set_xlabel('Coinjoin in time')
         cjplt.ax_anonscore_from_outputs.set_ylabel('Wasabi anonscore')
         cjplt.ax_anonscore_from_outputs.ticklabel_format(style='plain', axis='y')
-        cjplt.ax_anonscore_from_outputs.legend(ncol=5, fontsize='small')
+        if len(wallets_info.keys()) <= 15:
+            cjplt.ax_anonscore_from_outputs.legend(ncol=5, fontsize='small')
         cjplt.ax_anonscore_from_outputs.set_title(f'Wasabi Anonscore of outputs in time (all transactions)\n{experiment_name}')
 
     # SAVE_ANALYTICS
@@ -1268,7 +1208,8 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         cjplt.ax_anonscore_distrib_wallets.set_xlabel('Anonscore')
         cjplt.ax_anonscore_distrib_wallets.set_ylabel('Number of UTXOs')
         cjplt.ax_anonscore_distrib_wallets.ticklabel_format(style='plain', axis='y')
-        cjplt.ax_anonscore_distrib_wallets.legend(ncol=5, fontsize='small')
+        if len(wallets_info.keys()) <= 15:
+            cjplt.ax_anonscore_distrib_wallets.legend(ncol=5, fontsize='small')
         cjplt.ax_anonscore_distrib_wallets.set_title(f'Frequency of Wasabi anonscore of wallet outputs (all transactions)\n{experiment_name}')
 
     # SAVE_ANALYTICS:
@@ -2799,6 +2740,69 @@ def analyze_multiple_experiments(results: dict, base_path: str):
     return results
 
 
+def visualize_aggregated_graphs(experiment_paths_sorted, graphs, base_path: str, collate_same_num_wallets: bool):
+    for graph_type in graphs:
+        counted_wallets = Counter([num for path, num in experiment_paths_sorted])
+        num_wallets, max_num_wallets = counted_wallets.most_common(1)[0]
+        cjplots = CoinJoinPlots(plt)
+        if 3 <= max_num_wallets <= 5:
+            # Trying to put same number of wallets on same row
+            num_columns = max_num_wallets
+            num_rows = len(counted_wallets.keys())
+        else:
+            # Not trying to put same number of wallets on same row
+            num_columns = 3
+            num_rows = math.ceil(len(experiment_paths_sorted) / float(num_columns))  # enough rows to capture all graphs
+        cjplots.new_figure(num_rows, num_columns, False)  # Create default graph (4x4), do NOT assign default layout
+
+        # Perform processing for each desired analysis separately (note: not optimal as we are repeating analyses
+        # for all other unused as well. But plotting, not analysis, is the most time-consuming operation.)
+        axis_index = -1
+        last_num_wallets = -1
+        for experiment_path, num_wallets in experiment_paths_sorted:
+            print(f'INPUT PATH: {experiment_path}')
+            data_file = os.path.join(experiment_path, "coinjoin_tx_info.json")
+            # Load parsed coinjoin transactions again
+            with open(data_file, "r") as file:
+                cjtx_stats = json.load(file)
+
+            # Set targeted named subplot to next unused axes
+            # Case 1: Collating results for same number of wallets (collate_same_num_wallets == True), use every subplot
+            # Case 2: Subplots separately (collate_same_num_wallets == False) - try to put results for same number of wallets into same row
+            # Case 3: not trying to allign and not collating - every subplot is used
+            if collate_same_num_wallets:  # Case 1
+                if num_wallets != last_num_wallets:
+                    # Go to next subplot only if change in number of wallets is detected
+                    axis_index += 1
+                    last_num_wallets = num_wallets
+            else:
+                # Case 2: Trying to have same num wallets in the row
+                if max_num_wallets == num_columns and num_wallets != last_num_wallets:
+                    # Skip all remaining subplots in the row
+                    if axis_index < 0:
+                        axis_index = 0
+                    else:
+                        current_row = math.floor(axis_index / num_columns)
+                        axis_index = (current_row + 1) * num_columns
+                    last_num_wallets = num_wallets
+                else:
+                    # Case 3: Got to new subplot for every experiment (not trying to allign and not collating)
+                    axis_index += 1
+
+            assert axis_index < len(cjplots.axes), f'Invalid axis index: {axis_index}, max is {len(cjplots.axes) - 1}'
+            setattr(cjplots, graph_type, cjplots.axes[axis_index])
+
+            # Perform analysis, which will fill only desired analysis into yet unused subgraph
+            analyze_coinjoin_stats(cjtx_stats, experiment_path, cjplots)
+
+        # Save figure will all subgraphs
+        experiment_name = os.path.basename(base_path)
+        fig_save_file = os.path.join(base_path, f"cj_singletype_{graph_type}_{'collated_' if collate_same_num_wallets else ''}stats{GLOBAL_IMG_SUFFIX}.png")
+        fig_save_file = cjplots.savefig(fig_save_file, experiment_name)
+        cjplots.clear()
+        print(f'Aggregated coinjoins statistics saved into {fig_save_file}')
+
+
 def generate_aggregated_visualization(paths_to_process: list):
     """
     Generate separate graph picture from every analyzed property separately
@@ -2822,41 +2826,17 @@ def generate_aggregated_visualization(paths_to_process: list):
                 num_wallets = int(match.groupdict()['num_wallets'])
                 experiment_paths_temp.append((experiment_path, num_wallets))
         experiment_paths_sorted = sorted(experiment_paths_temp, key=lambda x: x[1])
-        experiment_paths_sorted = [item[0] for item in experiment_paths_sorted]
         assert len(experiment_paths_sorted) == len(experiment_paths)
 
-        # For each graph typ, run analysis separately and set CoinJoinPlot structure to fill only specific graph
-        # by disabling all other Axes
-        graphs = ['ax_num_inoutputs']
-        for graph_type in graphs:
-            cjplots = CoinJoinPlots(plt)
-            num_columns = 4
-            num_rows = math.ceil(len(experiment_paths) / float(num_columns))  # enough rows to capture all graphs
-            cjplots.new_figure(num_rows, num_columns, False)  # Create default graph (4x4), do NOT assign default layout
+        # Visualize data batched based on the number of wallets (only selected types of graphs which will not overload the plot)
+        graphs = ['ax_num_inoutputs', 'ax_utxo_entropy_from_outputs']
+        visualize_aggregated_graphs(experiment_paths_sorted, graphs, base_path, True)
 
-            # Perform processing for each desired analysis separately (note: not optimal as we are repeating analyses
-            # for all other unused as well. But plotting, not analysis, is the most time-consuming operation.)
-            axis_index = 0
-            for experiment_path in experiment_paths_sorted:
-                print(f'INPUT PATH: {experiment_path}')
-                data_file = os.path.join(experiment_path, "coinjoin_tx_info.json")
-                # Load parsed coinjoin transactions again
-                with open(data_file, "r") as file:
-                    cjtx_stats = json.load(file)
-
-                # Set ax_num_inoutputs to next unused axes
-                cjplots.ax_num_inoutputs = cjplots.axes[axis_index]
-                axis_index += 1
-
-                # Perform analysis, which will fill only desired analysis into yet unused subgraph
-                analyze_coinjoin_stats(cjtx_stats, experiment_path, cjplots)
-
-            # Save figure will all subgraphs
-            experiment_name = os.path.basename(base_path)
-            fig_save_file = os.path.join(base_path, f"cj_singletype_{graph_type}_stats{GLOBAL_IMG_SUFFIX}.png")
-            fig_save_file = cjplots.savefig(fig_save_file, experiment_name)
-            cjplots.clear()
-            print(f'Aggregated coinjoins statistics saved into {fig_save_file}')
+        # Visualize data of given type into single graph
+        graphs = ['ax_num_inoutputs', 'ax_wallets_distrib', 'ax_utxo_provided', 'ax_anonscore_distrib_wallets',
+                  'ax_anonscore_from_outputs', 'ax_utxo_entropy_from_outputs',
+                  'ax_utxo_entropy_from_outputs_inoutsize', 'ax_initial_final_utxos']
+        visualize_aggregated_graphs(experiment_paths_sorted, graphs, base_path, False)
 
 
 class AnalysisType(Enum):
@@ -3084,8 +3064,6 @@ if __name__ == "__main__":
                          os.path.join(super_base_path, 'grid_uniformsum-static-5utxo'),
                          os.path.join(super_base_path, 'grid_uniformsum-static-30utxo')]
 
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'grid_uniformsum-static-30utxo')]
@@ -3096,9 +3074,11 @@ if __name__ == "__main__":
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'unproccesed')]
+    #
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2')]
 
     generate_aggregated_visualization(target_base_paths)
-    exit(1)
 
     NUM_THREADS = -1  # if -1, then every experiment has own thread
     SAVE_BASE_FIGS = True if NUM_THREADS == 1 else False
