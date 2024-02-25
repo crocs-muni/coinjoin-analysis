@@ -1439,17 +1439,6 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
 
     #!!! Add how many coinjoins given wallet participated in. Weighted number by number of input txos.
 
-    experiment_name = os.path.basename(base_path)
-    save_file = cjplt.savefig(experiment_name, base_path)
-
-    # plt.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
-    # plt.subplots_adjust(bottom=0.1, wspace=0.1, hspace=0.5)
-    # save_file = os.path.join(base_path, "coinjoin_stats.png")
-    # plt.savefig(save_file, dpi=300)
-    # plt.close()
-
-    print('Basic coinjoins statistics saved into {}'.format(save_file))
-
 
 # 'os^vD'
 SCENARIO_MARKER_MAPPINGS = {'paretosum-static-.*-30utxo': '*', 'paretosum-static-.*-5utxo': '^',
@@ -2648,17 +2637,22 @@ def process_experiment(args):
         file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
     # Establish linkage between inputs and outputs for further analysis
-
     remove_link_between_inputs_and_outputs(cjtx_stats['coinjoins'])
     compute_link_between_inputs_and_outputs(cjtx_stats['coinjoins'],
                                             [cjtxid for cjtxid in cjtx_stats['coinjoins'].keys()])
 
-    # Analyze various coinjoins statistics
-    cjplots = CoinJoinPlots(plt)
+    # Analyze various coinjoins statistics.
+    # Plot only if required (time-consuming, and not thread safe)
+    cjplots = CoinJoinPlots(plt)  # Always provide coinjoin plots, but empty by default (no graph generation)
     if save_figs:
-        cjplots.new_figure()
+        cjplots.new_figure()  # If required, generate and set graph Axes for generation
     analyze_coinjoin_stats(cjtx_stats, WASABIWALLET_DATA_DIR, cjplots)
+    if save_figs:  # If required, render and save visual graph
+        experiment_name = os.path.basename(base_path)
+        fig_save_file = cjplots.savefig(experiment_name, base_path)
+        print('Basic coinjoins statistics saved into {}'.format(fig_save_file))
 
+    # Save updated information with analysis results
     with open(save_file, "w") as file:
         file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
@@ -3004,7 +2998,7 @@ if __name__ == "__main__":
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'unproccesed')]
 
-    NUM_THREADS = -1  # if -1, then every experiment has own thread
+    NUM_THREADS = 1  # if -1, then every experiment has own thread
     SAVE_BASE_FIGS = True if NUM_THREADS == 1 else False
     # SAVE_BASE_FIGS = False  # Force no saving of figs
     all_results = {}
