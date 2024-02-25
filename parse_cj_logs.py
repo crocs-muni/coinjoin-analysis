@@ -42,6 +42,7 @@ NUM_THREADS = 1
 SATS_IN_BTC = 100000000
 PRE_2_0_4_VERSION = False
 MAX_NUM_DISPLAY_UTXO = 1000
+GLOBAL_IMG_SUFFIX = '.2'
 
 class CJ_LOG_TYPES(Enum):
     ROUND_STARTED = 'ROUND_STARTED'
@@ -1672,7 +1673,7 @@ def analyze_aggregated_coinjoin_stats(multi_cjtx_stats, base_path):
     experiment_name = os.path.basename(base_path)
     plt.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
     plt.subplots_adjust(bottom=0.1, wspace=0.1, hspace=0.5)
-    save_file = os.path.join(base_path, "aggregated_coinjoin_stats.png")
+    save_file = os.path.join(base_path, f"aggregated_coinjoin_stats{GLOBAL_IMG_SUFFIX}.png")
     plt.savefig(save_file, dpi=300)
     plt.close()
     print('Aggregated coinjoins statistics saved into {}'.format(save_file))
@@ -2649,9 +2650,9 @@ def process_experiment(args):
     analyze_coinjoin_stats(cjtx_stats, WASABIWALLET_DATA_DIR, cjplots)
     if save_figs:  # If required, render and save visual graph
         experiment_name = os.path.basename(base_path)
-        fig_save_file = os.path.join(base_path, "coinjoin_stats.1.png")
+        fig_save_file = os.path.join(base_path, f"coinjoin_stats{GLOBAL_IMG_SUFFIX}.png")
         fig_save_file = cjplots.savefig(fig_save_file, experiment_name)
-        print('Basic coinjoins statistics saved into {}'.format(fig_save_file))
+        print(f'Basic coinjoins statistics saved into {fig_save_file}')
 
     # Save updated information with analysis results
     with open(save_file, "w") as file:
