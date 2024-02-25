@@ -652,7 +652,8 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
     :return:
     """
 
-    print("Starting analyze_coinjoin_stats() analysis")
+    experiment_name = os.path.basename(base_path)
+    print(f"Starting analyze_coinjoin_stats() analysis for {base_path}")
     coinjoins = cjtx_stats['coinjoins']
     address_wallet_mapping = cjtx_stats['address_wallet_mapping']
     wallets_info = cjtx_stats['wallets_info']
@@ -833,7 +834,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         cjplt.ax_coinjoins.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
         cjplt.ax_coinjoins.set_ylim(0)
         cjplt.ax_coinjoins.set_ylabel('Number of coinjoin transactions')
-        cjplt.ax_coinjoins.set_title('Number of coinjoin transactions in given time period')
+        cjplt.ax_coinjoins.set_title(f'Number of coinjoin transactions in given time period\n{experiment_name}')
 
     # SAVE_ANALYTICS
     cjtx_stats['analysis']['rounds_started_all'] = [x_ticks, [len(rounds_started_in_hours[hour]) for hour in rounds_started_in_hours.keys()]]
@@ -890,7 +891,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         cjplt.ax_logs.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
         cjplt.ax_logs.set_ylim(0)
         cjplt.ax_logs.set_ylabel('Number of logs')
-        cjplt.ax_logs.set_title('Number of logs in a given time period')
+        cjplt.ax_logs.set_title(f'Number of logs in a given time period\n{experiment_name}')
 
     #
     # Number of distinct wallets in coinjoins (including coordinator)
@@ -934,7 +935,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         cjplt.ax_wallets_distrib.set_xlabel('Number of distinct wallets')
         cjplt.ax_wallets_distrib.set_ylabel('Number of coinjoins')
         cjplt.ax_wallets_distrib.set_xlim(0.5)
-        cjplt.ax_wallets_distrib.set_title('Number of coinjoins with specific number of distinct wallets  (all transactions)')
+        cjplt.ax_wallets_distrib.set_title(f'Number of coinjoins with specific number of distinct wallets  (all transactions)\n{experiment_name}')
 
     # SAVE_ANALYTICS
     cjtx_stats['analysis']['coinjoin_number_different_wallets'] = [list(range(0, len(wallets_in_frequency_all_ordered))), wallets_in_frequency_all_ordered]
@@ -974,7 +975,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         cjplt.ax_utxo_provided.set_xlabel('Wallet name')
         cjplt.ax_utxo_provided.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
         cjplt.ax_utxo_provided.set_ylabel('Number of participations')
-        cjplt.ax_utxo_provided.set_title('Number of inputs given wallet provided to coinjoin txs (all transactions)')
+        cjplt.ax_utxo_provided.set_title(f'Number of inputs given wallet provided to coinjoin txs (all transactions)\n{experiment_name}')
         if len(x_ticks) >= 100:
             cjplt.ax_utxo_provided.tick_params(axis='x', labelsize=4)
         if len(x_ticks) >= 200:
@@ -1015,7 +1016,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         cjplt.ax_num_inoutputs.set_xlabel('Coinjoin in time')
         cjplt.ax_num_inoutputs.set_ylabel('Number of inputs/outputs/wallets')
         cjplt.ax_num_inoutputs.legend()
-        cjplt.ax_num_inoutputs.set_title('Number of inputs/outputs/wallets of cj transactions (all transactions)')
+        cjplt.ax_num_inoutputs.set_title(f'Number of inputs/outputs/wallets of cj transactions (all transactions)\n{experiment_name}')
 
     # SAVE_ANALYTICS
     cjtx_stats['analysis']['coinjoin_number_inputs_in_time'] = [list(range(0, len(inputs_data))), inputs_data]
@@ -1034,7 +1035,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
     # ax_num_participating_wallets.set_xlabel('Coinjoin in time')
     # ax_num_participating_wallets.set_ylabel('Number of wallets')
     # ax_num_participating_wallets.legend()
-    # ax_num_participating_wallets.set_title('Number of wallets participating in coinjoin transaction (all transactions)')
+    # ax_num_participating_wallets.set_title(f'Number of wallets participating in coinjoin transaction (all transactions)\n{experiment_name}')
 
     #
     # Wallet efficiency in time
@@ -1050,7 +1051,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
     # ax5.set_xlabel('Coinjoin in time')
     # ax5.set_ylabel('Wallet efficiency (%)')
     # ax5.legend()
-    # ax5.set_title('Wallet efficiency with respect to perfect coinjoin (only successfully analyzed transactions!)')
+    # ax5.set_title(f'Wallet efficiency with respect to perfect coinjoin (only successfully analyzed transactions!)\n{experiment_name}')
 
     #
     # Transaction boltzmann entropy and deterministic links
@@ -1066,7 +1067,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
                   if 'analysis' in coinjoins[cjtx['txid']].keys() and coinjoins[cjtx['txid']]['analysis']['processed']['successfully_analyzed'] is True], label='Number of deterministic links (#)')
         cjplt.ax_boltzmann_entropy.set_xlabel('Coinjoin in time')
         cjplt.ax_boltzmann_entropy.legend()
-        cjplt.ax_boltzmann_entropy.set_title('Transaction entropy and deterministic links (Boltzmann, only successfully analyzed transactions! {}/{})'.format(num_boltzmann_analyzed, len(coinjoins.keys())))
+        cjplt.ax_boltzmann_entropy.set_title('Transaction entropy and deterministic links (Boltzmann, only successfully analyzed transactions! {}/{})\n{}'.format(num_boltzmann_analyzed, len(coinjoins.keys()), experiment_name))
 
     #
     # tx entropy versus coinjoin round start-broadcast time
@@ -1091,7 +1092,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         cjplt.ax_boltzmann_entropy_roundtime.set_xlabel('Length of round (seconds)')
         cjplt.ax_boltzmann_entropy_roundtime.set_ylabel('Transaction entropy (bits)')
         cjplt.ax_boltzmann_entropy_roundtime.legend()
-        cjplt.ax_boltzmann_entropy_roundtime.set_title('Dependency of tx entropy on round duration (Boltzmann, only successfully analyzed transactions! {}/{})'.format(num_boltzmann_analyzed, len(coinjoins.keys())))
+        cjplt.ax_boltzmann_entropy_roundtime.set_title('Dependency of tx entropy on round duration (Boltzmann, only successfully analyzed transactions! {}/{}\n{})'.format(num_boltzmann_analyzed, len(coinjoins.keys()), experiment_name))
 
     #
     # tx boltzmann entropy versus coinjoin round start-broadcast time colored by wallet
@@ -1117,7 +1118,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         cjplt.ax_boltzmann_entropy_roundtime_wallets.set_xlabel('Length of round (seconds)')
         cjplt.ax_boltzmann_entropy_roundtime_wallets.set_ylabel('Transaction entropy (bits)')
         cjplt.ax_boltzmann_entropy_roundtime_wallets.legend()
-        cjplt.ax_boltzmann_entropy_roundtime_wallets.set_title('Dependency of tx entropy on round duration (Boltzmann, only successfully analyzed transactions! {}/{})'.format(num_boltzmann_analyzed, len(coinjoins.keys())))
+        cjplt.ax_boltzmann_entropy_roundtime_wallets.set_title('Dependency of tx entropy on round duration (Boltzmann, only successfully analyzed transactions! {}/{}\n{})'.format(num_boltzmann_analyzed, len(coinjoins.keys()), experiment_name))
 
     #
     # tx entropy versus input/output value size
@@ -1146,7 +1147,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         cjplt.ax_boltzmann_entropy_inoutsize.ticklabel_format(style='plain', axis='y')
         #cjplt.ax_boltzmann_entropy_inoutsize.set_xlim(0, 250000)
         cjplt.ax_boltzmann_entropy_inoutsize.legend()
-        cjplt.ax_boltzmann_entropy_inoutsize.set_title('Dependency of tx entropy on size of inputs / outputs (Boltzmann, only successfully analyzed transactions! {}/{})'.format(num_boltzmann_analyzed, len(coinjoins.keys())))
+        cjplt.ax_boltzmann_entropy_inoutsize.set_title('Dependency of tx entropy on size of inputs / outputs (Boltzmann, only successfully analyzed transactions! {}/{}\n{})'.format(num_boltzmann_analyzed, len(coinjoins.keys()), experiment_name))
 
     #
     # anonscore versus coijoin in time (how is anonscore of utxos evolving with more coinjoins in time executed?)
@@ -1172,7 +1173,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         cjplt.ax_anonscore_from_outputs.set_ylabel('Wasabi anonscore')
         cjplt.ax_anonscore_from_outputs.ticklabel_format(style='plain', axis='y')
         cjplt.ax_anonscore_from_outputs.legend(ncol=5, fontsize='small')
-        cjplt.ax_anonscore_from_outputs.set_title('Wasabi Anonscore of outputs in time (all transactions)')
+        cjplt.ax_anonscore_from_outputs.set_title(f'Wasabi Anonscore of outputs in time (all transactions)\n{experiment_name}')
 
     # SAVE_ANALYTICS
     # Nothing
@@ -1226,7 +1227,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         cjplt.ax_anonscore_distrib_wallets.set_ylabel('Number of UTXOs')
         cjplt.ax_anonscore_distrib_wallets.ticklabel_format(style='plain', axis='y')
         cjplt.ax_anonscore_distrib_wallets.legend(ncol=5, fontsize='small')
-        cjplt.ax_anonscore_distrib_wallets.set_title('Frequency of Wasabi anonscore of wallet outputs (all transactions)')
+        cjplt.ax_anonscore_distrib_wallets.set_title(f'Frequency of Wasabi anonscore of wallet outputs (all transactions)\n{experiment_name}')
 
     # SAVE_ANALYTICS:
     anonscore_histogram = []
@@ -1319,7 +1320,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         cjplt.ax_utxo_entropy_from_outputs_inoutsize.set_ylabel('Transaction entropy')
         cjplt.ax_utxo_entropy_from_outputs_inoutsize.ticklabel_format(style='plain', axis='y')
         cjplt.ax_utxo_entropy_from_outputs_inoutsize.legend()
-        cjplt.ax_utxo_entropy_from_outputs_inoutsize.set_title('Dependency of UTXO entropy on size of inputs / outputs (all transactions)')
+        cjplt.ax_utxo_entropy_from_outputs_inoutsize.set_title(f'Dependency of UTXO entropy on size of inputs / outputs (all transactions)\n{experiment_name}')
 
     # SAVE_ANALYTICS
     cjtx_stats['analysis']['coinjoin_txos_entropy_on_size'] = [x_cat_out_every_txo, y_cat_out_every_txo]
@@ -1392,7 +1393,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         cjplt.ax_initial_final_utxos.set_ylabel('Value (sats) (log scale)')
         cjplt.ax_initial_final_utxos.set_xlabel('Wallet name')
         cjplt.ax_initial_final_utxos.legend()
-        cjplt.ax_initial_final_utxos.set_title('Presence of wallet utxos at beginning and end of mixing')
+        cjplt.ax_initial_final_utxos.set_title(f'Presence of wallet utxos at beginning and end of mixing\n{experiment_name}')
 
 
     #
@@ -1411,7 +1412,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         if len(num_combinations_data) > 0 or len(x_cat_out) > 0:  # logscale only if some data were inserted
             cjplt.ax_boltzmann_txcombinations.set_yscale('log')
         cjplt.ax_boltzmann_txcombinations.legend()
-        cjplt.ax_boltzmann_txcombinations.set_title('Number of tx combinations found in time (Boltzmann, only successfully analyzed transactions!)')
+        cjplt.ax_boltzmann_txcombinations.set_title(f'Number of tx combinations found in time (Boltzmann, only successfully analyzed transactions!)\n{experiment_name}')
 
     #
     # Num non-unique output values in time
@@ -1431,7 +1432,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         cjplt.ax_utxo_entropy_from_outputs.set_ylabel('Entropy')
         cjplt.ax_utxo_entropy_from_outputs.set_ylim(0)
         cjplt.ax_utxo_entropy_from_outputs.legend()
-        cjplt.ax_utxo_entropy_from_outputs.set_title('Entropy of outputs of coinjoin transactions (all transactions)')
+        cjplt.ax_utxo_entropy_from_outputs.set_title(f'Entropy of outputs of coinjoin transactions (all transactions)\n{experiment_name}')
 
     # SAVE_ANALYTICS
     cjtx_stats['analysis']['coinjoin_utxos_entropy_in_time'] = [list(range(0, len(entropy_in_time_data))), entropy_in_time_data]
