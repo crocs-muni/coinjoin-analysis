@@ -563,7 +563,12 @@ def calculate_entropy(values):
 
 
 class CoinJoinPlots:
-    plot = None
+    plot = None  # Base MathplotLib
+    fig = None
+
+    axes = []  # List of all created axes (accessible via index)
+
+    # Named axes for specific analysis (is set to specific one from axes[])
     ax_coinjoins = None
     ax_logs = None
     ax_num_inoutputs = None
@@ -589,57 +594,94 @@ class CoinJoinPlots:
 
     def __init__(self, plot):
         self.plot = plot
+        self.clear()
 
-    def new_figure(self):
+
+    def new_figure(self, subplots_rows=4, subplots_columns=4, set_default_layout=True):
         # Create four subplots with their own axes
-        fig = self.plot.figure(figsize=(48, 24))
-        # fig, ((ax1, ax2, ax3, ax4), (ax5, ax6, ax7, ax8), (ax9, ax10, ax11, ax12), (ax13, ax14, ax15, ax16)) = plt.subplots(4, 4, figsize=(48, 24))
-        ax1 = fig.add_subplot(4, 4, 1)
-        ax2 = fig.add_subplot(4, 4, 2)
-        ax3 = fig.add_subplot(4, 4, 3)
-        ax4 = fig.add_subplot(4, 4, 4)
-        ax5 = fig.add_subplot(4, 4, 5)
-        ax6 = fig.add_subplot(4, 4, 6)
-        ax7 = fig.add_subplot(4, 4, 7)
-        ax8 = fig.add_subplot(4, 4, 8)
-        ax9 = fig.add_subplot(4, 4, 9)
-        ax10 = fig.add_subplot(4, 4, 10)
-        ax11 = fig.add_subplot(4, 4, 11)
-        ax12 = fig.add_subplot(4, 4, 12)
-        ax13 = fig.add_subplot(4, 4, 13)
-        ax14 = fig.add_subplot(4, 4, 14)
-        ax15 = fig.add_subplot(4, 4, 15)
-        ax16 = fig.add_subplot(4, 4, 16)
+        SCALE_FACTOR = 6
+        self.fig = self.plot.figure(figsize=(subplots_columns*SCALE_FACTOR*2, subplots_rows*SCALE_FACTOR))
+        for index in range(1, subplots_rows * subplots_columns + 1):
+            self.axes.append(self.fig.add_subplot(subplots_rows, subplots_columns, index))
 
-        self.ax_coinjoins = ax1
-        self.ax_logs = ax2
-        self.ax_num_inoutputs = ax3
-        self.ax_num_participating_wallets = ax4
-        self.ax_wallets_distrib = ax5
+        # self.axes.append(fig.add_subplot(4, 4, 1))
+        # self.axes.append(fig.add_subplot(4, 4, 2))
+        # self.axes.append(fig.add_subplot(4, 4, 3))
+        # self.axes.append(fig.add_subplot(4, 4, 4))
+        # self.axes.append(fig.add_subplot(4, 4, 5))
+        # self.axes.append(fig.add_subplot(4, 4, 6))
+        # self.axes.append(fig.add_subplot(4, 4, 7))
+        # self.axes.append(fig.add_subplot(4, 4, 8))
+        # self.axes.append(fig.add_subplot(4, 4, 9))
+        # self.axes.append(fig.add_subplot(4, 4, 10))
+        # self.axes.append(fig.add_subplot(4, 4, 11))
+        # self.axes.append(fig.add_subplot(4, 4, 12))
+        # self.axes.append(fig.add_subplot(4, 4, 13))
+        # self.axes.append(fig.add_subplot(4, 4, 14))
+        # self.axes.append(fig.add_subplot(4, 4, 15))
+        # self.axes.append(fig.add_subplot(4, 4, 16))
 
-        self.ax_utxo_provided = ax6
+        # Set default layout suitable for analysis of single experiment
+        if set_default_layout:
+            self.ax_coinjoins = self.axes[0]
+            self.ax_logs = self.axes[1]
+            self.ax_num_inoutputs = self.axes[2]
+            self.ax_num_participating_wallets = self.axes[3]
+            self.ax_wallets_distrib = self.axes[4]
 
-        self.ax_anonscore_distrib_wallets = ax7
-        self.ax_anonscore_from_outputs = ax8
+            self.ax_utxo_provided = self.axes[5]
 
-        self.ax_utxo_entropy_from_outputs = ax9
-        self.ax_utxo_entropy_from_outputs_inoutsize = ax10
-        self.ax_initial_final_utxos = ax11
+            self.ax_anonscore_distrib_wallets = self.axes[6]
+            self.ax_anonscore_from_outputs = self.axes[7]
 
-        # self.ax_mining_fees = ax11
+            self.ax_utxo_entropy_from_outputs = self.axes[8]
+            self.ax_utxo_entropy_from_outputs_inoutsize = self.axes[9]
+            self.ax_initial_final_utxos = self.axes[10]
 
-        self.ax_boltzmann_entropy_inoutsize = ax12
-        self.ax_boltzmann_entropy = ax13
-        self.ax_boltzmann_entropy_roundtime = ax14
-        self.ax_boltzmann_txcombinations = ax15
-        self.ax_boltzmann_entropy_roundtime_wallets = ax16
+            # self.ax_mining_fees = ax11
+
+            self.ax_boltzmann_entropy_inoutsize = self.axes[11]
+            self.ax_boltzmann_entropy = self.axes[12]
+            self.ax_boltzmann_entropy_roundtime = self.axes[13]
+            self.ax_boltzmann_txcombinations = self.axes[14]
+            self.ax_boltzmann_entropy_roundtime_wallets = self.axes[15]
 
     def savefig(self, save_file, experiment_name: str):
         self.plot.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
         self.plot.subplots_adjust(bottom=0.1, wspace=0.1, hspace=0.5)
         self.plot.savefig(save_file, dpi=300)
-        self.plot.close()
         return save_file
+
+    def clear(self):
+        self.plot.clf()
+        self.plot.close()
+        self.fig = None
+
+        self.axes = []  # List of all created axes (accessible via index)
+
+        # Named axes for specific analysis (is set to specific one from axes[])
+        self.ax_coinjoins = None
+        self.ax_logs = None
+        self.ax_num_inoutputs = None
+        self.ax_num_participating_wallets = None
+        self.ax_wallets_distrib = None
+
+        self.ax_utxo_provided = None
+
+        self.ax_anonscore_distrib_wallets = None
+        self.ax_anonscore_from_outputs = None
+
+        self.ax_utxo_entropy_from_outputs = None
+        self.ax_utxo_entropy_from_outputs_inoutsize = None
+        self.ax_initial_final_utxos = None
+
+        # self.ax_mining_fees = None
+
+        self.ax_boltzmann_entropy_inoutsize = None
+        self.ax_boltzmann_entropy = None
+        self.ax_boltzmann_entropy_roundtime = None
+        self.ax_boltzmann_txcombinations = None
+        self.ax_boltzmann_entropy_roundtime_wallets = None
 
 
 def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
@@ -2652,6 +2694,7 @@ def process_experiment(args):
         experiment_name = os.path.basename(base_path)
         fig_save_file = os.path.join(base_path, f"coinjoin_stats{GLOBAL_IMG_SUFFIX}.png")
         fig_save_file = cjplots.savefig(fig_save_file, experiment_name)
+        cjplots.clear()
         print(f'Basic coinjoins statistics saved into {fig_save_file}')
 
     # Save updated information with analysis results
@@ -2678,10 +2721,13 @@ def process_experiment(args):
     return cjtx_stats
 
 
-def process_multiple_experiments(base_path: str, save_figs=False, num_threads=-1):
-    print(f'Starting analysis of multiple folders in {base_path}')
-
-    results = {}  # Aggregated results
+def get_experiments_base_paths(base_path: str):
+    """
+    Search on-level subfolders for provided base_path for folders with experiments.
+    Returns it as a list of paths.
+    :param base_path: base folder with experiments as subfolders
+    :return: list of folders which cointain recognized experiments
+    """
     files = []
     if os.path.exists(base_path):
         files = os.listdir(base_path)
@@ -2691,13 +2737,24 @@ def process_multiple_experiments(base_path: str, save_figs=False, num_threads=-1
     # Search all paths to be processed
     paths_to_process = []
     for file in files:
-        target_base_path = os.path.join(base_path, file)
-        if os.path.isdir(target_base_path):
-            if (os.path.exists(os.path.join(target_base_path, 'WalletWasabi'))
-                    or os.path.exists(os.path.join(target_base_path, 'data'))):
-                paths_to_process.append(target_base_path)
+        target_exp_base_path = os.path.join(base_path, file)
+        if os.path.isdir(target_exp_base_path):
+            if (os.path.exists(os.path.join(target_exp_base_path, 'WalletWasabi'))
+                    or os.path.exists(os.path.join(target_exp_base_path, 'data'))):
+                paths_to_process.append(target_exp_base_path)
 
-    if num_threads == -1:  # If not provided, create separate threat for every experiment
+    return paths_to_process
+
+
+def process_multiple_experiments(base_path: str, save_figs=False, num_threads=-1):
+    print(f'Starting analysis of multiple folders in {base_path}')
+
+    results = {}  # Aggregated results
+
+    # Collect paths with experiments
+    paths_to_process = get_experiments_base_paths(base_path)
+
+    if num_threads == -1:  # If num_threads argument is not provided, create separate threat for every experiment
         num_threads = len(paths_to_process)
 
     # Execute process_experiment in parallel
@@ -2711,30 +2768,6 @@ def process_multiple_experiments(base_path: str, save_figs=False, num_threads=-1
             progress.update(1)
             print(result['analysis']['path'])
             results[result['analysis']['path']] = result
-
-        # params = []
-        # with Pool(num_threads) as p:
-        #     for path in paths_to_process:
-        #         cjplots = CoinJoinPlots(plt)
-        #         if save_figs:
-        #             cjplots.new_figure()
-        #         params.append((path, cjplots))
-        #
-        #     results = p.map(process_experiment, params)
-        #     for response in results:
-        #         results[response['analysis']['path']] = response
-        #         progress.update(1)
-        #         params = []
-
-
-    # for file in paths_to_process:
-    #     target_base_path = os.path.join(base_path, file)
-    #     if os.path.isdir(target_base_path):
-    #         if (os.path.exists(os.path.join(target_base_path, 'WalletWasabi'))
-    #                 or os.path.exists(os.path.join(target_base_path, 'data'))):
-    #             print('****************************')
-    #             print('Analyzing experiment {}'.format(target_base_path))
-    #             results[target_base_path] = process_experiment(target_base_path)
 
     return results
 
@@ -2766,7 +2799,67 @@ def analyze_multiple_experiments(results: dict, base_path: str):
     return results
 
 
-class ANALYSIS_TYPE(Enum):
+def generate_aggregated_visualization(paths_to_process: list):
+    """
+    Generate separate graph picture from every analyzed property separately
+    (specific graph from all experiments in one picture)
+    :param paths_to_process:
+    :param base_path:
+    :return:
+    """
+
+    # Load all experiment paths found on paths_to_process
+    for base_path in paths_to_process:
+        experiment_paths = get_experiments_base_paths(base_path)
+
+        # Sort paths based on some property (e.g., number of wallets incrementally)
+        reg = 'static-(?P<num_wallets>[0-9]+)-'
+        experiment_paths_temp = []
+        for experiment_path in experiment_paths:
+            match = re.search(reg, experiment_path)
+            assert match, f'Failed to match regular expression \'{reg}\' to experiment_path \'{experiment_path}\''
+            if match:
+                num_wallets = int(match.groupdict()['num_wallets'])
+                experiment_paths_temp.append((experiment_path, num_wallets))
+        experiment_paths_sorted = sorted(experiment_paths_temp, key=lambda x: x[1])
+        experiment_paths_sorted = [item[0] for item in experiment_paths_sorted]
+        assert len(experiment_paths_sorted) == len(experiment_paths)
+
+        # For each graph typ, run analysis separately and set CoinJoinPlot structure to fill only specific graph
+        # by disabling all other Axes
+        graphs = ['ax_num_inoutputs']
+        for graph_type in graphs:
+            cjplots = CoinJoinPlots(plt)
+            num_columns = 4
+            num_rows = math.ceil(len(experiment_paths) / float(num_columns))  # enough rows to capture all graphs
+            cjplots.new_figure(num_rows, num_columns, False)  # Create default graph (4x4), do NOT assign default layout
+
+            # Perform processing for each desired analysis separately (note: not optimal as we are repeating analyses
+            # for all other unused as well. But plotting, not analysis, is the most time-consuming operation.)
+            axis_index = 0
+            for experiment_path in experiment_paths_sorted:
+                print(f'INPUT PATH: {experiment_path}')
+                data_file = os.path.join(experiment_path, "coinjoin_tx_info.json")
+                # Load parsed coinjoin transactions again
+                with open(data_file, "r") as file:
+                    cjtx_stats = json.load(file)
+
+                # Set ax_num_inoutputs to next unused axes
+                cjplots.ax_num_inoutputs = cjplots.axes[axis_index]
+                axis_index += 1
+
+                # Perform analysis, which will fill only desired analysis into yet unused subgraph
+                analyze_coinjoin_stats(cjtx_stats, experiment_path, cjplots)
+
+            # Save figure will all subgraphs
+            experiment_name = os.path.basename(base_path)
+            fig_save_file = os.path.join(base_path, f"cj_singletype_{graph_type}_stats{GLOBAL_IMG_SUFFIX}.png")
+            fig_save_file = cjplots.savefig(fig_save_file, experiment_name)
+            cjplots.clear()
+            print(f'Aggregated coinjoins statistics saved into {fig_save_file}')
+
+
+class AnalysisType(Enum):
     COLLECT_COINJOIN_DATA_LOCAL = 1
     COMPUTE_COINJOIN_TXINFO_REMOTE = 2
     ANALYZE_COINJOIN_DATA_LOCAL = 3
@@ -2777,16 +2870,16 @@ if __name__ == "__main__":
     PROFILE_PERFORMANCE = False
 
     # Analysis type
-    #cfg = ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL
-    #cfg = ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
-    cfg = ANALYSIS_TYPE.ANALYZE_COINJOIN_DATA_LOCAL
-    #cfg = ANALYSIS_TYPE.COMPUTE_COINJOIN_TXINFO_REMOTE
+    #cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL
+    #cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
+    cfg = AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL
+    #cfg = AnalysisType.COMPUTE_COINJOIN_TXINFO_REMOTE
 
     print('Analysis configuration: {}'.format(cfg.name))
 
     RAW_TXS_DB = {}
 
-    if cfg == ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL:
+    if cfg == AnalysisType.COLLECT_COINJOIN_DATA_LOCAL:
         # Extract all info from running wallet and fullnode
 
         # If True, preprocessed files extracted from dockerized instances are assumed.
@@ -2816,7 +2909,7 @@ if __name__ == "__main__":
         GENERATE_COINJOIN_GRAPH = False
         # Base start path with data for processing (WalletWasabi and other folders)
         target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
-    elif cfg == ANALYSIS_TYPE.COLLECT_COINJOIN_DATA_LOCAL_DOCKER:
+    elif cfg == AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER:
         # Extract info from static files previously created and collected from dockerized instances
         LOAD_TXINFO_FROM_DOCKER_FILES = True
         LOAD_TXINFO_FROM_FILE = False
@@ -2829,7 +2922,7 @@ if __name__ == "__main__":
         PARALLELIZE_COMPUTE_COINJOIN_STATS = False
         GENERATE_COINJOIN_GRAPH = False
         target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
-    elif cfg == ANALYSIS_TYPE.ANALYZE_COINJOIN_DATA_LOCAL:
+    elif cfg == AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL:
         # Just recompute analysis
 
         LOAD_TXINFO_FROM_DOCKER_FILES = False
@@ -2848,7 +2941,7 @@ if __name__ == "__main__":
         GENERATE_COINJOIN_GRAPH = True
 
         target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
-    elif cfg == ANALYSIS_TYPE.COMPUTE_COINJOIN_TXINFO_REMOTE:
+    elif cfg == AnalysisType.COMPUTE_COINJOIN_TXINFO_REMOTE:
         # Compute only time-consuming transaction entropy analysis from pre-retrieved transactions
 
         LOAD_TXINFO_FROM_DOCKER_FILES = False
@@ -2983,7 +3076,7 @@ if __name__ == "__main__":
     # Assumption: given base path contains one or more subfolders (experiments for related settings) with each containing 'data' subfolder (one experiment)
     # super_base_path is path where aggregated results from all
 
-    super_base_path = ''
+    # super_base_path = ''
     super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     target_base_paths = [os.path.join(super_base_path, 'grid_paretosum-static-30utxo'),
                          os.path.join(super_base_path, 'grid_paretosum-static-5utxo'),
@@ -2998,9 +3091,16 @@ if __name__ == "__main__":
     # target_base_paths = [os.path.join(super_base_path, 'grid_uniformsum-static-30utxo')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2'),
+    #                      os.path.join(super_base_path, 'grid_uniform_test2')]
+
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'unproccesed')]
 
-    NUM_THREADS = 1  # if -1, then every experiment has own thread
+    generate_aggregated_visualization(target_base_paths)
+    exit(1)
+
+    NUM_THREADS = -1  # if -1, then every experiment has own thread
     SAVE_BASE_FIGS = True if NUM_THREADS == 1 else False
     # SAVE_BASE_FIGS = False  # Force no saving of figs
     all_results = {}
