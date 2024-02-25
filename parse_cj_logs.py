@@ -633,10 +633,9 @@ class CoinJoinPlots:
         self.ax_boltzmann_txcombinations = ax15
         self.ax_boltzmann_entropy_roundtime_wallets = ax16
 
-    def savefig(self, experiment_name: str, base_path: str):
+    def savefig(self, save_file, experiment_name: str):
         self.plot.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
         self.plot.subplots_adjust(bottom=0.1, wspace=0.1, hspace=0.5)
-        save_file = os.path.join(base_path, "coinjoin_stats.png")
         self.plot.savefig(save_file, dpi=300)
         self.plot.close()
         return save_file
@@ -2650,7 +2649,8 @@ def process_experiment(args):
     analyze_coinjoin_stats(cjtx_stats, WASABIWALLET_DATA_DIR, cjplots)
     if save_figs:  # If required, render and save visual graph
         experiment_name = os.path.basename(base_path)
-        fig_save_file = cjplots.savefig(experiment_name, base_path)
+        fig_save_file = os.path.join(base_path, "coinjoin_stats.1.png")
+        fig_save_file = cjplots.savefig(fig_save_file, experiment_name)
         print('Basic coinjoins statistics saved into {}'.format(fig_save_file))
 
     # Save updated information with analysis results
