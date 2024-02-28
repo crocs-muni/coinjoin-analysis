@@ -572,7 +572,7 @@ class CoinJoinPlots:
     ax_coinjoins = None
     ax_logs = None
     ax_num_inoutputs = None
-    ax_num_participating_wallets = None
+    ax_utxo_denom_anonscore = None
     ax_wallets_distrib = None
 
     ax_utxo_provided = None
@@ -608,7 +608,7 @@ class CoinJoinPlots:
             self.ax_coinjoins = self.axes[0]
             self.ax_logs = self.axes[1]
             self.ax_num_inoutputs = self.axes[2]
-            self.ax_num_participating_wallets = self.axes[3]
+            self.ax_utxo_denom_anonscore = self.axes[3]
             self.ax_wallets_distrib = self.axes[4]
 
             self.ax_utxo_provided = self.axes[5]
@@ -644,8 +644,8 @@ class CoinJoinPlots:
         # Named axes for specific analysis (is set to specific one from axes[])
         self.ax_coinjoins = None
         self.ax_logs = None
+        self.ax_utxo_denom_anonscore = None
         self.ax_num_inoutputs = None
-        self.ax_num_participating_wallets = None
         self.ax_wallets_distrib = None
 
         self.ax_utxo_provided = None
@@ -1172,6 +1172,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
     bar_wallets = {}
     wallet_index = 0
     max_score = 1
+    x_y_utxo_anonscore = []
     for wallet_name in wallets_info.keys():
         x_cat_out, y_cat_out = [], []
         cj_index = 0
@@ -1182,6 +1183,8 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
                         'anon_score' in output.keys() and output['anon_score'] > 1):
                     x_cat_out.append(cj_index)
                     y_cat_out.append(output['anon_score'])
+                    if 'spend_by_txid' not in coinjoins[cjtx['txid']]['outputs'][index].keys():
+                        x_y_utxo_anonscore.append((output['value'], output['anon_score']))
                     if max_score < output['anon_score']:  # keep the maximum
                         max_score = output['anon_score']
             cj_index = cj_index + 1
@@ -1226,7 +1229,8 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
     #
     # tx entropy versus input/output value size
     #
-    x_cat_in, y_cat_in, x_cat_out, y_cat_out, x_cat_out_every_txo, y_cat_out_every_txo, x_cat_out_every_utxo, y_cat_out_every_utxo = [], [], [], [], [], [], [], []
+    x_cat_in, y_cat_in, x_cat_out, y_cat_out, x_cat_out_every_utxo, y_cat_out_every_utxo = [], [], [], [], [], []
+    x_y_spend_txo = []
     x_y_utxo, x_y_txo = [], []
     for cjtx in sorted_cj_time:
         tx_entropy = coinjoins[cjtx['txid']]['analysis2']['outputs_entropy']
@@ -1248,8 +1252,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
                 x_y_utxo.append((coin_value, ratio_entropy))
             else:
                 # This output is already spend
-                x_cat_out_every_txo.append(coin_value)
-                y_cat_out_every_txo.append(ratio_entropy)
+                x_y_spend_txo.append((coin_value, ratio_entropy))
                 x_y_txo.append((coin_value, ratio_entropy))
 
     # Add lines corresponding to standard denominations
@@ -1263,60 +1266,71 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         10460353203, 17179869184, 20000000000, 20920706406, 31381059609, 34359738368, 50000000000, 62762119218,
         68719476736, 94143178827, 100000000000, 137438953472
     ]
-    # Add all outputs created in time
-    if cjplt.ax_utxo_entropy_from_outputs_inoutsize:
-        cjplt.ax_utxo_entropy_from_outputs_inoutsize.scatter(x_cat_out_every_txo, y_cat_out_every_txo, label='Tx outputs (spend)', color='red', s=1)
 
-    # Overlay with currently valid UTXOs, make proportional size of utxos based on number of occurrences
-    utxo_value_counts = Counter(x_y_utxo)
+    def display_denomination_dependency_graph(x_y_spend_txo, x_y_utxo, ax_graph, y_label: str, graph_title: str):
+        # Add all spent outputs created in time
+        if ax_graph:
+            ax_graph.scatter([coin[0] for coin in x_y_spend_txo], [coin[1] for coin in x_y_spend_txo],
+                            label='Tx outputs (spend)', color='red', s=1)
 
-    # For nice legend entry, pick the most common utxo (wrt occurrences) and plot single one to have it shown in legend
-    coin = utxo_value_counts.most_common()[int(len(utxo_value_counts)/2)]
-    if cjplt.ax_utxo_entropy_from_outputs_inoutsize:
-        cjplt.ax_utxo_entropy_from_outputs_inoutsize.scatter([coin[0][0]], [coin[0][1]], label='Tx outputs (unspend,\nsized by occurence)', color='green', s=30*coin[1],
-                                                   alpha=0.1)
-    # Now display all utxos (possibly limited up to MAX_NUM_DISPLAY_UTXO utxos if required)
-    if len(utxo_value_counts) > MAX_NUM_DISPLAY_UTXO:
-        print(f'Limiting number of UTXOs displayed from {len(utxo_value_counts)} to {MAX_NUM_DISPLAY_UTXO} (MAX_NUM_DISPLAY_UTXO)')
-    if cjplt.ax_utxo_entropy_from_outputs_inoutsize:
-        for coin in list(utxo_value_counts.keys())[0:min(MAX_NUM_DISPLAY_UTXO, len(utxo_value_counts))]:
-            cjplt.ax_utxo_entropy_from_outputs_inoutsize.scatter([coin[0]], [coin[1]], color='green', s=30*utxo_value_counts[coin], alpha=0.1)
+        # Overlay with currently valid UTXOs, make proportional size of utxos based on number of occurrences
+        utxo_value_counts = Counter(x_y_utxo)
 
-    # Compute and display median entropy for standard denominations
-    avg_denom_entropy = {}
-    for denom in std_denoms:
-        denom_utxos = [coin[1] for coin in x_y_utxo if coin[0] == denom]
-        if len(denom_utxos) > 0:
-            avg_denom_entropy[denom] = np.median(denom_utxos)
-    if cjplt.ax_utxo_entropy_from_outputs_inoutsize:
-        cjplt.ax_utxo_entropy_from_outputs_inoutsize.plot(list(avg_denom_entropy.keys()), list(avg_denom_entropy.values()), color='green', linewidth=3)
+        # For nice legend entry, pick the most common utxo (wrt occurrences) and plot single one to have it shown in legend
+        coin = utxo_value_counts.most_common()[int(len(utxo_value_counts)/2)]
+        if ax_graph:
+            ax_graph.scatter([coin[0][0]], [coin[0][1]], label='Tx outputs (unspend,\nsized by occurence)', color='green', s=30*coin[1],
+                                                       alpha=0.1)
+        # Now display all utxos (possibly limited up to MAX_NUM_DISPLAY_UTXO utxos if required)
+        if len(utxo_value_counts) > MAX_NUM_DISPLAY_UTXO:
+            print(f'Limiting number of UTXOs displayed from {len(utxo_value_counts)} to {MAX_NUM_DISPLAY_UTXO} (MAX_NUM_DISPLAY_UTXO)')
+        if ax_graph:
+            for coin in list(utxo_value_counts.keys())[0:min(MAX_NUM_DISPLAY_UTXO, len(utxo_value_counts))]:
+                ax_graph.scatter([coin[0]], [coin[1]], color='green', s=30*utxo_value_counts[coin], alpha=0.1)
 
-    max_value_used = 0
-    if len(x_cat_out_every_txo) > 0:
-        max_value_used = max(x_cat_out_every_txo)
-    if len(x_cat_out_every_utxo) > 0:
-        if max(x_cat_out_every_utxo) > max_value_used:
-            max_value_used = max(x_cat_out_every_utxo)
+        # Compute and display median entropy for standard denominations
+        avg_denom_entropy_or_anonscore = {}
+        for denom in std_denoms:
+            denom_utxos = [coin[1] for coin in x_y_utxo if coin[0] == denom]
+            if len(denom_utxos) > 0:
+                avg_denom_entropy_or_anonscore[denom] = np.median(denom_utxos)
+        if ax_graph:
+            ax_graph.plot(list(avg_denom_entropy_or_anonscore.keys()), list(avg_denom_entropy_or_anonscore.values()),
+                          color='green', linewidth=3)
 
-    # Plot vertical lines to highlight standard denominations
-    if cjplt.ax_utxo_entropy_from_outputs_inoutsize:
-        for value in std_denoms:
-            if value <= max_value_used:
-                cjplt.ax_utxo_entropy_from_outputs_inoutsize.axvline(x=value, color='gray', linestyle='--', linewidth=0.1)
-        if len(x_cat_in) > 0 or len(x_cat_out) > 0:  # logscale only if some data were inserted
-            cjplt.ax_utxo_entropy_from_outputs_inoutsize.set_xscale('log')
+        max_value_used = 0
+        if len(x_y_spend_txo) > 0:
+            max_value_used = max([coin[0] for coin in x_y_spend_txo])
+        if len(x_cat_out_every_utxo) > 0:
+            if max(x_cat_out_every_utxo) > max_value_used:
+                max_value_used = max(x_cat_out_every_utxo)
 
-    if cjplt.ax_utxo_entropy_from_outputs_inoutsize:
-        cjplt.ax_utxo_entropy_from_outputs_inoutsize.set_xlabel('Value (sats) (log scale)')
-        cjplt.ax_utxo_entropy_from_outputs_inoutsize.set_ylabel('Transaction entropy')
-        cjplt.ax_utxo_entropy_from_outputs_inoutsize.ticklabel_format(style='plain', axis='y')
-        cjplt.ax_utxo_entropy_from_outputs_inoutsize.legend()
-        cjplt.ax_utxo_entropy_from_outputs_inoutsize.set_title(f'Dependency of UTXO entropy on size of inputs / outputs (all transactions)\n{experiment_name}')
+        # Plot vertical lines to highlight standard denominations
+        if ax_graph:
+            for value in std_denoms:
+                if value <= max_value_used:
+                    ax_graph.axvline(x=value, color='gray', linestyle='--', linewidth=0.1)
+            if len(x_cat_in) > 0 or len(x_cat_out) > 0:  # logscale only if some data were inserted
+                ax_graph.set_xscale('log')
 
+        if ax_graph:
+            ax_graph.set_xlabel('Value (sats) (log scale)')
+            ax_graph.set_ylabel(y_label)
+            ax_graph.ticklabel_format(style='plain', axis='y')
+            ax_graph.legend()
+            ax_graph.set_title(graph_title)
+
+        return avg_denom_entropy_or_anonscore
+
+
+    avg_denom_entropy = display_denomination_dependency_graph(x_y_spend_txo, x_y_utxo, cjplt.ax_utxo_entropy_from_outputs_inoutsize,
+                                          'Transaction entropy', f'Dependency of UTXO entropy on size of inputs / outputs (all transactions)\n{experiment_name}')
+    avg_denom_anonscore = display_denomination_dependency_graph(x_y_spend_txo, x_y_utxo_anonscore, cjplt.ax_utxo_denom_anonscore,
+                                          'Anonscore', f'Dependency of UTXO anonscore on outputs (all transactions)\n{experiment_name}')
     # SAVE_ANALYTICS
-    cjtx_stats['analysis']['coinjoin_txos_entropy_on_size'] = [x_cat_out_every_txo, y_cat_out_every_txo]
-    cjtx_stats['analysis']['coinjoin_utxos_entropy_in_time'] = [[], utxo_value_counts]  # BUGBUG
-    cjtx_stats['analysis']['coinjoin_utxos_entropy_on_size_median'] = [avg_denom_entropy.keys(), avg_denom_entropy.values()]
+    cjtx_stats['analysis']['coinjoin_txos_entropy_on_size'] = [[coin[0] for coin in x_y_spend_txo], [coin[1] for coin in x_y_spend_txo]]
+    # cjtx_stats['analysis']['coinjoin_utxos_entropy_on_size_median'] = [avg_denom_entropy_or_anonscore.keys(), avg_denom_entropy_or_anonscore.values()]
+    # cjtx_stats['analysis']['coinjoin_utxos_entropy_on_size_median'] = [avg_denom_anonscore.keys(), avg_denom_anonscore.values()]
 
 
     #
@@ -2860,8 +2874,8 @@ if __name__ == "__main__":
 
     # Analysis type
     #cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL
-    #cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
-    cfg = AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL
+    cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
+    #cfg = AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL
     #cfg = AnalysisType.COMPUTE_COINJOIN_TXINFO_REMOTE
 
     print('Analysis configuration: {}'.format(cfg.name))
