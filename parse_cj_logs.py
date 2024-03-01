@@ -1267,7 +1267,8 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         68719476736, 94143178827, 100000000000, 137438953472
     ]
 
-    def display_denomination_dependency_graph(x_y_spend_txo, x_y_utxo, ax_graph, y_label: str, graph_title: str):
+    def display_denomination_dependency_graph(x_y_spend_txo, x_y_utxo, ax_graph, y_label: str, graph_title: str,
+                                              main_color: str):
         # Add all spent outputs created in time
         if ax_graph:
             ax_graph.scatter([coin[0] for coin in x_y_spend_txo], [coin[1] for coin in x_y_spend_txo],
@@ -1279,14 +1280,14 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         # For nice legend entry, pick the most common utxo (wrt occurrences) and plot single one to have it shown in legend
         coin = utxo_value_counts.most_common()[int(len(utxo_value_counts)/2)]
         if ax_graph:
-            ax_graph.scatter([coin[0][0]], [coin[0][1]], label='Tx outputs (unspend,\nsized by occurence)', color='green', s=30*coin[1],
+            ax_graph.scatter([coin[0][0]], [coin[0][1]], label='Tx outputs (unspend,\nsized by occurence)', color=main_color, s=30*coin[1],
                                                        alpha=0.1)
         # Now display all utxos (possibly limited up to MAX_NUM_DISPLAY_UTXO utxos if required)
         if len(utxo_value_counts) > MAX_NUM_DISPLAY_UTXO:
             print(f'Limiting number of UTXOs displayed from {len(utxo_value_counts)} to {MAX_NUM_DISPLAY_UTXO} (MAX_NUM_DISPLAY_UTXO)')
         if ax_graph:
             for coin in list(utxo_value_counts.keys())[0:min(MAX_NUM_DISPLAY_UTXO, len(utxo_value_counts))]:
-                ax_graph.scatter([coin[0]], [coin[1]], color='green', s=30*utxo_value_counts[coin], alpha=0.1)
+                ax_graph.scatter([coin[0]], [coin[1]], color=main_color, s=30*utxo_value_counts[coin], alpha=0.1)
 
         # Compute and display median entropy for standard denominations
         avg_denom_entropy_or_anonscore = {}
@@ -1296,7 +1297,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
                 avg_denom_entropy_or_anonscore[denom] = np.median(denom_utxos)
         if ax_graph:
             ax_graph.plot(list(avg_denom_entropy_or_anonscore.keys()), list(avg_denom_entropy_or_anonscore.values()),
-                          color='green', linewidth=3)
+                          color=main_color, linewidth=3, label='median')
 
         max_value_used = 0
         if len(x_y_spend_txo) > 0:
@@ -1322,15 +1323,16 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
 
         return avg_denom_entropy_or_anonscore
 
-
     avg_denom_entropy = display_denomination_dependency_graph(x_y_spend_txo, x_y_utxo, cjplt.ax_utxo_entropy_from_outputs_inoutsize,
-                                          'Transaction entropy', f'Dependency of UTXO entropy on size of inputs / outputs (all transactions)\n{experiment_name}')
+                                          'Transaction entropy', f'Dependency of UTXO entropy on size of inputs / outputs (all transactions)\n{experiment_name}',
+                                                              'green')
     avg_denom_anonscore = display_denomination_dependency_graph(x_y_spend_txo, x_y_utxo_anonscore, cjplt.ax_utxo_denom_anonscore,
-                                          'Anonscore', f'Dependency of UTXO anonscore on outputs (all transactions)\n{experiment_name}')
+                                          'Anonscore', f'Dependency of UTXO anonscore on outputs (all transactions)\n{experiment_name}',
+                                                                'darkblue')
     # SAVE_ANALYTICS
     cjtx_stats['analysis']['coinjoin_txos_entropy_on_size'] = [[coin[0] for coin in x_y_spend_txo], [coin[1] for coin in x_y_spend_txo]]
-    # cjtx_stats['analysis']['coinjoin_utxos_entropy_on_size_median'] = [avg_denom_entropy_or_anonscore.keys(), avg_denom_entropy_or_anonscore.values()]
-    # cjtx_stats['analysis']['coinjoin_utxos_entropy_on_size_median'] = [avg_denom_anonscore.keys(), avg_denom_anonscore.values()]
+    cjtx_stats['analysis']['coinjoin_utxos_entropy_on_size_median'] = [list(avg_denom_entropy.keys()), list(avg_denom_entropy.values())]
+    cjtx_stats['analysis']['coinjoin_utxos_anonscore_on_size_median'] = [list(avg_denom_anonscore.keys()), list(avg_denom_anonscore.values())]
 
 
     #
@@ -2852,12 +2854,12 @@ def generate_aggregated_visualization(paths_to_process: list):
         assert len(experiment_paths_sorted) == len(experiment_paths)
 
         # Visualize data batched based on the number of wallets (only selected types of graphs which will not overload the plot)
-        graphs = ['ax_num_inoutputs', 'ax_utxo_entropy_from_outputs']
+        graphs = ['ax_num_inoutputs', 'ax_utxo_entropy_from_outputs', 'ax_utxo_entropy_from_outputs_inoutsize', 'ax_utxo_denom_anonscore']
         visualize_aggregated_graphs(experiment_paths_sorted, graphs, base_path, True)
 
         # Visualize data of given type into single graph
         graphs = ['ax_num_inoutputs', 'ax_wallets_distrib', 'ax_utxo_provided', 'ax_anonscore_distrib_wallets',
-                  'ax_anonscore_from_outputs', 'ax_utxo_entropy_from_outputs',
+                  'ax_anonscore_from_outputs', 'ax_utxo_entropy_from_outputs', 'ax_utxo_denom_anonscore',
                   'ax_utxo_entropy_from_outputs_inoutsize', 'ax_initial_final_utxos']
         visualize_aggregated_graphs(experiment_paths_sorted, graphs, base_path, False)
 
@@ -2874,8 +2876,8 @@ if __name__ == "__main__":
 
     # Analysis type
     #cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL
-    cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
-    #cfg = AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL
+    #cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
+    cfg = AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL
     #cfg = AnalysisType.COMPUTE_COINJOIN_TXINFO_REMOTE
 
     print('Analysis configuration: {}'.format(cfg.name))
@@ -3089,8 +3091,8 @@ if __name__ == "__main__":
                          os.path.join(super_base_path, 'grid_pareto-static-1utxo')]
 
 
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_uniformsum-static-30utxo')]
+    super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    target_base_paths = [os.path.join(super_base_path, 'grid_pareto-static-30utxo')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2'),
@@ -3098,9 +3100,9 @@ if __name__ == "__main__":
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'unproccesed')]
-    #
-    super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2')]
+
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2')]
 
     ##Generate aggregated visualizations
     # generate_aggregated_visualization(target_base_paths)
