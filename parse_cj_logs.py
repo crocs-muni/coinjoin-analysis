@@ -572,6 +572,7 @@ class CoinJoinPlots:
     ax_coinjoins = None
     ax_logs = None
     ax_num_inoutputs = None
+    ax_available_utxos = None
     ax_utxo_denom_anonscore = None
     ax_wallets_distrib = None
 
@@ -596,7 +597,7 @@ class CoinJoinPlots:
         self.plot = plot
         self.clear()
 
-    def new_figure(self, subplots_rows=4, subplots_columns=4, set_default_layout=True):
+    def new_figure(self, subplots_rows=4, subplots_columns=5, set_default_layout=True):
         # Create four subplots with their own axes
         SCALE_FACTOR = 6
         self.fig = self.plot.figure(figsize=(subplots_columns*SCALE_FACTOR*2, subplots_rows*SCALE_FACTOR))
@@ -608,7 +609,7 @@ class CoinJoinPlots:
             self.ax_coinjoins = self.axes[0]
             self.ax_logs = self.axes[1]
             self.ax_num_inoutputs = self.axes[2]
-            self.ax_utxo_denom_anonscore = self.axes[3]
+            self.ax_available_utxos = self.axes[3]
             self.ax_wallets_distrib = self.axes[4]
 
             self.ax_utxo_provided = self.axes[5]
@@ -618,15 +619,16 @@ class CoinJoinPlots:
 
             self.ax_utxo_entropy_from_outputs = self.axes[8]
             self.ax_utxo_entropy_from_outputs_inoutsize = self.axes[9]
-            self.ax_initial_final_utxos = self.axes[10]
+            self.ax_utxo_denom_anonscore = self.axes[10]
+            self.ax_initial_final_utxos = self.axes[11]
 
             # self.ax_mining_fees = ax11
 
-            self.ax_boltzmann_entropy_inoutsize = self.axes[11]
-            self.ax_boltzmann_entropy = self.axes[12]
-            self.ax_boltzmann_entropy_roundtime = self.axes[13]
-            self.ax_boltzmann_txcombinations = self.axes[14]
-            self.ax_boltzmann_entropy_roundtime_wallets = self.axes[15]
+            self.ax_boltzmann_entropy_inoutsize = self.axes[12]
+            self.ax_boltzmann_entropy = self.axes[13]
+            self.ax_boltzmann_entropy_roundtime = self.axes[14]
+            self.ax_boltzmann_txcombinations = self.axes[15]
+            self.ax_boltzmann_entropy_roundtime_wallets = self.axes[16]
 
     def savefig(self, save_file, experiment_name: str):
         self.plot.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
@@ -646,6 +648,7 @@ class CoinJoinPlots:
         self.ax_logs = None
         self.ax_utxo_denom_anonscore = None
         self.ax_num_inoutputs = None
+        self.ax_available_utxos = None
         self.ax_wallets_distrib = None
 
         self.ax_utxo_provided = None
@@ -681,7 +684,12 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
     coinjoins = cjtx_stats['coinjoins']
     address_wallet_mapping = cjtx_stats['address_wallet_mapping']
     wallets_info = cjtx_stats['wallets_info']
+    wallets_coins = cjtx_stats['wallets_coins']
     rounds = cjtx_stats['rounds']
+    cj_time = []
+    for cjtxid in coinjoins.keys():
+        cj_time.append({'txid':cjtxid, 'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")})
+    sorted_cj_time = sorted(cj_time,  key=lambda x: x['broadcast_time'])
 
     # Add placeholder for analytics computed
     if 'analysis' not in cjtx_stats.keys():
@@ -743,6 +751,49 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
         print(f'Total overmixed outputs: {num_overmixed_utxos} / {total_utxos} ({round(num_overmixed_utxos/total_utxos, 1)*100}%)')
     else:
         print('Total overmixed outputs: nothing found.')
+
+
+    # Compute number of new / mixed / outgoing utxos for each coinjoin
+    # unmixed_utxos_in_wallets ... # utxo not yet mixed even once (not output of any previous coinjoin)
+    # mixed_utxos_in_wallets ... # utxo mixed at least once, but still mixed later on (input of some later coinjoin)
+    # finish_utxos_in_wallets ... # utxos not mixed in any subsequent coinjoin
+
+    # For each coinjoin, reconstruct set of coins available in wallets and eligible for mixing
+    # Use [round_start_time, broadcast_time] for more precise interval when coin is evaluated
+    for cjtx in [cjtx['txid'] for cjtx in sorted_cj_time]:
+        unmixed_utxos = []
+        mixed_utxos = []
+        finished_utxos = []
+        #cjtx_creation_time = coinjoins[cjtx]['round_start_time']
+        cjtx_creation_time = coinjoins[cjtx]['broadcast_time']
+
+        for wallet_name in wallets_coins.keys():
+            for coin in wallets_coins[wallet_name]:
+                # get coin destroy time - if not used by any tx, then set to year 9999
+                coin_destroy_time = '9999-01-25 09:44:48.000' if 'destroy_time' not in coin.keys() else coin['destroy_time']
+                if coin['create_time'] < cjtx_creation_time:
+                    if cjtx_creation_time <= coin_destroy_time:
+                        # Coin was available for mixing at coinjoin round registration time
+                        # Now identify if it was unmixed, already mixed but not enough (will be another coinjoin) or not mixed again
+                        if coin['txid'] not in coinjoins.keys():  # Coin's creating tx was not coinjoin => unmixed
+                            unmixed_utxos.append(coin)
+                        elif 'spentBy' in coin.keys() and coin['spentBy'] in coinjoins.keys() and coin['spentBy'] != cjtx:
+                            # Coin was already mixed (coming from coinjoin), but will be mixed again by future coinjoin
+                            mixed_utxos.append(coin)
+                        else:
+                            # Coin is either unspent till end of all coinjoins or was spent by non-coinjoin tx (later)
+                            # Present at a time, but not available for mixing
+                            finished_utxos.append(coin)
+                    else:
+                        # Coin was created, but also destroyed before this coinjoin time
+                        a = 5
+                else:
+                    # Coin was created only after this coinjoin
+                    a = 5
+
+        coinjoins[cjtx]['analysis2']['unmixed_utxos_in_wallets'] = unmixed_utxos
+        coinjoins[cjtx]['analysis2']['mixed_utxos_in_wallets'] = mixed_utxos
+        coinjoins[cjtx]['analysis2']['finished_utxos_in_wallets'] = finished_utxos
 
     #
     # Number of coinjoins per given time interval (e.g., hour or 10 minutes)
@@ -963,18 +1014,10 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
             cjplt.ax_utxo_provided.tick_params(axis='x', labelsize=2)
 
     #
-    # Transaction entropy analysis
+    # Number of inputs/outputs/wallets in coinjoins
     #
-    cj_time = []
-    for cjtxid in coinjoins.keys():
-        cj_time.append({'txid':cjtxid, 'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")})
-    sorted_cj_time = sorted(cj_time,  key=lambda x: x['broadcast_time'])
-
-    #
-    # Number of inputs and outputs in coinjoins
-    #
-    #outputs_data = [len(coinjoins[cjtx['txid']]['analysis']['processed']['outputs']) for cjtx in sorted_cj_time if 'analysis' in coinjoins[cjtx['txid']].keys()]
     outputs_data = [len(coinjoins[cjtx['txid']]['outputs']) for cjtx in sorted_cj_time]
+
     x = range(1, len(outputs_data))
     outputs_data_avg10 = sliding_window_average(outputs_data, 10)
     outputs_data_avg100 = sliding_window_average(outputs_data, 100)
@@ -1008,6 +1051,34 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots):
     cjtx_stats['analysis']['coinjoin_number_inputs_in_time'] = [list(range(0, len(inputs_data))), inputs_data]
     cjtx_stats['analysis']['coinjoin_number_outputs_in_time'] = [list(range(0, len(inputs_data))), outputs_data]
     cjtx_stats['analysis']['coinjoin_number_wallets_involved_in_time'] = [list(range(0, len(inputs_data))), num_wallets_in_time_data]
+
+    #
+    #  Number of txos of unmined/mixed/finished during start of given coinjoin
+    #
+    num_unmixed_utxos_per_cj = [len(coinjoins[cjtx['txid']]['analysis2']['unmixed_utxos_in_wallets']) for cjtx in sorted_cj_time]
+    num_mixed_data_per_cj = [len(coinjoins[cjtx['txid']]['analysis2']['mixed_utxos_in_wallets']) for cjtx in sorted_cj_time]
+    num_finished_data_per_cj = [len(coinjoins[cjtx['txid']]['analysis2']['finished_utxos_in_wallets']) for cjtx in sorted_cj_time]
+    if cjplt.ax_available_utxos:
+        bar_width = 0.1
+        categories = range(0, len(outputs_data))
+        cjplt.ax_available_utxos.bar(categories, num_unmixed_utxos_per_cj, bar_width,
+                                     label='unmixed', alpha=0.3, color='blue')
+        cjplt.ax_available_utxos.bar(categories, num_mixed_data_per_cj, bar_width, bottom=num_unmixed_utxos_per_cj,
+                                   label='mixed', color='orange', alpha=0.3)
+        cjplt.ax_available_utxos.bar(categories, num_finished_data_per_cj, bar_width,
+                                   bottom=np.array(num_unmixed_utxos_per_cj) + np.array(num_mixed_data_per_cj),
+                                   label='finished', color='green', alpha=0.3)
+        cjplt.ax_available_utxos.plot(categories, num_unmixed_utxos_per_cj, label='unmixed',
+                                      linewidth=3, color='blue', linestyle='--', alpha=0.3)
+        cjplt.ax_available_utxos.plot(categories, num_mixed_data_per_cj, label='mixed',
+                                     linewidth=3, color='orange', linestyle='-.', alpha=0.3)
+        cjplt.ax_available_utxos.plot(categories, num_finished_data_per_cj, label='finished',
+                                     linewidth=3, color='green', linestyle=':', alpha=0.3)
+
+        cjplt.ax_available_utxos.set_xlabel('Coinjoin in time')
+        cjplt.ax_available_utxos.set_ylabel('Number of txos')
+        cjplt.ax_available_utxos.legend()
+        cjplt.ax_available_utxos.set_title(f'Number of txos available in wallets when cjtx is starting registration (all transactions)\n{experiment_name}')
 
     #
     # Number of different wallets involved time
@@ -1985,7 +2056,7 @@ def visualize_cjtx_graph(cjtx_stats, cjtxid, address_wallet_mapping, graphdot):
 
 
 def load_wallets_info():
-    """
+    """load_wallets_info
     Loads information about wallets and their addresses using Wasabi RPC
     :return: dictionary for all loaded wallets with retrieved info
     """
@@ -2182,12 +2253,14 @@ def visualize_coinjoins_aggregated(cjtx_stats, base_path='', output_name='coinjo
     dot2.render(save_file, view=view_pdf)
 
 
-def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_docker_files):
+def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_docker_files, all_tx_db):
     wallets_file = os.path.join(base_path, "wallets_info.json")
+    wallets_coins_file = os.path.join(base_path, "wallets_coins.json")
+
     if load_wallet_info_via_rpc:
         print("Loading current wallets info from WasabiWallet RPC")
         # Load wallets info via WasabiWallet RPC
-        wallets_info, wallet_coins_all, wallet_coins_unspent = load_wallets_info()
+        wallets_info, wallets_coins_all, wallet_coins_unspent = load_wallets_info()
         # Save wallets info into json
         print("Saving current wallets into {}".format(wallets_file))
         with open(wallets_file, "w") as file:
@@ -2198,7 +2271,8 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
         # List folders corresponding to wallets
         base_path_wasabi = os.path.join(base_path, 'data')
         files = os.listdir(base_path_wasabi) if os.path.exists(base_path_wasabi) else print(f'Path {base_path_wasabi} does not exist')
-        wallets_info = {}
+        wallets_info = {}   # Information about wallet keys ('listkeys' RPC)
+        wallets_coins_all = {}     # Information about wallet coins ('listcoins' RPC)
         # Load information from all wallet directories
         anonymity_by_address = {}
         for file in files:
@@ -2218,6 +2292,8 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
                         for coin in parsed_coins:
                             anonymity_by_address[coin.address] = coin
 
+                    wallets_coins_all[wallet_name] = wallet_coins
+
                 # Wallet addresses (as obtained by 'listkeys' RPC) - now extracted from 'keys.json' file
                 with open(os.path.join(target_base_path, 'keys.json'), "r") as file:
                     wallet_keys = json.load(file)
@@ -2235,6 +2311,32 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
                 #     wallet_addresses.append(json_representation)
                 # wallets_info[wallet_name] = wallet_addresses
 
+        # Sometimes, all_tx_db is not complete for all logged coinjoins
+        # Create artificial record for some future time
+        highest_known_mine_time = max([all_tx_db[txid]['mine_time'] for txid in all_tx_db.keys()])
+        datetime_obj = datetime.strptime(highest_known_mine_time, "%Y-%m-%d %H:%M:%S.%f")
+        datetime_obj = datetime_obj + timedelta(minutes=10)
+        highest_known_mine_time_next = datetime_obj.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
+        # Update coins with information about their lifetime information
+        for wallet_name in wallets_coins_all.keys():
+            for coin in wallets_coins_all[wallet_name]:
+                if coin['txid'] in all_tx_db.keys():
+                    coin['block_hash'] = all_tx_db[coin['txid']]['hash']
+                    coin['create_time'] = all_tx_db[coin['txid']]['mine_time']
+                else:
+                    # Synthetic block info in case of missing block
+                    coin['block_hash'] = 'synthetic_block'
+                    coin['create_time'] = highest_known_mine_time_next
+
+                if 'spentBy' in coin.keys():
+                    if coin['spentBy'] in all_tx_db.keys():
+                        coin['destroy_time'] = all_tx_db[coin['spentBy']]['mine_time']
+                    else:
+                        # Synthetic destroy time in case of missing block
+                        coin['destroy_time'] = highest_known_mine_time_next
+
+
         # Serialize parsed coins for all wallets into 'serialized_annonymity.json' file
         # (as expected by subsequent analysis)
         list_of_coins = list(anonymity_by_address.values())
@@ -2248,16 +2350,23 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
         print("Saving current wallets into {}".format(wallets_file))
         with open(wallets_file, "w") as file:
             file.write(json.dumps(dict(sorted(wallets_info.items())), indent=4))
+        # Save wallets coins into json
+        wallets_coins_file = os.path.join(base_path, 'wallets_coins.json')
+        print("Saving current wallets coins {}".format(wallets_coins_file))
+        with open(wallets_coins_file, "w") as file:
+            file.write(json.dumps(dict(sorted(wallets_coins_all.items())), indent=4))
     else:
         print("Loading current wallets info from {}".format(wallets_file))
         print("WARNING: wallets info may be outdated, if wallets were active after information retrieval via RPC "
               "(watch for {} wallet name string in results).".format(UNKNOWN_WALLET_STRING))
         with open(wallets_file, "r") as file:
             wallets_info = json.load(file)
+        with open(wallets_coins_file, "r") as file:
+            wallets_coins_all = json.load(file)
 
     print("Wallets info loaded.")
 
-    return wallets_info
+    return wallets_info, wallets_coins_all
 
 
 def fix_coordinator_wallet_addresses(cjtx_stats):
@@ -2392,10 +2501,13 @@ def load_tx_database_from_btccore(base_tx_path):
     tx_db = {}
     files = list_files(base_tx_path, '.json')
     for tx_file in files:  # Each file corresponds to whole block - may be multiple transactions
-        with open(tx_file, "r") as file:
+        with (open(tx_file, "r") as file):
             block_txs = json.load(file)
             for tx_info in block_txs['tx']:
+                datetime_obj = datetime.utcfromtimestamp(block_txs['time'])
+                tx_info['mine_time'] = datetime_obj.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
                 tx_db[tx_info['txid']] = tx_info
+
 
             # # Create a Transaction object from the raw hex
             # tx = Transaction.parse(raw_tx['txRawHex'], False, 'regtest')
@@ -2518,7 +2630,8 @@ def process_experiment(args):
 
         # Load wallets info
         cjtx_stats = {}
-        cjtx_stats['wallets_info'] = obtain_wallets_info(WASABIWALLET_DATA_DIR, LOAD_WALLETS_INFO_VIA_RPC, LOAD_TXINFO_FROM_DOCKER_FILES)
+        cjtx_stats['wallets_info'], cjtx_stats['wallets_coins'] = (
+            obtain_wallets_info(WASABIWALLET_DATA_DIR, LOAD_WALLETS_INFO_VIA_RPC, LOAD_TXINFO_FROM_DOCKER_FILES, RAW_TXS_DB))
 
         # Parse conjoins from logs
         coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'WalletWasabi/Backend/Logs.txt')
@@ -2854,11 +2967,11 @@ def generate_aggregated_visualization(paths_to_process: list):
         assert len(experiment_paths_sorted) == len(experiment_paths)
 
         # Visualize data batched based on the number of wallets (only selected types of graphs which will not overload the plot)
-        graphs = ['ax_num_inoutputs', 'ax_utxo_entropy_from_outputs', 'ax_utxo_entropy_from_outputs_inoutsize', 'ax_utxo_denom_anonscore']
+        graphs = ['ax_num_inoutputs', 'ax_available_utxos', 'ax_utxo_entropy_from_outputs', 'ax_utxo_entropy_from_outputs_inoutsize', 'ax_utxo_denom_anonscore']
         visualize_aggregated_graphs(experiment_paths_sorted, graphs, base_path, True)
 
         # Visualize data of given type into single graph
-        graphs = ['ax_num_inoutputs', 'ax_wallets_distrib', 'ax_utxo_provided', 'ax_anonscore_distrib_wallets',
+        graphs = ['ax_num_inoutputs', 'ax_available_utxos', 'ax_wallets_distrib', 'ax_utxo_provided', 'ax_anonscore_distrib_wallets',
                   'ax_anonscore_from_outputs', 'ax_utxo_entropy_from_outputs', 'ax_utxo_denom_anonscore',
                   'ax_utxo_entropy_from_outputs_inoutsize', 'ax_initial_final_utxos']
         visualize_aggregated_graphs(experiment_paths_sorted, graphs, base_path, False)
@@ -3088,6 +3201,9 @@ if __name__ == "__main__":
                          os.path.join(super_base_path, 'grid_uniformsum-static-1utxo'),
                          os.path.join(super_base_path, 'grid_uniformsum-static-5utxo'),
                          os.path.join(super_base_path, 'grid_uniformsum-static-30utxo'),
+                         os.path.join(super_base_path, 'grid_pareto-static-1utxo'),
+                         os.path.join(super_base_path, 'grid_pareto-static-5utxo'),
+                         os.path.join(super_base_path, 'grid_pareto-static-30utxo'),
                          os.path.join(super_base_path, 'grid_pareto-static-1utxo')]
 
 
