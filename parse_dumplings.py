@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timedelta
 from enum import Enum
 from collections import defaultdict
+from pathlib import Path
 
 import numpy as np
 from jsonpickle import json
@@ -96,21 +97,38 @@ def extract_txid_from_inout_string(inout_string):
         assert False, f'Invalid inout string {inout_string}'
 
 
-def load_coinjoin_stats_from_file(target_file):
+def get_synthetic_address(create_txid, vout_index):
+    """
+    Synthetic unique address from creating transaction and its vout index
+    :param create_txid: tx which created this output
+    :param vout_index: index of output
+    :return: formatted string with synthetic address
+    """
+    return f'synbc1_{create_txid}_{vout_index}'
+
+
+def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date: str = None):
     cj_stats = {}
     logging.debug(f'Processing file {target_file}')
     with open(target_file, "r") as file:
         for line in file.readlines():
             parts = line.split(VerboseTransactionInfoLineSeparator)
             record = {}
+
+            # Be careful, broadcast time and blocktime can be significantly different
+            block_time = None if parts[3] is None else datetime.fromtimestamp(int(parts[3]))
+            record['broadcast_time'] = block_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+            if start_date and stop_date:
+                if record['broadcast_time'] < start_date or record['broadcast_time'] > stop_date:
+                    # Skip this record as it is outside of observed period
+                    continue
+
             tx_id = None if parts[0] is None else parts[0]
             record['txid'] = tx_id
             block_hash = None if parts[1] is None else parts[1]
             record['block_hash'] = block_hash
             block_index = None if parts[2] is None else int(parts[2])
             record['block_index'] = block_index
-            block_time = None if parts[3] is None else datetime.fromtimestamp(int(parts[3]))
-            record['broadcast_time'] = block_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]  # Be careful, broadcast time and blocktime can be significantly different
 
             inputs = [input.strip('{') for input in parts[4].split(VerboseInOutInfoInLineSeparator)] if parts[4] else None
             record['inputs'] = {}
@@ -125,8 +143,10 @@ def load_coinjoin_stats_from_file(target_file):
                 this_input['spending_tx'] = get_output_name_string(segments[0], segments[1])
                 this_input['value'] = int(segments[2])
                 this_input['wallet_name'] = 'real_unknown'
-                this_input['address'] = segments[3]
+                this_input['script'] = segments[3]
                 this_input['script_type'] = segments[4]
+                # TODO: generate proper address from script, now replaced by synthetic
+                this_input['address'] = get_synthetic_address(segments[0], segments[1])
 
                 record['inputs'][f'{index}'] = this_input
                 index += 1
@@ -139,8 +159,9 @@ def load_coinjoin_stats_from_file(target_file):
                 this_output = {}
                 this_output['value'] = int(segments[0])
                 this_output['wallet_name'] = 'real_unknown'
-                this_output['address'] = segments[1]  # BUGBUG: this is not address but likely script itself - needs for decoding
+                this_output['script'] = segments[1]
                 this_output['script_type'] = segments[2]
+                this_output['address'] = get_synthetic_address(tx_id, index)  # TODO: Compute proper address from script
 
                 record['outputs'][f'{index}'] = this_output
                 index += 1
@@ -223,7 +244,55 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend):
 
 def extract_wallets_info(data):
     wallets_info = {}
+    wallets_coins_info = {}
     txs_data = data['coinjoins']
+
+    if len(txs_data) == 0:
+        return wallets_info, wallets_coins_info
+
+    # Compute artificial min and max times
+    min_cj_time = min([txs_data[cjtxid]['broadcast_time'] for cjtxid in txs_data.keys()])  # Time of the earliest coinjoin
+    max_cj_time = max([txs_data[cjtxid]['broadcast_time'] for cjtxid in txs_data.keys()])  # Time of the latest coinjoin
+    # Use it as the earliest creation of coin
+    datetime_obj = datetime.strptime(min_cj_time, "%Y-%m-%d %H:%M:%S.%f")
+    datetime_obj = datetime_obj - timedelta(minutes=60)
+    artificial_min_cj_time = datetime_obj.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    datetime_obj = datetime.strptime(max_cj_time, "%Y-%m-%d %H:%M:%S.%f")
+    datetime_obj = datetime_obj + timedelta(minutes=60)
+    artificial_max_cj_time = datetime_obj.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
+    # 1. Extract all information from outputs and create also corresponding coins
+    for cjtxid in txs_data.keys():
+        for index in txs_data[cjtxid]['outputs'].keys():
+            target_addr = txs_data[cjtxid]['outputs'][index]['address']
+            wallet_name = txs_data[cjtxid]['outputs'][index]['wallet_name']
+            if wallet_name not in wallets_info.keys():
+                wallets_info[wallet_name] = {}
+                wallets_coins_info[wallet_name] = []
+            wallets_info[wallet_name][target_addr] = {'address': target_addr}
+
+            # Create new coin with information derived from output and transaction info
+            coin = {'txid': cjtxid, 'index': index, 'amount': txs_data[cjtxid]['outputs'][index]['value'],
+                    'anonymityScore': -1, 'confirmed': True, 'confirmations': 1, 'keyPath': '', 'address': target_addr,
+                    'block_hash': txs_data[cjtxid]['block_hash'], 'create_time': txs_data[cjtxid]['broadcast_time'],
+                    'wallet_name': wallet_name}
+            if 'spend_by_tx' in txs_data[cjtxid]['outputs'][index].keys():
+                spent_tx, spend_index = extract_txid_from_inout_string(txs_data[cjtxid]['outputs'][index]['spend_by_tx'])
+                coin['spentBy'] = spent_tx
+                if spent_tx in txs_data.keys():
+                    coin['destroy_time'] = txs_data[spent_tx]['broadcast_time']
+            wallets_coins_info[wallet_name].append(coin)
+
+    num_outputs = sum([len(txs_data[cjtxid]['outputs']) for cjtxid in txs_data.keys()])
+    num_coins = sum([len(wallets_coins_info[wallet_name]) for wallet_name in wallets_coins_info.keys()])
+    assert num_outputs == num_coins, f'Mismatch in number of identified coins {num_outputs} vs {num_coins}'
+
+    # 2. Extract all information from inputs and update corresponding coins (destroy_time)
+    all_coins = []
+    for wallet_name in wallets_coins_info.keys():
+        all_coins.extend(wallets_coins_info[wallet_name])
+    coins = {coin['address']: coin for coin in all_coins}
+
     for cjtxid in txs_data.keys():
         for index in txs_data[cjtxid]['inputs'].keys():
             target_addr = txs_data[cjtxid]['inputs'][index]['address']
@@ -231,13 +300,34 @@ def extract_wallets_info(data):
             if wallet_name not in wallets_info.keys():
                 wallets_info[wallet_name] = {}
             wallets_info[wallet_name][target_addr] = {'address': target_addr}
-        for index in txs_data[cjtxid]['outputs'].keys():
-            target_addr = txs_data[cjtxid]['outputs'][index]['address']
-            wallet_name = txs_data[cjtxid]['outputs'][index]['wallet_name']
-            if wallet_name not in wallets_info.keys():
-                wallets_info[wallet_name] = {}
-            wallets_info[wallet_name][target_addr] = {'address': target_addr}
-    return wallets_info
+
+            # Update coin destroy time for this specific input (if coin already exists)
+            if target_addr not in coins.keys():
+                # Coin record was not found in any of the previous outputs of all analyzed transactions,
+                # Create new coin with information derived from output and transaction info
+                # Coin creation time set to artificial_min_cj_time . TODO: change to real value from blockchain
+                txid, vout = extract_txid_from_inout_string(txs_data[cjtxid]['inputs'][index]['spending_tx'])
+                coin = {'txid': txid, 'index': vout, 'amount': txs_data[cjtxid]['inputs'][index]['value'],
+                        'anonymityScore': -1, 'confirmed': True, 'confirmations': 1, 'keyPath': '',
+                        'address': target_addr, 'block_hash': txs_data[cjtxid]['block_hash'],
+                        'create_time': artificial_min_cj_time, 'wallet_name': wallet_name}
+                coin['destroy_time'] = txs_data[cjtxid]['broadcast_time']
+                coin['spentBy'] = cjtxid
+                coins[target_addr] = coin
+            else:
+                assert coins[target_addr]['amount'] == txs_data[cjtxid]['inputs'][index]['value'], f'Inconsistent value found for {target_addr}'
+                # We have found the coin, update destroy_time
+                coins[target_addr]['destroy_time'] = txs_data[cjtxid]['broadcast_time']
+                assert coins[target_addr]['spentBy'] == cjtxid, f'Inconsistent spentBy mapping for {coins[target_addr]['address']}'
+
+    wallets_coins_info_updated = {}
+    for address in coins.keys():
+        coin = coins[address]
+        if coin['wallet_name'] not in wallets_coins_info_updated.keys():
+            wallets_coins_info_updated[coin['wallet_name']] = []
+        wallets_coins_info_updated[coin['wallet_name']].append(coin)
+
+    return wallets_info, wallets_coins_info_updated
 
 
 def extract_rounds_info(data):
@@ -284,15 +374,16 @@ def compute_mix_postmix_link(data: dict):
     return data
 
 
-def load_coinjoins(target_path: str, mix_filename: str, postmix_filename: str, premix_filename: str =None) -> dict:
+def load_coinjoins(target_path: str, mix_filename: str, postmix_filename: str, premix_filename: str,
+                   start_date: str, stop_date: str) -> dict:
     # All mixes are having mixing coinjoins and postmix spends
     data = {'rounds': {}, 'filename': os.path.join(target_path, mix_filename),
-            'coinjoins': load_coinjoin_stats_from_file(os.path.join(target_path, mix_filename)),
-            'postmix': load_coinjoin_stats_from_file(os.path.join(target_path, postmix_filename))}
+            'coinjoins': load_coinjoin_stats_from_file(os.path.join(target_path, mix_filename), start_date, stop_date),
+            'postmix': load_coinjoin_stats_from_file(os.path.join(target_path, postmix_filename), start_date, stop_date)}
 
     # Only Samourai Whirlpool is having premix tx (TX0)
     if premix_filename is not None:
-        data['premix'] = load_coinjoin_stats_from_file(os.path.join(target_path, premix_filename))
+        data['premix'] = load_coinjoin_stats_from_file(os.path.join(target_path, premix_filename), start_date, stop_date)
         for txid in list(data['premix'].keys()):
             if is_whirlpool_coinjoin_tx(data['premix'][txid]):
                 # Misclassified mix transaction, move between groups
@@ -303,7 +394,7 @@ def load_coinjoins(target_path: str, mix_filename: str, postmix_filename: str, p
     # Set spending transactions also between mix and postmix
     data = compute_mix_postmix_link(data)
 
-    data['wallets_info'] = extract_wallets_info(data)
+    data['wallets_info'], data['wallets_coins'] = extract_wallets_info(data)
     data['rounds'] = extract_rounds_info(data)
 
     return data
@@ -453,13 +544,17 @@ def analyze_coinjoin_blocks(data):
 
 def visualize_coinjoins_in_time(data, base_path, experiment_name):
     fig = plt.figure(figsize=(12, 10))
-    ax_coinjoins = fig.add_subplot(1, 1, 1)
+    ax_num_coinjoins = fig.add_subplot(2, 2, 1)
+    ax_1 = fig.add_subplot(2, 2, 2)
+    ax2 = fig.add_subplot(2, 2, 3)
+    ax3 = fig.add_subplot(2, 2, 4)
+
 
     #
     # Number of coinjoins per given time interval (e.g., day)
     #
     coinjoins = data['coinjoins']
-    SLOT_WIDTH_SECONDS = 600 * 24 * 7
+    SLOT_WIDTH_SECONDS = 3600 * 24 * 7
     broadcast_times = [datetime.strptime(coinjoins[item]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for item in
                        coinjoins.keys()]
     experiment_start_time = min(broadcast_times)
@@ -475,19 +570,19 @@ def visualize_coinjoins_in_time(data, base_path, experiment_name):
         cjtx_in_hours[cjtx_hour].append(cjtx)
     if cjtx_in_hours[len(cjtx_in_hours.keys()) - 1] == []:  # remove last slot if no coinjoins are available there
         del cjtx_in_hours[len(cjtx_in_hours.keys()) - 1]
-    ax_coinjoins.plot([len(cjtx_in_hours[cjtx_hour]) for cjtx_hour in cjtx_in_hours.keys()],
+    ax_num_coinjoins.plot([len(cjtx_in_hours[cjtx_hour]) for cjtx_hour in cjtx_in_hours.keys()],
                       label='All coinjoins finished', color='green')
-    ax_coinjoins.legend()
+    ax_num_coinjoins.legend()
     x_ticks = []
     for slot in cjtx_in_hours.keys():
         x_ticks.append(
             (experiment_start_time + slot * timedelta(seconds=SLOT_WIDTH_SECONDS)).strftime("%Y-%m-%d %H:%M:%S"))
-    ax_coinjoins.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
+    ax_num_coinjoins.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
     num_xticks = 30
     plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=num_xticks))
-    ax_coinjoins.set_ylim(0)
-    ax_coinjoins.set_ylabel('Number of coinjoin transactions')
-    ax_coinjoins.set_title('Number of coinjoin transactions in given time period')
+    ax_num_coinjoins.set_ylim(0)
+    ax_num_coinjoins.set_ylabel('Number of coinjoin transactions')
+    ax_num_coinjoins.set_title('Number of coinjoin transactions in given time period')
 
     plt.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
     plt.subplots_adjust(bottom=0.1, wspace=0.1, hspace=0.5)
@@ -559,8 +654,8 @@ def visualize_coinjoins(data, events, base_path, experiment_name):
     visualize_liquidity_in_time(events, base_path, experiment_name)
 
 
-def process_coinjoins(target_path, mix_filename, postmix_filename, premix_filename=None):
-    data = load_coinjoins(target_path, mix_filename, postmix_filename, premix_filename)
+def process_coinjoins(target_path, mix_filename, postmix_filename, premix_filename, start_date: str, stop_date: str):
+    data = load_coinjoins(target_path, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
 
     SM.print('*******************************************')
     SM.print(f'{mix_filename} coinjoins: {len(data['coinjoins'])}')
@@ -609,29 +704,80 @@ def filter_liquidity_events(data):
     return events
 
 
-def process_and_save_coinjoins(mix_id: str, target_path: os.path, mix_filename: str, postmix_filename: str, premix_filename: str=None):
+def process_and_save_coinjoins(mix_id: str, target_path: os.path, mix_filename: str, postmix_filename: str,
+                               premix_filename: str, start_date: str, stop_date: str, target_save_path: os.path=None):
+    if not target_save_path:
+        target_save_path = target_path
     # Process and save full conjoin information
-    data = process_coinjoins(target_path, mix_filename, postmix_filename, premix_filename)
+    data = process_coinjoins(target_path, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
     if SAVE_BASE_FILES:
-        with open(os.path.join(target_path, f'{mix_id}_txs.json'), "w") as file:
+        with open(os.path.join(target_save_path, f'coinjoin_tx_info.json'), "w") as file:
             file.write(json.dumps(dict(sorted(data.items())), indent=4))
 
     # Filter only liquidity-relevant events to maintain smaller file
     events = filter_liquidity_events(data)
-    with open(os.path.join(target_path, f'{mix_id}_events.json'), "w") as file:
+    with open(os.path.join(target_save_path, f'{mix_id}_events.json'), "w") as file:
         file.write(json.dumps(dict(sorted(events.items())), indent=4))
 
     # Visualize coinjoins
-    visualize_coinjoins(data, events, target_path, mix_filename)
+    visualize_coinjoins(data, events, target_save_path, mix_filename)
+
+    return data
+
+
+def process_and_save_intervals(mix_id: str, target_path: os.path, start_date: str, stop_date: str, mix_filename: str,
+                               postmix_filename: str, premix_filename: str=None):
+
+    # Create directory structure with files split per month (around 1000 subsequent coinjoins)
+
+    # Find first day of a month when first coinjoin ocured
+    start_date_obj = datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S.%f")
+    start_date = datetime(start_date_obj.year, start_date_obj.month, 1)
+
+    # Month After the last coinjoin occured
+    last_date_obj = datetime.strptime(stop_date, "%Y-%m-%d %H:%M:%S.%f")
+    last_date_obj = last_date_obj + timedelta(days=32)
+    last_date_str = last_date_obj.strftime("%Y-%m-%d %H:%M:%S")
+
+    # Previously used stop date (will become start date for next interval)
+    last_stop_date = start_date
+    last_stop_date_str = last_stop_date.strftime("%Y-%m-%d %H:%M")
+
+    # Current stop date
+    current_stop_date = start_date + timedelta(days=32)
+    current_stop_date = datetime(current_stop_date.year, current_stop_date.month, 1)
+    current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M")
+
+    while current_stop_date_str <= last_date_str:
+        print(f'Processing interval {last_stop_date_str} - {current_stop_date_str}')
+        interval_path = os.path.join(target_path, f'{last_stop_date_str.replace(':', '-')}--{current_stop_date_str.replace(':', '-')}_unknown-static-100-1utxo')
+        if not os.path.exists(interval_path):
+            os.makedirs(interval_path.replace('\\', '/'))
+            os.makedirs(os.path.join(interval_path, 'data').replace('\\', '/'))
+        process_and_save_coinjoins('wasabi2_test', target_path, 'wasabi2_mix_test.txt',
+                                          'wasabi2_postmix_test.txt', None,
+                                          last_stop_date_str, current_stop_date_str, interval_path)
+        # Move to the next month
+        last_stop_date_str = current_stop_date_str
+
+        current_stop_date = current_stop_date + timedelta(days=32)
+        current_stop_date = datetime(current_stop_date.year, current_stop_date.month, 1)
+        current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M:%S")
+
 
 
 if __name__ == "__main__":
-    FULL_TX_SET = True
-    SAVE_BASE_FILES = False
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20231113\\'
+    FULL_TX_SET = False
+    SAVE_BASE_FILES = True
+    #target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20231113\\'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240215\\'
     target_path = os.path.join(target_base_path, 'Scanner')
     SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES={SAVE_BASE_FILES}')
 
+    process_and_save_intervals('wasabi2_test', target_path, '2022-06-18 01:38:07.000', '2024-02-15 01:38:07.000',
+                               'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt')
+
+    exit(1)
     if FULL_TX_SET:
         # All transactions
         process_and_save_coinjoins('whirlpool', target_path, 'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt')
@@ -639,9 +785,18 @@ if __name__ == "__main__":
         process_and_save_coinjoins('wasabi2', target_path, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt')
     else:
         # Smaller set for debugging
-        process_and_save_coinjoins('whirlpool_test', target_path, 'sam_mix_test.txt', 'sam_postmix_test.txt', 'sam_premix_test.txt')
-        process_and_save_coinjoins('wasabi_test', target_path, 'wasabi_mix_test.txt', 'wasabi_postmix_test.txt')
-        process_and_save_coinjoins('wasabi2_test', target_path, 'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt')
+        # process_and_save_coinjoins('whirlpool_test', target_path, True, 'sam_mix_test.txt', 'sam_postmix_test.txt', 'sam_premix_test.txt')
+        # process_and_save_coinjoins('wasabi_test', target_path, True, 'wasabi_mix_test.txt', 'wasabi_postmix_test.txt')
+        data = process_and_save_coinjoins('wasabi2_test', target_path,'wasabi2_mix_test.txt',
+                                          'wasabi2_postmix_test.txt', None, None, None)
+        first_coinjoin_date_str = min([data['coinjoins'][cjtx]['broadcast_time'] for cjtx in data['coinjoins'].keys()])
+        last_coinjoin_date_str = max([data['coinjoins'][cjtx]['broadcast_time'] for cjtx in data['coinjoins'].keys()])
+        process_and_save_intervals('wasabi2_test', target_path, first_coinjoin_date_str, last_coinjoin_date_str,
+                                   'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt')
+
+        # 2022-06-18 01:38:07.000
+        # 2024-02-15 01:38:07.000
+
 
     print('### SUMMARY #############################')
     SM.print_summary()
