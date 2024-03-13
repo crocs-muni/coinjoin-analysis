@@ -2,7 +2,7 @@ import copy
 import os
 from datetime import datetime, timedelta
 from enum import Enum
-from collections import defaultdict
+from collections import defaultdict, Counter
 from pathlib import Path
 
 import numpy as np
@@ -23,6 +23,8 @@ SATS_IN_BTC = 100000000
 # If False, only warning is printed, but execution continues.
 # TODO: Systematic solution requires merging and resolving different cluster ids
 CLUSTER_ID_CHECK_HARD_ASSERT = False
+
+SAVE_BASE_FILES_JSON = False
 
 
 class ClusterIndex:
@@ -104,7 +106,7 @@ def get_synthetic_address(create_txid, vout_index):
     :param vout_index: index of output
     :return: formatted string with synthetic address
     """
-    return f'synbc1_{create_txid}_{vout_index}'
+    return f'synbc1{create_txid[:16]}_{vout_index}'
 
 
 def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date: str = None):
@@ -143,8 +145,8 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                 this_input['spending_tx'] = get_output_name_string(segments[0], segments[1])
                 this_input['value'] = int(segments[2])
                 this_input['wallet_name'] = 'real_unknown'
-                this_input['script'] = segments[3]
-                this_input['script_type'] = segments[4]
+                #this_input['script'] = segments[3]
+                #this_input['script_type'] = segments[4]
                 # TODO: generate proper address from script, now replaced by synthetic
                 this_input['address'] = get_synthetic_address(segments[0], segments[1])
 
@@ -273,9 +275,9 @@ def extract_wallets_info(data):
 
             # Create new coin with information derived from output and transaction info
             coin = {'txid': cjtxid, 'index': index, 'amount': txs_data[cjtxid]['outputs'][index]['value'],
-                    'anonymityScore': -1, 'confirmed': True, 'confirmations': 1, 'keyPath': '', 'address': target_addr,
-                    'block_hash': txs_data[cjtxid]['block_hash'], 'create_time': txs_data[cjtxid]['broadcast_time'],
+                    'anonymityScore': -1, 'address': target_addr, 'create_time': txs_data[cjtxid]['broadcast_time'],
                     'wallet_name': wallet_name}
+            #coin.update({'confirmed': True, 'confirmations': 1, 'keyPath': '', 'block_hash': txs_data[cjtxid]['block_hash']})
             if 'spend_by_tx' in txs_data[cjtxid]['outputs'][index].keys():
                 spent_tx, spend_index = extract_txid_from_inout_string(txs_data[cjtxid]['outputs'][index]['spend_by_tx'])
                 coin['spentBy'] = spent_tx
@@ -308,9 +310,9 @@ def extract_wallets_info(data):
                 # Coin creation time set to artificial_min_cj_time . TODO: change to real value from blockchain
                 txid, vout = extract_txid_from_inout_string(txs_data[cjtxid]['inputs'][index]['spending_tx'])
                 coin = {'txid': txid, 'index': vout, 'amount': txs_data[cjtxid]['inputs'][index]['value'],
-                        'anonymityScore': -1, 'confirmed': True, 'confirmations': 1, 'keyPath': '',
-                        'address': target_addr, 'block_hash': txs_data[cjtxid]['block_hash'],
-                        'create_time': artificial_min_cj_time, 'wallet_name': wallet_name}
+                        'anonymityScore': -1, 'address': target_addr, 'create_time': artificial_min_cj_time,
+                        'wallet_name': wallet_name}
+                # coin.update({'confirmed': True, 'confirmations': 1, 'keyPath': '', 'block_hash': txs_data[cjtxid]['block_hash']})
                 coin['destroy_time'] = txs_data[cjtxid]['broadcast_time']
                 coin['spentBy'] = cjtxid
                 coins[target_addr] = coin
@@ -318,7 +320,10 @@ def extract_wallets_info(data):
                 assert coins[target_addr]['amount'] == txs_data[cjtxid]['inputs'][index]['value'], f'Inconsistent value found for {target_addr}'
                 # We have found the coin, update destroy_time
                 coins[target_addr]['destroy_time'] = txs_data[cjtxid]['broadcast_time']
-                assert coins[target_addr]['spentBy'] == cjtxid, f'Inconsistent spentBy mapping for {coins[target_addr]['address']}'
+                if 'spentBy' not in coins[target_addr].keys():
+                    coins[target_addr]['spentBy'] = cjtxid
+                else:
+                    assert coins[target_addr]['spentBy'] == cjtxid, f'Inconsistent spentBy mapping for {coins[target_addr]['address']}'
 
     wallets_coins_info_updated = {}
     for address in coins.keys():
@@ -542,14 +547,7 @@ def analyze_coinjoin_blocks(data):
     SM.print(f'  {get_ratio_string(len(filtered_dict), len(data['coinjoins']))} coinjoins in same block')
 
 
-def visualize_coinjoins_in_time(data, base_path, experiment_name):
-    fig = plt.figure(figsize=(12, 10))
-    ax_num_coinjoins = fig.add_subplot(2, 2, 1)
-    ax_1 = fig.add_subplot(2, 2, 2)
-    ax2 = fig.add_subplot(2, 2, 3)
-    ax3 = fig.add_subplot(2, 2, 4)
-
-
+def visualize_coinjoins_in_time(data, ax_num_coinjoins):
     #
     # Number of coinjoins per given time interval (e.g., day)
     #
@@ -568,7 +566,8 @@ def visualize_coinjoins_in_time(data, base_path, experiment_name):
         timestamp = datetime.strptime(coinjoins[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")
         cjtx_hour = int((timestamp - slot_start_time).total_seconds() // SLOT_WIDTH_SECONDS)
         cjtx_in_hours[cjtx_hour].append(cjtx)
-    if cjtx_in_hours[len(cjtx_in_hours.keys()) - 1] == []:  # remove last slot if no coinjoins are available there
+    # remove last slot(s) if no coinjoins are available there
+    while cjtx_in_hours[len(cjtx_in_hours.keys()) - 1] == []:
         del cjtx_in_hours[len(cjtx_in_hours.keys()) - 1]
     ax_num_coinjoins.plot([len(cjtx_in_hours[cjtx_hour]) for cjtx_hour in cjtx_in_hours.keys()],
                       label='All coinjoins finished', color='green')
@@ -576,7 +575,7 @@ def visualize_coinjoins_in_time(data, base_path, experiment_name):
     x_ticks = []
     for slot in cjtx_in_hours.keys():
         x_ticks.append(
-            (experiment_start_time + slot * timedelta(seconds=SLOT_WIDTH_SECONDS)).strftime("%Y-%m-%d %H:%M:%S"))
+            (experiment_start_time + slot * timedelta(seconds=SLOT_WIDTH_SECONDS)).strftime("%Y-%m-%d"))
     ax_num_coinjoins.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
     num_xticks = 30
     plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=num_xticks))
@@ -584,25 +583,17 @@ def visualize_coinjoins_in_time(data, base_path, experiment_name):
     ax_num_coinjoins.set_ylabel('Number of coinjoin transactions')
     ax_num_coinjoins.set_title('Number of coinjoin transactions in given time period')
 
-    plt.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
-    plt.subplots_adjust(bottom=0.1, wspace=0.1, hspace=0.5)
-    save_file = os.path.join(base_path, f'{experiment_name}_coinjoin_stats.png')
-    plt.savefig(save_file, dpi=300)
-    plt.close()
-    print('Basic coinjoins statistics saved into {}'.format(save_file))
 
-
-def visualize_liquidity_in_time(events, base_path, experiment_name):
-    fig = plt.figure(figsize=(12, 10))
-    ax_coinjoins = fig.add_subplot(1, 1, 1)
-
+def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_boxplot, ax_output_values_boxplot,
+                                ax_input_values_bar, ax_output_values_bar, ax_burn_time, legend_labels: list):
     #
     # Number of coinjoins per given time interval (e.g., day)
     #
     coinjoins = events
     SLOT_WIDTH_SECONDS = 600 * 24 * 7
-    broadcast_times = [datetime.strptime(coinjoins[item]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for item in
-                       coinjoins.keys()]
+    broadcast_times_cjtxs = {item: datetime.strptime(coinjoins[item]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for item in
+                       coinjoins.keys()}
+    broadcast_times = list(broadcast_times_cjtxs.values())
     experiment_start_time = min(broadcast_times)
     slot_start_time = experiment_start_time
     slot_last_time = max(broadcast_times)
@@ -610,52 +601,195 @@ def visualize_liquidity_in_time(events, base_path, experiment_name):
     num_slots = int(diff_seconds // SLOT_WIDTH_SECONDS)
     inputs_cjtx_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
     outputs_cjtx_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
+    inputs_remixed_cjtx_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
+    inputs_values_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
+    outputs_values_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
+    inputs_burned_time_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
     for cjtx in coinjoins.keys():  # go over all coinjoin transactions
         timestamp = datetime.strptime(coinjoins[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")
         cjtx_hour = int((timestamp - slot_start_time).total_seconds() // SLOT_WIDTH_SECONDS)
         inputs_cjtx_in_slot[cjtx_hour].append(len(coinjoins[cjtx]['inputs']))
         outputs_cjtx_in_slot[cjtx_hour].append(len(coinjoins[cjtx]['outputs']))
-    if not inputs_cjtx_in_slot[len(inputs_cjtx_in_slot.keys()) - 1]:  # remove last slot if no coinjoins are available there
+        inputs_remixed_cjtx_in_slot[cjtx_hour].append(len([coinjoins[cjtx]['inputs'][index] for index in coinjoins[cjtx]['inputs'].keys()
+                                                           if coinjoins[cjtx]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name]))
+        inputs_values_in_slot[cjtx_hour].extend([coinjoins[cjtx]['inputs'][index]['value'] for index in coinjoins[cjtx]['inputs'].keys()])
+        outputs_values_in_slot[cjtx_hour].extend([coinjoins[cjtx]['outputs'][index]['value'] for index in coinjoins[cjtx]['outputs'].keys()])
+
+        # Extract difference in time between output creation and destruction in this cjtx
+        if ax_burn_time:
+            destruct_time = timestamp
+            for index in coinjoins[cjtx]['inputs'].keys():
+                if 'spending_tx' in coinjoins[cjtx]['inputs'][index].keys():
+                    txid, vout = extract_txid_from_inout_string(coinjoins[cjtx]['inputs'][index]['spending_tx'])
+                    if txid in broadcast_times_cjtxs.keys():
+                        create_time = broadcast_times_cjtxs[txid]
+                        time_diff = destruct_time - create_time
+                        hours_diff = time_diff.total_seconds() / 3600
+                        inputs_burned_time_in_slot[cjtx_hour].append(hours_diff)
+
+    # remove last slot(s) if no coinjoins are available there
+    while inputs_cjtx_in_slot[len(inputs_cjtx_in_slot.keys()) - 1] == []:
         del inputs_cjtx_in_slot[len(inputs_cjtx_in_slot.keys()) - 1]
-    if not outputs_cjtx_in_slot[len(outputs_cjtx_in_slot.keys()) - 1]:  # remove last slot if no coinjoins are available there
+    while outputs_cjtx_in_slot[len(outputs_cjtx_in_slot.keys()) - 1] == []:
         del outputs_cjtx_in_slot[len(outputs_cjtx_in_slot.keys()) - 1]
+    while inputs_values_in_slot[len(inputs_values_in_slot.keys()) - 1] == []:
+        del inputs_values_in_slot[len(inputs_values_in_slot.keys()) - 1]
+    while outputs_cjtx_in_slot[len(outputs_cjtx_in_slot.keys()) - 1] == []:
+        del outputs_values_in_slot[len(outputs_values_in_slot.keys()) - 1]
 
-    ax_coinjoins.plot(range(0, len(inputs_cjtx_in_slot)), [sum(inputs_cjtx_in_slot[cjtx_hour]) for cjtx_hour in inputs_cjtx_in_slot.keys()],
-                      label='New inputs entering mix', color='green', alpha=0.5)
-    ax_coinjoins.plot(range(0, len(outputs_cjtx_in_slot)), [sum(outputs_cjtx_in_slot[cjtx_hour]) for cjtx_hour in outputs_cjtx_in_slot.keys()],
-                      label='Outputs leaving mix', color='red', alpha=0.5)
+    ax_number.plot(range(0, len(inputs_cjtx_in_slot)), [sum(inputs_cjtx_in_slot[cjtx_hour]) for cjtx_hour in inputs_cjtx_in_slot.keys()],
+                   label=legend_labels[0], alpha=0.5)
+    ax_number.plot(range(0, len(outputs_cjtx_in_slot)), [sum(outputs_cjtx_in_slot[cjtx_hour]) for cjtx_hour in outputs_cjtx_in_slot.keys()],
+                   label=legend_labels[1], alpha=0.5)
+    ax_number.plot(range(0, len(inputs_remixed_cjtx_in_slot)), [sum(inputs_remixed_cjtx_in_slot[cjtx_hour]) for cjtx_hour in inputs_remixed_cjtx_in_slot.keys()],
+                   label=legend_labels[2], alpha=0.5, linestyle='-.')
 
-    ax_coinjoins.legend()
+    # Create a boxplot
+    data = [series[1] for series in inputs_cjtx_in_slot.items()]
+    ax_boxplot.boxplot(data)
+    # data = [series[1] for series in outputs_cjtx_in_slot.items()]
+    # ax_boxplot.boxplot(data)
+    data = [series[1] for series in inputs_values_in_slot.items()]
+    ax_input_values_boxplot.boxplot(data)
+    data = [series[1] for series in outputs_values_in_slot.items()]
+    ax_output_values_boxplot.boxplot(data)
+    if ax_burn_time:
+        data = [series[1] for series in inputs_burned_time_in_slot.items()]
+        ax_burn_time.boxplot(data)
+        ax_burn_time.set_yscale('log')
+
+    # Plot distribution of input values (bar height corresponding to number of occurences)
+    if ax_input_values_bar:
+        flat_data = [item for index in inputs_values_in_slot.keys() for item in inputs_values_in_slot[index]]
+        input_values_count = Counter(flat_data)
+        sorted_input_values_count = sorted(input_values_count.items(), key=lambda x: x[0])
+        sorted_values, counts = zip(*sorted_input_values_count)
+        #ax_input_values_bar.bar(sorted_values, counts)
+
+        log_values = np.log(flat_data)
+        ax_input_values_bar.hist(log_values, 100)
+        ax_input_values_bar.set_xscale('log')
+
+        #ax_input_values_bar.set_xscale('linear')
+        #ax_input_values_bar.set_xticks(np.linspace(min(log_values), max(log_values), 30))
+        #ax_input_values_bar.set_xticks(np.arange(min(log_values), max(log_values) + 1, 100))
+
+    # Plot distribution of output values (bar height corresponding to number of occurences)
+    if ax_output_values_bar:
+        flat_data = [item for index in outputs_values_in_slot.keys() for item in outputs_values_in_slot[index]]
+        output_values_count = Counter(flat_data)
+        sorted_input_values_count = sorted(output_values_count.items(), key=lambda x: x[0])
+        sorted_values, counts = zip(*sorted_input_values_count)
+        #ax_output_values_bar.bar(sorted_values, counts)
+
+        log_values = np.log(flat_data)
+        ax_output_values_bar.hist(log_values, 100)
+        ax_output_values_bar.set_xscale('log')
+        # ax_output_values_bar.set_xscale('linear')
+        #ax_output_values_bar.set_xticks(np.linspace(min(flat_data), max(flat_data), 30))
+
+    # if ax_burn_time:
+    #     flat_data = [item for index in inputs_burned_time_in_slot.keys() for item in inputs_burned_time_in_slot[index]]
+    #     ax_burn_time.bar(flat_data)
+
+    ax_number.legend()
+    ax_boxplot.legend()
     x_ticks = []
     for slot in inputs_cjtx_in_slot.keys():
         time_delta_format = "%Y-%m-%d %H:%M:%S" if SLOT_WIDTH_SECONDS < 600 * 24 else "%Y-%m-%d"
         x_ticks.append(
             (experiment_start_time + slot * timedelta(seconds=SLOT_WIDTH_SECONDS)).strftime(time_delta_format))
-    ax_coinjoins.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=16)
+    ax_number.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
+    ax_boxplot.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
+    ax_input_values_boxplot.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
+    ax_output_values_boxplot.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
+    if ax_burn_time:
+        ax_burn_time.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
     num_xticks = 30
     plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=num_xticks))
-    ax_coinjoins.set_ylim(0)
-    ax_coinjoins.set_ylabel('Number of new inputs / outputs', fontsize=16)
-    ax_coinjoins.set_title('Number of liquidity utxos (inputs/outputs) entering and leaving mix in given time period')
-
-    plt.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
-    plt.subplots_adjust(bottom=0.1, wspace=0.1, hspace=0.5)
-    save_file = os.path.join(base_path, f'{experiment_name}_liquidity_stats.png')
-    plt.savefig(save_file, dpi=100)
-    plt.close()
-    print('Basic liquidity statistics saved into {}'.format(save_file))
+    ax_number.set_ylim(0)
+    ax_boxplot.set_ylim(0)
+    if ax_input_values_bar:
+        ax_input_values_bar.set_xlim(0)
+    if ax_output_values_bar:
+        ax_output_values_bar.set_xlim(0)
+    if ax_burn_time:
+        ax_burn_time.set_ylim(0)
 
 
 def visualize_coinjoins(data, events, base_path, experiment_name):
-    # Coinjoins in time
-    visualize_coinjoins_in_time(data, base_path, experiment_name)
+    fig = plt.figure(figsize=(30, 20))
+    ax_num_coinjoins = fig.add_subplot(4, 3, 1)
+    ax_inputs_outputs = fig.add_subplot(4, 3, 2)
+    ax_liquidity = fig.add_subplot(4, 3, 3)
+    ax_input_time_to_burn = fig.add_subplot(4, 3, 4)
+    ax_inputs_outputs_boxplot = fig.add_subplot(4, 3, 5)
+    ax_liquidity_boxplot = fig.add_subplot(4, 3, 6)
+    ax_inputs_value_bar = fig.add_subplot(4, 3, 7)
+    ax_inputs_value_boxplot = fig.add_subplot(4, 3, 8)
+    ax_fresh_inputs_value_boxplot = fig.add_subplot(4, 3, 9)
+    ax_outputs_value_bar = fig.add_subplot(4, 3, 10)
+    ax_outputs_value_boxplot = fig.add_subplot(4, 3, 11)
+    ax_fresh_outputs_value_boxplot = fig.add_subplot(4, 3, 12)
 
-    # Liquidity in/out of mix
-    visualize_liquidity_in_time(events, base_path, experiment_name)
+    # Coinjoins in time
+    visualize_coinjoins_in_time(data, ax_num_coinjoins)
+
+    # All inputs and outputs
+    visualize_liquidity_in_time(data['coinjoins'], ax_inputs_outputs, ax_inputs_outputs_boxplot, ax_inputs_value_boxplot,
+                                ax_outputs_value_boxplot, None, None, ax_input_time_to_burn, ['all inputs', 'all outputs', 'remixed inputs'])
+    ax_inputs_outputs.set_ylabel('Number of inputs / outputs')
+    ax_inputs_outputs.set_title('Number of all inputs and outputs in cjtx')
+    ax_inputs_outputs_boxplot.set_ylabel('Number of inputs / outputs')
+    ax_inputs_outputs_boxplot.set_title('Distribution of inputs of single coinjoins')
+
+    ax_inputs_value_boxplot.set_ylabel('Value of inputs (sats)')
+    ax_inputs_value_boxplot.set_yscale('log')
+    ax_inputs_value_boxplot.set_title('Distribution of value of inputs (log scale)')
+    ax_outputs_value_boxplot.set_ylabel('Value of outputs (sats)')
+    ax_outputs_value_boxplot.set_yscale('log')
+    ax_outputs_value_boxplot.set_title('Distribution of value of outputs (log scale)')
+
+    ax_input_time_to_burn.set_ylabel('Input coin burn time (hours)')
+    ax_input_time_to_burn.set_yscale('log')
+    ax_input_time_to_burn.set_title('Distribution of coin burn times (log scale)')
+
+    # Fresh liquidity in/out of mix
+    visualize_liquidity_in_time(events, ax_liquidity, ax_liquidity_boxplot, ax_fresh_inputs_value_boxplot,
+                                ax_fresh_outputs_value_boxplot, ax_inputs_value_bar, ax_outputs_value_bar,
+                                None, ['fresh inputs mixed', 'outputs leaving mix', ''])
+    ax_liquidity.set_ylabel('Number of new inputs / outputs')
+    ax_liquidity.set_title('Number of fresh liquidity in and out of cjtx')
+    ax_liquidity_boxplot.set_ylabel('Number of new inputs / outputs')
+    ax_liquidity_boxplot.set_title('Distribution of fresh liquidity inputs of single coinjoins')
+    ax_fresh_inputs_value_boxplot.set_ylabel('Value of inputs (sats)')
+    ax_fresh_inputs_value_boxplot.set_yscale('log')
+    ax_fresh_inputs_value_boxplot.set_title('Distribution of value of fresh inputs (log scale)')
+    ax_fresh_outputs_value_boxplot.set_ylabel('Value of outputs (sats)')
+    ax_fresh_outputs_value_boxplot.set_yscale('log')
+    ax_fresh_outputs_value_boxplot.set_title('Distribution of value of fresh outputs (log scale)')
+
+    ax_inputs_value_bar.set_ylabel('Number of inputs')
+    ax_inputs_value_bar.set_title('Histogram of frequencies of specific values of fresh inputs.\n(x is log scale)')
+    ax_outputs_value_bar.set_ylabel('Number of outputs')
+    ax_outputs_value_bar.set_title('Histogram of frequencies of specific values of fresh outputs.\n(x is log scale)')
+
+    # TODO: Add distribution of time-to-burn for remixed utxos
+    # TODO: Add detection of any non-standard output values for WW2 and WW1
+
+    # save graph
+    plt.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
+    plt.subplots_adjust(bottom=0.1, wspace=0.5, hspace=0.5)
+    save_file = os.path.join(base_path, f'{experiment_name}_coinjoin_stats.png')
+    plt.savefig(save_file, dpi=300)
+    plt.close()
+    print('Basic coinjoins statistics saved into {}'.format(save_file))
 
 
 def process_coinjoins(target_path, mix_filename, postmix_filename, premix_filename, start_date: str, stop_date: str):
     data = load_coinjoins(target_path, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
+    if len(data['coinjoins']) == 0:
+        return data
 
     SM.print('*******************************************')
     SM.print(f'{mix_filename} coinjoins: {len(data['coinjoins'])}')
@@ -710,7 +844,8 @@ def process_and_save_coinjoins(mix_id: str, target_path: os.path, mix_filename: 
         target_save_path = target_path
     # Process and save full conjoin information
     data = process_coinjoins(target_path, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
-    if SAVE_BASE_FILES:
+
+    if SAVE_BASE_FILES_JSON:
         with open(os.path.join(target_save_path, f'coinjoin_tx_info.json'), "w") as file:
             file.write(json.dumps(dict(sorted(data.items())), indent=4))
 
@@ -720,13 +855,14 @@ def process_and_save_coinjoins(mix_id: str, target_path: os.path, mix_filename: 
         file.write(json.dumps(dict(sorted(events.items())), indent=4))
 
     # Visualize coinjoins
-    visualize_coinjoins(data, events, target_save_path, mix_filename)
+    if len(data['coinjoins']) > 0:
+        visualize_coinjoins(data, events, target_save_path, mix_filename)
 
     return data
 
 
-def process_and_save_intervals(mix_id: str, target_path: os.path, start_date: str, stop_date: str, mix_filename: str,
-                               postmix_filename: str, premix_filename: str=None):
+def process_and_save_intervals_onload(mix_id: str, target_path: os.path, start_date: str, stop_date: str, mix_filename: str,
+                                      postmix_filename: str, premix_filename: str=None):
 
     # Create directory structure with files split per month (around 1000 subsequent coinjoins)
 
@@ -741,12 +877,12 @@ def process_and_save_intervals(mix_id: str, target_path: os.path, start_date: st
 
     # Previously used stop date (will become start date for next interval)
     last_stop_date = start_date
-    last_stop_date_str = last_stop_date.strftime("%Y-%m-%d %H:%M")
+    last_stop_date_str = last_stop_date.strftime("%Y-%m-%d %H:%M:%S")
 
     # Current stop date
     current_stop_date = start_date + timedelta(days=32)
     current_stop_date = datetime(current_stop_date.year, current_stop_date.month, 1)
-    current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M")
+    current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M:%S")
 
     while current_stop_date_str <= last_date_str:
         print(f'Processing interval {last_stop_date_str} - {current_stop_date_str}')
@@ -754,8 +890,7 @@ def process_and_save_intervals(mix_id: str, target_path: os.path, start_date: st
         if not os.path.exists(interval_path):
             os.makedirs(interval_path.replace('\\', '/'))
             os.makedirs(os.path.join(interval_path, 'data').replace('\\', '/'))
-        process_and_save_coinjoins('wasabi2_test', target_path, 'wasabi2_mix_test.txt',
-                                          'wasabi2_postmix_test.txt', None,
+        process_and_save_coinjoins(mix_id, target_path, mix_filename, postmix_filename, premix_filename,
                                           last_stop_date_str, current_stop_date_str, interval_path)
         # Move to the next month
         last_stop_date_str = current_stop_date_str
@@ -765,19 +900,101 @@ def process_and_save_intervals(mix_id: str, target_path: os.path, start_date: st
         current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def process_and_save_intervals_filter(mix_id: str, target_path: os.path, start_date: str, stop_date: str, mix_filename: str,
+                                      postmix_filename: str, premix_filename: str=None, save_base_files=True):
+    # Create directory structure with files split per month (around 1000 subsequent coinjoins)
+    # Load all coinjoins first, then filter based on intervals
+    SAVE_BASE_FILES_JSON = False
+    data = process_and_save_coinjoins(mix_id, target_path, mix_filename, postmix_filename, premix_filename, None, None)
+    SAVE_BASE_FILES_JSON = save_base_files
+
+    # Find first day of a month when first coinjoin ocured
+    start_date_obj = datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S.%f")
+    start_date = datetime(start_date_obj.year, start_date_obj.month, 1)
+
+    # Month After the last coinjoin occured
+    last_date_obj = datetime.strptime(stop_date, "%Y-%m-%d %H:%M:%S.%f")
+    last_date_obj = last_date_obj + timedelta(days=32)
+    last_date_str = last_date_obj.strftime("%Y-%m-%d %H:%M:%S")
+
+    # Previously used stop date (will become start date for next interval)
+    last_stop_date = start_date
+    last_stop_date_str = last_stop_date.strftime("%Y-%m-%d %H:%M:%S")
+
+    # Current stop date
+    current_stop_date = start_date + timedelta(days=32)
+    current_stop_date = datetime(current_stop_date.year, current_stop_date.month, 1)
+    current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M:%S")
+
+    while current_stop_date_str <= last_date_str:
+        print(f'Processing interval {last_stop_date_str} - {current_stop_date_str}')
+
+        # Create folder structure compatible with ww2 coinjoin simulation for further processing
+        interval_path = os.path.join(target_path, mix_id, f'{last_stop_date_str.replace(':', '-')}--{current_stop_date_str.replace(':', '-')}_unknown-static-100-1utxo')
+        if not os.path.exists(interval_path):
+            os.makedirs(interval_path.replace('\\', '/'))
+            os.makedirs(os.path.join(interval_path, 'data').replace('\\', '/'))
+
+        # Filter only data relevant for given interval and save
+        interval_data = {}
+        interval_data['coinjoins'] = {txid: data['coinjoins'][txid] for txid in data['coinjoins'].keys()
+                                      if last_stop_date_str < data['coinjoins'][txid]['broadcast_time'] < current_stop_date_str}
+        interval_data['postmix'] = {}
+        interval_data['rounds'] = {roundid: data['rounds'][roundid] for roundid in data['rounds'].keys()
+                                   if last_stop_date_str < data['rounds'][roundid]['round_start_timestamp'] < current_stop_date_str}
+        interval_data['wallets_coins'] = {wallet_name: [] for wallet_name in data['wallets_coins'].keys()}
+        for wallet_name in data['wallets_coins'].keys():
+            interval_data['wallets_coins'][wallet_name] = [coin for coin in data['wallets_coins'][wallet_name]
+                    if last_stop_date_str < coin['create_time'] < current_stop_date_str
+                    or 'destroy_time' in coin.keys() and last_stop_date_str < coin['destroy_time'] < current_stop_date_str]
+        interval_data['wallets_info'] = data['wallets_info']
+
+        with open(os.path.join(interval_path, f'coinjoin_tx_info.json'), "w") as file:
+            file.write(json.dumps(dict(sorted(interval_data.items())), indent=4))
+        # Filter only liquidity-relevant events to maintain smaller file
+        events = filter_liquidity_events(interval_data)
+        with open(os.path.join(interval_path, f'{mix_id}_events.json'), "w") as file:
+            file.write(json.dumps(dict(sorted(events.items())), indent=4))
+
+        # Visualize coinjoins
+        if len(interval_data['coinjoins']) > 0:
+            visualize_coinjoins(interval_data, events, interval_path, os.path.basename(interval_path))
+
+        # Move to the next month
+        last_stop_date_str = current_stop_date_str
+
+        current_stop_date = current_stop_date + timedelta(days=32)
+        current_stop_date = datetime(current_stop_date.year, current_stop_date.month, 1)
+        current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M:%S")
+
 
 if __name__ == "__main__":
     FULL_TX_SET = False
-    SAVE_BASE_FILES = True
+
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20231113\\'
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240215\\'
     target_path = os.path.join(target_base_path, 'Scanner')
-    SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES={SAVE_BASE_FILES}')
+    SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
 
-    process_and_save_intervals('wasabi2_test', target_path, '2022-06-18 01:38:07.000', '2024-02-15 01:38:07.000',
-                               'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt')
+    # process_and_save_intervals('wasabi2', target_path, '2022-06-18 01:38:07.000', '2024-02-15 01:38:07.000',
+    #                            'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt')
+
+    process_and_save_intervals_filter('wasabi2_test', target_path, '2023-12-01 01:38:07.000', '2024-02-15 01:38:07.000',
+                               'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt', None, SAVE_BASE_FILES_JSON)
+
+    # process_and_save_intervals_filter('wasabi2', target_path, '2022-06-18 01:38:07.000', '2024-02-15 01:38:07.000',
+    #                            'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON)
+    #
+    # process_and_save_intervals_filter('wasabi1', target_path, '2018-07-19 01:38:07.000', '2024-02-15 01:38:07.000',
+    #                            'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', None, SAVE_BASE_FILES_JSON)
+    #
+    # process_and_save_intervals_filter('whirlpool', target_path, '2019-04-17 01:38:07.000', '2024-02-15 01:38:07.000',
+    #                            'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt', SAVE_BASE_FILES_JSON)
+
+
 
     exit(1)
+
     if FULL_TX_SET:
         # All transactions
         process_and_save_coinjoins('whirlpool', target_path, 'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt')
