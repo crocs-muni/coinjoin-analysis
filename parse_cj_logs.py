@@ -892,9 +892,14 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
         if 'logs' in rounds[round_id]:
             for entry in rounds[round_id]['logs']:
                 broadcast_times.append(datetime.strptime(entry['timestamp'], "%Y-%m-%d %H:%M:%S.%f"))
-    experiment_start_time = min(broadcast_times)
+        else:
+            if 'coinjoins' in rounds[round_id]:
+                for entry in rounds[round_id]['logs']:
+                    broadcast_times.append(datetime.strptime(entry['timestamp'], "%Y-%m-%d %H:%M:%S.%f"))
+
+    experiment_start_time = min(broadcast_times) if len(broadcast_times) > 0 else datetime(2009, 1, 1)
     slot_start_time = experiment_start_time
-    slot_last_time = max(broadcast_times)
+    slot_last_time = max(broadcast_times) if len(broadcast_times) > 0 else datetime(2009, 1, 1)
     diff_seconds = (slot_last_time - slot_start_time).total_seconds()
     num_slots = int(diff_seconds // SLOT_WIDTH_SECONDS)
     logs_in_hours = {}
