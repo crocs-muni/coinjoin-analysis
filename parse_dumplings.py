@@ -676,32 +676,34 @@ def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_b
     # Plot distribution of input values (bar height corresponding to number of occurences)
     if ax_input_values_bar:
         flat_data = [item for index in inputs_values_in_slot.keys() for item in inputs_values_in_slot[index]]
-        input_values_count = Counter(flat_data)
-        sorted_input_values_count = sorted(input_values_count.items(), key=lambda x: x[0])
-        sorted_values, counts = zip(*sorted_input_values_count)
-        #ax_input_values_bar.bar(sorted_values, counts)
-
-        log_values = np.log(flat_data)
-        ax_input_values_bar.hist(log_values, 100)
-        ax_input_values_bar.set_xscale('log')
-
-        #ax_input_values_bar.set_xscale('linear')
-        #ax_input_values_bar.set_xticks(np.linspace(min(log_values), max(log_values), 30))
-        #ax_input_values_bar.set_xticks(np.arange(min(log_values), max(log_values) + 1, 100))
+        log_data = np.log(flat_data)
+        hist, bins = np.histogram(log_data, bins=100)
+        ax_input_values_bar.bar(bins[:-1], hist, width=np.diff(bins))
+        xticks = np.linspace(min(log_data), max(log_data), num=10)
+        ax_input_values_bar.set_xticks(xticks, np.round(np.exp(xticks), decimals=0), rotation=45, fontsize=6)
+        ax_input_values_bar.set_xlim(0, max(log_data))
 
     # Plot distribution of output values (bar height corresponding to number of occurences)
     if ax_output_values_bar:
         flat_data = [item for index in outputs_values_in_slot.keys() for item in outputs_values_in_slot[index]]
-        output_values_count = Counter(flat_data)
-        sorted_input_values_count = sorted(output_values_count.items(), key=lambda x: x[0])
-        sorted_values, counts = zip(*sorted_input_values_count)
-        #ax_output_values_bar.bar(sorted_values, counts)
+        log_data = np.log(flat_data)
+        hist, bins = np.histogram(log_data, bins=100)
+        ax_output_values_bar.bar(bins[:-1], hist, width=np.diff(bins))
+        xticks = np.linspace(min(log_data), max(log_data), num=10)
+        ax_output_values_bar.set_xticks(xticks, np.round(np.exp(xticks), decimals=0), rotation=45, fontsize=6)
+        ax_output_values_bar.set_xlim(0, max(log_data))
 
-        log_values = np.log(flat_data)
-        ax_output_values_bar.hist(log_values, 100)
-        ax_output_values_bar.set_xscale('log')
-        # ax_output_values_bar.set_xscale('linear')
-        #ax_output_values_bar.set_xticks(np.linspace(min(flat_data), max(flat_data), 30))
+        #
+        # output_values_count = Counter(flat_data)
+        # sorted_input_values_count = sorted(output_values_count.items(), key=lambda x: x[0])
+        # sorted_values, counts = zip(*sorted_input_values_count)
+        # #ax_output_values_bar.bar(sorted_values, counts)
+        #
+        # log_values = np.log(flat_data)
+        # ax_output_values_bar.hist(log_values, 100)
+        # ax_output_values_bar.set_xscale('log')
+        # # ax_output_values_bar.set_xscale('linear')
+        # #ax_output_values_bar.set_xticks(np.linspace(min(flat_data), max(flat_data), 30))
 
     # if ax_burn_time:
     #     flat_data = [item for index in inputs_burned_time_in_slot.keys() for item in inputs_burned_time_in_slot[index]]
@@ -730,10 +732,6 @@ def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_b
     plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=num_xticks))
     ax_number.set_ylim(0)
     ax_boxplot.set_ylim(0)
-    if ax_input_values_bar:
-        ax_input_values_bar.set_xlim(0)
-    if ax_output_values_bar:
-        ax_output_values_bar.set_xlim(0)
     if ax_burn_time:
         ax_burn_time.set_ylim(0)
 
