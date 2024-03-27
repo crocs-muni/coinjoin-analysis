@@ -727,7 +727,8 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
             sum_inputs = sum(
                 coinjoins[cjtx]['inputs'][index]['value'] for index in coinjoins[cjtx]['inputs'].keys() if wallet_name == coinjoins[cjtx]['inputs'][index]['wallet_name'])
             sum_outputs = sum(
-                coinjoins[cjtx]['outputs'][index]['value'] for index in coinjoins[cjtx]['outputs'].keys() if wallet_name == coinjoins[cjtx]['outputs'][index]['wallet_name'])
+                coinjoins[cjtx]['outputs'][index]['value'] for index in coinjoins[cjtx]['outputs'].keys()
+                if 'wallet_name' in coinjoins[cjtx]['outputs'][index].keys() and wallet_name == coinjoins[cjtx]['outputs'][index]['wallet_name'])
             mining_and_coinjoin_fee_payed = sum_inputs - sum_outputs
 
             if sum_inputs > 0:  # save only if some value was found
