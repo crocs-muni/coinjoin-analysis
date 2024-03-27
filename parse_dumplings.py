@@ -26,6 +26,10 @@ CLUSTER_ID_CHECK_HARD_ASSERT = False
 
 SAVE_BASE_FILES_JSON = False
 
+# SLOT_WIDTH_SECONDS = 3600 * 24 * 7  # week
+#SLOT_WIDTH_SECONDS = 3600 * 24  # day
+SLOT_WIDTH_SECONDS = 3600   # hour
+
 
 class ClusterIndex:
     NEW_CLUSTER_INDEX = 0
@@ -552,7 +556,6 @@ def visualize_coinjoins_in_time(data, ax_num_coinjoins):
     # Number of coinjoins per given time interval (e.g., day)
     #
     coinjoins = data['coinjoins']
-    SLOT_WIDTH_SECONDS = 3600 * 24 * 7
     broadcast_times = [datetime.strptime(coinjoins[item]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for item in
                        coinjoins.keys()]
     experiment_start_time = min(broadcast_times)
@@ -574,8 +577,14 @@ def visualize_coinjoins_in_time(data, ax_num_coinjoins):
     ax_num_coinjoins.legend()
     x_ticks = []
     for slot in cjtx_in_hours.keys():
+        if SLOT_WIDTH_SECONDS < 3600:
+            time_delta_format = "%Y-%m-%d %H:%M:%S"
+        elif SLOT_WIDTH_SECONDS < 3600 * 24:
+            time_delta_format = "%Y-%m-%d %H:%M:%S"
+        else:
+            time_delta_format = "%Y-%m-%d"
         x_ticks.append(
-            (experiment_start_time + slot * timedelta(seconds=SLOT_WIDTH_SECONDS)).strftime("%Y-%m-%d"))
+            (experiment_start_time + slot * timedelta(seconds=SLOT_WIDTH_SECONDS)).strftime(time_delta_format))
     ax_num_coinjoins.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
     num_xticks = 30
     plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=num_xticks))
@@ -590,7 +599,6 @@ def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_b
     # Number of coinjoins per given time interval (e.g., day)
     #
     coinjoins = events
-    SLOT_WIDTH_SECONDS = 600 * 24 * 7
     broadcast_times_cjtxs = {item: datetime.strptime(coinjoins[item]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for item in
                        coinjoins.keys()}
     broadcast_times = list(broadcast_times_cjtxs.values())
@@ -696,7 +704,13 @@ def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_b
     ax_boxplot.legend()
     x_ticks = []
     for slot in inputs_cjtx_in_slot.keys():
-        time_delta_format = "%Y-%m-%d %H:%M:%S" if SLOT_WIDTH_SECONDS < 600 * 24 else "%Y-%m-%d"
+        if SLOT_WIDTH_SECONDS < 3600:
+            time_delta_format = "%Y-%m-%d %H:%M:%S"
+        elif SLOT_WIDTH_SECONDS < 3600 * 24:
+            time_delta_format = "%Y-%m-%d %H:%M:%S"
+        else:
+            time_delta_format = "%Y-%m-%d"
+
         x_ticks.append(
             (experiment_start_time + slot * timedelta(seconds=SLOT_WIDTH_SECONDS)).strftime(time_delta_format))
     ax_number.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
