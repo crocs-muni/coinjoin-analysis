@@ -131,6 +131,7 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
 
             tx_id = None if parts[0] is None else parts[0]
             record['txid'] = tx_id
+            record['is_cjtx'] = True
             block_hash = None if parts[1] is None else parts[1]
             record['block_hash'] = block_hash
             block_index = None if parts[2] is None else int(parts[2])
@@ -280,11 +281,13 @@ def extract_wallets_info(data):
             # Create new coin with information derived from output and transaction info
             coin = {'txid': cjtxid, 'index': index, 'amount': txs_data[cjtxid]['outputs'][index]['value'],
                     'anonymityScore': -1, 'address': target_addr, 'create_time': txs_data[cjtxid]['broadcast_time'],
-                    'wallet_name': wallet_name}
+                    'wallet_name': wallet_name, 'is_from_cjtx': False, 'is_spent_by_cjtx': False}
             #coin.update({'confirmed': True, 'confirmations': 1, 'keyPath': '', 'block_hash': txs_data[cjtxid]['block_hash']})
+            coin['is_from_cjtx'] = txs_data[cjtxid].get('is_cjtx', False)
             if 'spend_by_tx' in txs_data[cjtxid]['outputs'][index].keys():
                 spent_tx, spend_index = extract_txid_from_inout_string(txs_data[cjtxid]['outputs'][index]['spend_by_tx'])
                 coin['spentBy'] = spent_tx
+                coin['is_spent_by_cjtx'] = False if spent_tx not in txs_data.keys() else txs_data[spent_tx].get('is_cjtx', False)
                 if spent_tx in txs_data.keys():
                     coin['destroy_time'] = txs_data[spent_tx]['broadcast_time']
             wallets_coins_info[wallet_name].append(coin)
@@ -315,10 +318,13 @@ def extract_wallets_info(data):
                 txid, vout = extract_txid_from_inout_string(txs_data[cjtxid]['inputs'][index]['spending_tx'])
                 coin = {'txid': txid, 'index': vout, 'amount': txs_data[cjtxid]['inputs'][index]['value'],
                         'anonymityScore': -1, 'address': target_addr, 'create_time': artificial_min_cj_time,
-                        'wallet_name': wallet_name}
+                        'wallet_name': wallet_name, 'is_from_cjtx': False, 'is_spent_by_cjtx': False}
                 # coin.update({'confirmed': True, 'confirmations': 1, 'keyPath': '', 'block_hash': txs_data[cjtxid]['block_hash']})
+                coin['is_from_cjtx'] = False if txid not in txs_data.keys() else txs_data[txid].get('is_cjtx', False)
+
                 coin['destroy_time'] = txs_data[cjtxid]['broadcast_time']
                 coin['spentBy'] = cjtxid
+                coin['is_spent_by_cjtx'] = False if cjtxid not in txs_data.keys() else txs_data[cjtxid].get('is_cjtx', False)
                 coins[target_addr] = coin
             else:
                 assert coins[target_addr]['amount'] == txs_data[cjtxid]['inputs'][index]['value'], f'Inconsistent value found for {target_addr}'
@@ -326,6 +332,7 @@ def extract_wallets_info(data):
                 coins[target_addr]['destroy_time'] = txs_data[cjtxid]['broadcast_time']
                 if 'spentBy' not in coins[target_addr].keys():
                     coins[target_addr]['spentBy'] = cjtxid
+                    coin['is_spent_by_cjtx'] = False if cjtxid not in txs_data.keys() else txs_data[cjtxid].get('is_cjtx', False)
                 else:
                     assert coins[target_addr]['spentBy'] == cjtxid, f'Inconsistent spentBy mapping for {coins[target_addr]['address']}'
 
