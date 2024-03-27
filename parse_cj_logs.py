@@ -777,17 +777,31 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
                 for coin in wallets_coins[wallet_name]:
                     # get coin destroy time - if not used by any tx, then set to year 9999
                     coin_destroy_time = '9999-01-25 09:44:48.000' if 'destroy_time' not in coin.keys() else coin['destroy_time']
+                    # Decide state of the coin in the time of current coinjoin (cjtx_creation_time) - just before cjtx was executed
                     if coin['create_time'] < cjtx_creation_time:
-                        if cjtx_creation_time <= coin_destroy_time:
+                        if cjtx_creation_time <= coin_destroy_time:  # Equal is to capture case when coin was consumed by this cjtx
                             # Coin was available for mixing at coinjoin round registration time
                             # Now identify if it was unmixed, already mixed but not enough (will be another coinjoin) or not mixed again
-                            if coin['txid'] not in coinjoins.keys():  # Coin's creating tx was not coinjoin => unmixed
+
+                            if 'is_from_cjtx' not in coin.keys():
+                                coin['is_from_cjtx'] = True if coin['txid'] in coinjoins.keys() else False
+                            if 'is_spent_by_cjtx' not in coin.keys():
+                                coin['is_spent_by_cjtx'] = False
+                                if 'spentBy' in coin.keys() and coin['spentBy'] in coinjoins.keys():
+                                    coin['is_spent_by_cjtx'] = True
+
+                            if not coin['is_from_cjtx']:  # Coin is not from previous cjtx => fresh liquidity
                                 unmixed_utxos.append(coin)
-                            elif 'spentBy' in coin.keys() and coin['spentBy'] in coinjoins.keys() and coin['spentBy'] != cjtx:
-                                # Coin was already mixed (coming from coinjoin), but will be mixed again by future coinjoin
-                                mixed_utxos.append(coin)
-                            else:
-                                # Coin is either unspent till end of all coinjoins or was spent by non-coinjoin tx (later)
+                            elif 'spentBy' in coin.keys():
+                                # Coin was already mixed (coming from some coinjoin)
+                                #coin['spentBy'] != cjtx and
+                                if coin['is_spent_by_cjtx']:
+                                    # Will be mixed by this or some future coinjoin
+                                    mixed_utxos.append(coin)
+                                else:
+                                    # Coin is spent by some non-coinjoin tx (later)
+                                    finished_utxos.append(coin)
+                            else:  # Coin is unspent till the end
                                 # If anonscore is set (>=0), then check if it is below default mixing limit
                                 if 0 <= coin['anonymityScore'] < BASE_ANONSCORE_LIMIT:
                                     mixed_utxos.append(coin)
