@@ -919,7 +919,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
 
     index = 0
     for log_type in logs_in_hours.keys():
-        num_logs_of_type = sum(logs_in_hours[log_type][log_hour])
+        num_logs_of_type = sum([len(logs_in_hours[log_type][log_hour]) for log_hour in logs_in_hours[log_type].keys()])
         if num_logs_of_type > 0:
             linestyle = LINE_STYLES[index % len(LINE_STYLES)]
             if log_type not in (CJ_LOG_TYPES.ROUND_STARTED.name, CJ_LOG_TYPES.BLAME_ROUND_STARTED.name,
