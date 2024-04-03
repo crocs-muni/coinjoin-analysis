@@ -377,10 +377,10 @@ def graphviz_insert_cjtxid(coinjoin_tx, graphdot):
         graphdot.attr('node', penwidth=str(tx_entropy * 5))
 
     if 'is_blame_round' in coinjoin_tx.keys() and coinjoin_tx['is_blame_round']:
-        graphdot.attr('node', label='coinjoin tx:\n{}\n{}\n{}\ntx_entropy={}\nnum_dlinks={}\nBLAME ROUND'.format(cjtxid, coinjoin_tx['round_start_time'],
+        graphdot.attr('node', label='coinjoin tx:\n{}\n{}\n{}\ntx_entropy={}\nnum_dlinks={}\nBLAME ROUND'.format(cjtxid, coinjoin_tx['broadcast_time'],
                                                                               coinjoin_tx['broadcast_time'], tx_entropy_str, num_dlinks))
     else:
-        graphdot.attr('node', label='coinjoin tx:\n{}\n{}\n{}\ntx_entropy={}\nnum_dlinks={}'.format(cjtxid, coinjoin_tx['round_start_time'],
+        graphdot.attr('node', label='coinjoin tx:\n{}\n{}\n{}\ntx_entropy={}\nnum_dlinks={}'.format(cjtxid, coinjoin_tx['broadcast_time'],
                                                                  coinjoin_tx['broadcast_time'], tx_entropy_str, num_dlinks))
     if GENERATE_COINJOIN_GRAPH_BLIND:
         graphdot.attr('node', label='')
@@ -993,8 +993,8 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
         cjplt.ax_wallets_distrib.set_xticks(range(0, len(wallets_in_frequency_all_ordered)))
         cjplt.ax_wallets_distrib.set_xticklabels(range(0, len(wallets_in_frequency_all_ordered)))
         cjplt.ax_wallets_distrib.tick_params(axis='x', labelsize=6)
-        cjplt.ax_wallets_distrib.set_xlabel('Number of distinct wallets')
-        cjplt.ax_wallets_distrib.set_ylabel('Number of coinjoins')
+        cjplt.ax_wallets_distrib.set_xlabel('Number of distinct wallets participating in given coinjoin')
+        cjplt.ax_wallets_distrib.set_ylabel('Number of such coinjoin transactions')
         cjplt.ax_wallets_distrib.set_xlim(0.5)
         cjplt.ax_wallets_distrib.set_title(f'Number of coinjoins with specific number of distinct wallets  (all transactions)\n{experiment_name}')
 
@@ -1035,8 +1035,8 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
         insert_percentages_annotations(wallets_used_times, cjplt.ax_utxo_provided)
         cjplt.ax_utxo_provided.set_xlabel('Wallet name')
         cjplt.ax_utxo_provided.set_xticks(range(0, len(x_ticks)), x_ticks, rotation=45, fontsize=6)
-        cjplt.ax_utxo_provided.set_ylabel('Number of participations')
-        cjplt.ax_utxo_provided.set_title(f'Number of inputs given wallet provided to coinjoin txs (all transactions)\n{experiment_name}')
+        cjplt.ax_utxo_provided.set_ylabel('Fraction of all inputs')
+        cjplt.ax_utxo_provided.set_title(f'Fraction of inputs from given wallet provided to all coinjoin txs (all transactions)\n{experiment_name}')
         if len(x_ticks) >= 100:
             cjplt.ax_utxo_provided.tick_params(axis='x', labelsize=4)
         if len(x_ticks) >= 200:
@@ -1107,7 +1107,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
         cjplt.ax_available_utxos.set_xlabel('Coinjoin in time')
         cjplt.ax_available_utxos.set_ylabel('Number of txos')
         cjplt.ax_available_utxos.legend(loc='lower left')
-        cjplt.ax_available_utxos.set_title(f'Number of txos available in wallets when cjtx is starting registration (all transactions)\n{experiment_name}')
+        cjplt.ax_available_utxos.set_title(f'Number of txos available in wallets when given cjtx is starting (all transactions)\n{experiment_name}')
 
     #
     # Number of different wallets involved time
@@ -1260,7 +1260,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
         cjplt.ax_anonscore_from_outputs.ticklabel_format(style='plain', axis='y')
         if len(wallets_info.keys()) <= 15:
             cjplt.ax_anonscore_from_outputs.legend(ncol=5, fontsize='small')
-        cjplt.ax_anonscore_from_outputs.set_title(f'Wasabi Anonscore of outputs in time (all transactions)\n{experiment_name}')
+        cjplt.ax_anonscore_from_outputs.set_title(f'Wasabi Anonscore of separate outputs of given cjtx (all transactions)\n{experiment_name}')
 
     # SAVE_ANALYTICS
     # Nothing
@@ -1313,12 +1313,12 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
     if cjplt.ax_anonscore_distrib_wallets:
         cjplt.ax_anonscore_distrib_wallets.plot(bar_positions_sum, np.array(hist_sum), label=f'AVERAGE {short_exp_name}', linestyle='solid',
                                           color='red', linewidth=3)
-        cjplt.ax_anonscore_distrib_wallets.set_xlabel('Anonscore')
-        cjplt.ax_anonscore_distrib_wallets.set_ylabel('Number of UTXOs')
+        cjplt.ax_anonscore_distrib_wallets.set_xlabel('Anonscore of txo')
+        cjplt.ax_anonscore_distrib_wallets.set_ylabel('Number of txos with specific anonscore')
         cjplt.ax_anonscore_distrib_wallets.ticklabel_format(style='plain', axis='y')
         if len(wallets_info.keys()) <= 15:
             cjplt.ax_anonscore_distrib_wallets.legend(ncol=5, fontsize='small')
-        cjplt.ax_anonscore_distrib_wallets.set_title(f'Frequency of Wasabi anonscore of wallet outputs (all transactions)\n{experiment_name}')
+        cjplt.ax_anonscore_distrib_wallets.set_title(f'Frequency of Wasabi anonscore among wallet outputs (all transactions)\n{experiment_name}')
 
     # SAVE_ANALYTICS:
     anonscore_histogram = []
@@ -1504,7 +1504,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
         cjplt.ax_initial_final_utxos.set_ylabel('Value (sats) (log scale)')
         cjplt.ax_initial_final_utxos.set_xlabel('Wallet name')
         cjplt.ax_initial_final_utxos.legend()
-        cjplt.ax_initial_final_utxos.set_title(f'Presence of wallet utxos at beginning and end of mixing\n{experiment_name}')
+        cjplt.ax_initial_final_utxos.set_title(f'Presence of wallet utxos at beginning and end of mixing\n(All utxos including never mixed ones)\n{experiment_name}')
 
 
     #
@@ -1543,7 +1543,9 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
         cjplt.ax_utxo_entropy_from_outputs.set_ylabel('Entropy')
         cjplt.ax_utxo_entropy_from_outputs.set_ylim(0)
         cjplt.ax_utxo_entropy_from_outputs.legend()
-        cjplt.ax_utxo_entropy_from_outputs.set_title(f'Entropy of outputs of coinjoin transactions (all transactions)\n{experiment_name}')
+        cjplt.ax_utxo_entropy_from_outputs.set_title(f'Entropy of outputs of coinjoin transactions (all transactions)\n'
+                                                     f'(entropy = count / total_count * math.log2(count / total_count))\n'
+                                                     f'{experiment_name}')
 
     # SAVE_ANALYTICS
     cjtx_stats['analysis']['coinjoin_utxos_entropy_in_time'] = [list(range(0, len(entropy_in_time_data))), entropy_in_time_data]
@@ -2223,7 +2225,7 @@ def graphviz_insert_aggregated_connections(cjtx_stats, target_cjtxid, graphdot):
 
             # Insert single edge between target_cjtxid and other_cjtxid for shared inputs
             if wallet_inputs_sum > 0:  # Plot connection only if at least some satoshies are transfered
-                width = math.log(int(wallet_inputs_sum), 2)  # The sizes might be very different, use log
+                width = math.log(int(wallet_inputs_sum), 10)  # The sizes might be very different, use log
                 graphdot.edge(prepare_display_cjtxid(other_cjtxid), prepare_display_cjtxid(target_cjtxid),
                               color=WALLET_COLORS[wallet_name], style='solid', dir='forward', penwidth=f'{width}')
 
@@ -3032,6 +3034,7 @@ class AnalysisType(Enum):
     COMPUTE_COINJOIN_TXINFO_REMOTE = 2
     ANALYZE_COINJOIN_DATA_LOCAL = 3
     COLLECT_COINJOIN_DATA_LOCAL_DOCKER = 4
+    COLLECT_COINJOIN_DATA_REAL = 5
 
 
 if __name__ == "__main__":
@@ -3258,11 +3261,14 @@ if __name__ == "__main__":
 
     # super_base_path = ''
     super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    target_base_paths = [os.path.join(super_base_path, 'grid_paretosum-static-30utxo'),
-                         os.path.join(super_base_path, 'grid_paretosum-static-5utxo'),
+    target_base_paths = [os.path.join(super_base_path, 'grid_paretosum-static-5utxo'),
+                         os.path.join(super_base_path, 'grid_paretosum-static-30utxo'),
                          os.path.join(super_base_path, 'grid_uniformsum-static-1utxo'),
                          os.path.join(super_base_path, 'grid_uniformsum-static-5utxo'),
                          os.path.join(super_base_path, 'grid_uniformsum-static-30utxo'),
+                         os.path.join(super_base_path, 'grid_uniform-static-1utxo'),
+                         os.path.join(super_base_path, 'grid_uniform-static-5utxo'),
+                         os.path.join(super_base_path, 'grid_uniform-static-30utxo'),
                          os.path.join(super_base_path, 'grid_pareto-static-1utxo'),
                          os.path.join(super_base_path, 'grid_pareto-static-5utxo'),
                          os.path.join(super_base_path, 'grid_pareto-static-30utxo'),
@@ -3273,11 +3279,20 @@ if __name__ == "__main__":
     # target_base_paths = [os.path.join(super_base_path, 'grid_pareto-static-30utxo')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'grid_uniform-static-30utxo')]
+
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'grid_uniform-static-5utxo')]
+
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2'),
     #                      os.path.join(super_base_path, 'grid_uniform_test2')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'unproccesed')]
+
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'wasabi2_feb')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test3')]
@@ -3291,9 +3306,16 @@ if __name__ == "__main__":
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'grid_2500-3000utxo')]
 
-    super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    target_base_paths = [os.path.join(super_base_path, 'Wasabi2')]
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'Wasabi2_rest')]
 
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'grid_100w_30utxo'),
+    #                      os.path.join(super_base_path, 'grid_250w_30utxo'),
+    #                      os.path.join(super_base_path, 'grid_250w_5utxo')]
+
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'wasabi2_test')]
 
 
     ##Generate aggregated visualizations
