@@ -54,6 +54,11 @@ class MIX_EVENT_TYPE(Enum):
     MIX_REMIX = 'MIX_REMIX'  # Remixed value within mix
     MIX_STAY = 'MIX_STAY'    # Mix output not yet spend (may be remixed or leave mix later)
 
+class MIX_PROTOCOL(Enum):
+    WASABI1 = 'WASABI1'  # Wasabi 1.0
+    WASABI2 = 'WASABI2'  # Wasabi 2.0
+    WHIRLPOOL = 'WHIRLPOOL'  # Whirlpool
+
 
 class SummaryMessages:
     summary_messages = []
@@ -173,9 +178,11 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                 record['outputs'][f'{index}'] = this_output
                 index += 1
 
+            # Add this record as coinjoin
             cj_stats[tx_id] = record
 
-    # backward reference to spending transaction output is already set ('spending_tx'), now set also forward link ('spend_by_tx')
+    # backward reference to spending transaction output is already set ('spending_tx'),
+    # now set also forward link ('spend_by_tx')
     for txid in cj_stats.keys():
         for index in cj_stats[txid]['inputs'].keys():
             input = cj_stats[txid]['inputs'][index]
@@ -351,7 +358,7 @@ def extract_rounds_info(data):
     txs_data = data['coinjoins']
     for cjtxid in txs_data.keys():
         # Create basic round info from coinjoin data
-        rounds_info[cjtxid] = {"cj_tx_id": cjtxid, "round_start_timestamp": txs_data[cjtxid]['broadcast_time'],
+        rounds_info[cjtxid] = {"cj_tx_id": cjtxid, "round_start_time": txs_data[cjtxid]['broadcast_time'],
                                "logs": [{"round_id": cjtxid, "timestamp": txs_data[cjtxid]['broadcast_time'],
                                          "type": "ROUND_STARTED"}]
                                }
@@ -390,12 +397,29 @@ def compute_mix_postmix_link(data: dict):
     return data
 
 
-def load_coinjoins(target_path: str, mix_filename: str, postmix_filename: str, premix_filename: str,
+def filter_false_coinjoins(data, cj_type):
+    for cjtx in data['coinjoins'].keys():
+        if cj_type == MIX_PROTOCOL.WASABI2:
+            # Not WW2 coinjoin if:
+            # P2SH, P2PKH addresses,
+            # large number of repeated same addresses
+            # large number of non-standard denominations for outputs
+            if len(data['coinjoins'][cjtx]['iputs']) < 100:
+                print(f'{cjtx} is false coinjoin, removing....')
+                data['coinjoins'].pop(cjtx)
+
+    return data
+
+
+def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: str, postmix_filename: str, premix_filename: str,
                    start_date: str, stop_date: str) -> dict:
     # All mixes are having mixing coinjoins and postmix spends
     data = {'rounds': {}, 'filename': os.path.join(target_path, mix_filename),
             'coinjoins': load_coinjoin_stats_from_file(os.path.join(target_path, mix_filename), start_date, stop_date),
             'postmix': load_coinjoin_stats_from_file(os.path.join(target_path, postmix_filename), start_date, stop_date)}
+
+    # Filter mistakes in Dumplings analysis of coinjoins
+    data = filter_false_coinjoins(data, mix_protocol)
 
     # Only Samourai Whirlpool is having premix tx (TX0)
     if premix_filename is not None:
@@ -601,7 +625,7 @@ def visualize_coinjoins_in_time(data, ax_num_coinjoins):
 
 
 def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_boxplot, ax_output_values_boxplot,
-                                ax_input_values_bar, ax_output_values_bar, ax_burn_time, legend_labels: list):
+                                ax_input_values_bar, ax_output_values_bar, ax_burn_time, legend_labels: list, events_premix: dict = None):
     #
     # Number of coinjoins per given time interval (e.g., day)
     #
@@ -618,6 +642,7 @@ def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_b
     outputs_cjtx_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
     inputs_remixed_cjtx_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
     inputs_values_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
+    tx0_inputs_values_in_slot = None
     outputs_values_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
     inputs_burned_time_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
     for cjtx in coinjoins.keys():  # go over all coinjoin transactions
@@ -641,6 +666,26 @@ def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_b
                         time_diff = destruct_time - create_time
                         hours_diff = time_diff.total_seconds() / 3600
                         inputs_burned_time_in_slot[cjtx_hour].append(hours_diff)
+
+    # If provided, process also TX0 premix
+    if events_premix and len(events_premix) > 0:
+        tx0_broadcast_times_cjtxs = {item: datetime.strptime(events_premix[item]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for
+                                 item in events_premix.keys()}
+        broadcast_times = list(tx0_broadcast_times_cjtxs.values())
+        experiment_start_time = min(broadcast_times)
+        slot_start_time = experiment_start_time
+        slot_last_time = max(broadcast_times)
+        diff_seconds = (slot_last_time - slot_start_time).total_seconds()
+        num_slots = int(diff_seconds // SLOT_WIDTH_SECONDS)
+        tx0_inputs_values_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
+
+        for cjtx in events_premix.keys():
+            timestamp = datetime.strptime(events_premix[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")
+            cjtx_hour = int((timestamp - slot_start_time).total_seconds() // SLOT_WIDTH_SECONDS)
+            tx0_inputs_values_in_slot[cjtx_hour].extend(
+                [events_premix[cjtx]['inputs'][index]['value'] for index in events_premix[cjtx]['inputs'].keys()])
+        while tx0_inputs_values_in_slot[len(tx0_inputs_values_in_slot.keys()) - 1] == []:
+            del tx0_inputs_values_in_slot[len(tx0_inputs_values_in_slot.keys()) - 1]
 
     # remove last slot(s) if no coinjoins are available there
     while inputs_cjtx_in_slot[len(inputs_cjtx_in_slot.keys()) - 1] == []:
@@ -675,7 +720,12 @@ def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_b
 
     # Plot distribution of input values (bar height corresponding to number of occurences)
     if ax_input_values_bar:
-        flat_data = [item for index in inputs_values_in_slot.keys() for item in inputs_values_in_slot[index]]
+        # For whirlpooll, use distribution of inputs to TX0 (which splits inputs to premix), otherwise inputs to coinjoins
+        if tx0_inputs_values_in_slot and len(tx0_inputs_values_in_slot) > 0:
+            input_data = tx0_inputs_values_in_slot
+        else:
+            input_data = inputs_values_in_slot
+        flat_data = [item for index in input_data.keys() for item in input_data[index]]
         log_data = np.log(flat_data)
         hist, bins = np.histogram(log_data, bins=100)
         ax_input_values_bar.bar(bins[:-1], hist, width=np.diff(bins))
@@ -755,6 +805,7 @@ def visualize_coinjoins(data, events, base_path, experiment_name):
     visualize_coinjoins_in_time(data, ax_num_coinjoins)
 
     # All inputs and outputs
+    print(f'Premix size : {len(data['premix'])}')
     visualize_liquidity_in_time(data['coinjoins'], ax_inputs_outputs, ax_inputs_outputs_boxplot, ax_inputs_value_boxplot,
                                 ax_outputs_value_boxplot, None, None, ax_input_time_to_burn, ['all inputs', 'all outputs', 'remixed inputs'])
     ax_inputs_outputs.set_ylabel('Number of inputs / outputs')
@@ -776,7 +827,7 @@ def visualize_coinjoins(data, events, base_path, experiment_name):
     # Fresh liquidity in/out of mix
     visualize_liquidity_in_time(events, ax_liquidity, ax_liquidity_boxplot, ax_fresh_inputs_value_boxplot,
                                 ax_fresh_outputs_value_boxplot, ax_inputs_value_bar, ax_outputs_value_bar,
-                                None, ['fresh inputs mixed', 'outputs leaving mix', ''])
+                                None, ['fresh inputs mixed', 'outputs leaving mix', ''], data['premix'])
     ax_liquidity.set_ylabel('Number of new inputs / outputs')
     ax_liquidity.set_title('Number of fresh liquidity in and out of cjtx')
     ax_liquidity_boxplot.set_ylabel('Number of new inputs / outputs')
@@ -805,8 +856,8 @@ def visualize_coinjoins(data, events, base_path, experiment_name):
     print('Basic coinjoins statistics saved into {}'.format(save_file))
 
 
-def process_coinjoins(target_path, mix_filename, postmix_filename, premix_filename, start_date: str, stop_date: str):
-    data = load_coinjoins(target_path, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
+def process_coinjoins(target_path, mix_protocol: MIX_PROTOCOL, mix_filename, postmix_filename, premix_filename, start_date: str, stop_date: str):
+    data = load_coinjoins(target_path, mix_protocol, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
     if len(data['coinjoins']) == 0:
         return data
 
@@ -857,12 +908,12 @@ def filter_liquidity_events(data):
     return events
 
 
-def process_and_save_coinjoins(mix_id: str, target_path: os.path, mix_filename: str, postmix_filename: str,
+def process_and_save_coinjoins(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: os.path, mix_filename: str, postmix_filename: str,
                                premix_filename: str, start_date: str, stop_date: str, target_save_path: os.path=None):
     if not target_save_path:
         target_save_path = target_path
     # Process and save full conjoin information
-    data = process_coinjoins(target_path, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
+    data = process_coinjoins(target_path, mix_protocol, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
 
     if SAVE_BASE_FILES_JSON:
         with open(os.path.join(target_save_path, f'coinjoin_tx_info.json'), "w") as file:
@@ -880,7 +931,7 @@ def process_and_save_coinjoins(mix_id: str, target_path: os.path, mix_filename: 
     return data
 
 
-def process_and_save_intervals_onload(mix_id: str, target_path: os.path, start_date: str, stop_date: str, mix_filename: str,
+def process_and_save_intervals_onload(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: os.path, start_date: str, stop_date: str, mix_filename: str,
                                       postmix_filename: str, premix_filename: str=None):
 
     # Create directory structure with files split per month (around 1000 subsequent coinjoins)
@@ -909,7 +960,7 @@ def process_and_save_intervals_onload(mix_id: str, target_path: os.path, start_d
         if not os.path.exists(interval_path):
             os.makedirs(interval_path.replace('\\', '/'))
             os.makedirs(os.path.join(interval_path, 'data').replace('\\', '/'))
-        process_and_save_coinjoins(mix_id, target_path, mix_filename, postmix_filename, premix_filename,
+        process_and_save_coinjoins(mix_id, mix_protocol, target_path, mix_filename, postmix_filename, premix_filename,
                                           last_stop_date_str, current_stop_date_str, interval_path)
         # Move to the next month
         last_stop_date_str = current_stop_date_str
@@ -919,12 +970,12 @@ def process_and_save_intervals_onload(mix_id: str, target_path: os.path, start_d
         current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def process_and_save_intervals_filter(mix_id: str, target_path: os.path, start_date: str, stop_date: str, mix_filename: str,
+def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: os.path, start_date: str, stop_date: str, mix_filename: str,
                                       postmix_filename: str, premix_filename: str=None, save_base_files=True):
     # Create directory structure with files split per month (around 1000 subsequent coinjoins)
     # Load all coinjoins first, then filter based on intervals
     SAVE_BASE_FILES_JSON = False
-    data = process_and_save_coinjoins(mix_id, target_path, mix_filename, postmix_filename, premix_filename, None, None)
+    data = process_and_save_coinjoins(mix_id, mix_protocol, target_path, mix_filename, postmix_filename, premix_filename, None, None)
     SAVE_BASE_FILES_JSON = save_base_files
 
     # Find first day of a month when first coinjoin ocured
@@ -987,53 +1038,206 @@ def process_and_save_intervals_filter(mix_id: str, target_path: os.path, start_d
         current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def find_whirlpool_tx0_reuse(mix_id: str, target_path: Path, premix_filename: str):
+    """
+    Detects all address reuse in Whirlpool TX0 transactions
+    :param mix_id:
+    :param target_path:
+    :param premix_filename:
+    :return:
+    """
+    txs = load_coinjoin_stats_from_file(os.path.join(target_path, premix_filename))
+    # If potential reuse detected, check if not coordinator address for fees
+    # pools are 100k (=>5000), 1M (=>50000), 5M (=>175000), 50M (=> 1750000)
+    return find_address_reuse(mix_id, txs, target_path, [0, 5000, 50000, 175000, 1750000, 250000, 2500000])
+
+
+def find_txs_address_reuse(mix_id: str, target_path: Path, tx_filename: str, save_outputs = False):
+    """
+    Detects all address reuse in Whirlpool mix transactions
+    :param mix_id:
+    :param target_path:
+    :param tx_filename:
+    :return:
+    """
+    txs = load_coinjoin_stats_from_file(os.path.join(target_path, tx_filename))
+    return find_address_reuse(mix_id, txs, target_path, [], save_outputs)
+
+
+def find_address_reuse(mix_id: str, txs: dict, target_path: Path = None, ignore_denominations: list = [], save_outputs = False):
+    """
+    Detects all address reuse in given list of transactions
+    :param mix_id:
+    :param txs: dictionary of transactions
+    :param target_path: path used for saving results
+    :param premix_filename:
+    :return:
+    """
+    print(f'Processing {mix_id}')
+    seen_addresses = defaultdict(list)
+    reused_addresses = defaultdict(list)
+    for txid in list(txs.keys()):
+        for index in txs[txid]['outputs']:
+            address = txs[txid]['outputs'][index]['script']
+            value = txs[txid]['outputs'][index]['value']
+            if address in seen_addresses.keys():
+                #print(f'Detected address reuse {txid}_{index} and {seen_addresses[address][0][0]['txid']}')
+                if value not in ignore_denominations:
+                    #print(f'{value}')
+                    # Add this address as seen and reused
+                    reused_addresses[address].append((txs[txid], index))
+                    # Add previous record we now know was reused in this output
+                    reused_addresses[address].append(seen_addresses[address][0])
+            seen_addresses[address].append((txs[txid], index))
+
+    total_txs = len(txs)
+    total_out_addresses = sum([len(txs[txid]['outputs']) for txid in txs.keys()])
+    single_reuse = {address: reused_addresses[address] for address in reused_addresses.keys() if len(reused_addresses[address]) == 2}
+    multiple_reuse = {address: reused_addresses[address] for address in reused_addresses.keys() if len(reused_addresses[address]) > 2}
+    print(f'{mix_id} total txs: {total_txs}, total out addresses {total_out_addresses}')
+    print(f'Total reused addresses: {len(reused_addresses)} ({round(len(reused_addresses) / total_out_addresses, 4)}%), {sum([len(reused_addresses[addr]) for addr in reused_addresses])} times')
+    print(f'Total single reuse addresses: {len(single_reuse)} ({round(len(single_reuse) / total_out_addresses, 4)}%), {sum([len(single_reuse[addr]) for addr in single_reuse])} times')
+    print(f'Total multiple reuse addresses: {len(multiple_reuse)} ({round(len(multiple_reuse) / total_out_addresses, 4)}%), {sum([len(multiple_reuse[addr]) for addr in multiple_reuse])} times')
+
+    if target_path and save_outputs:
+        target_save_path = target_path
+        with open(os.path.join(target_save_path, f'{mix_id}_reused_addresses.json'), "w") as file:
+            file.write(json.dumps(dict(reused_addresses.items()), indent=4))
+        with open(os.path.join(target_save_path, f'{mix_id}_reused_addresses_single.json'), "w") as file:
+            file.write(json.dumps(dict(single_reuse.items()), indent=4))
+        with open(os.path.join(target_save_path, f'{mix_id}_reused_addresses_multiple.json'), "w") as file:
+            file.write(json.dumps(dict(multiple_reuse.items()), indent=4))
+
+    # TODO: Plot characteristics of address reuse (time between reuse, ocurence in real time...)
+
+
+def extract_inputs_distribution(mix_id: str, target_path: Path, tx_filename: str, save_outputs = False):
+    print(f'Processing {mix_id}')
+    txs = load_coinjoin_stats_from_file(os.path.join(target_path, tx_filename))
+    analyze_input_out_liquidity(txs, [])
+    # inputs_not_enter = [(txid, index) for txid in txs.keys() for index in txs[txid]['inputs'].keys()
+    #           if txs[txid]['inputs'][index]['mix_event_type'] != MIX_EVENT_TYPE.MIX_ENTER.name]
+
+    inputs = [txs[txid]['inputs'][index]['value'] for txid in txs.keys() for index in txs[txid]['inputs'].keys()
+              if txs[txid]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name]
+    inputs_distrib = Counter(inputs)
+    inputs_distrib = dict(sorted(inputs_distrib.items(), key=lambda item: (-item[1], item[0])))
+    inputs_info = {'mix_id': mix_id, 'path': tx_filename, 'distrib': inputs_distrib}
+    print(f'  Distribution extracted, total {len(inputs_info['distrib'])} different input values found')
+    if save_outputs:
+        with open(os.path.join(target_path, f'{mix_id}_inputs_distribution.json'), "w") as file:
+            file.write(json.dumps(dict(sorted(inputs_info.items())), indent=4))
+
+    log_data = np.log(inputs)
+    hist, bins = np.histogram(log_data, bins=100)
+    plt.bar(bins[:-1], hist, width=np.diff(bins))
+    xticks = np.linspace(min(log_data), max(log_data), num=10)
+    plt.xscale('log')
+    plt.xticks(xticks, np.round(np.exp(xticks), decimals=0), rotation=45, fontsize=6)
+    plt.title(f'{mix_id} inputs histogram (x axis is log)')
+    plt.xlabel(f'Size of input')
+    plt.ylabel(f'Number of inputs')
+    plt.show()
+
+
+def analyze_address_reuse(target_path):
+    # find_whirlpool_tx0_reuse('whirlpool_tx0_test', target_path, 'whirlpool_tx0_test.txt')
+    find_whirlpool_tx0_reuse('whirlpool_tx0', target_path, 'SamouraiTx0s.txt')
+    find_txs_address_reuse('whirlpool_mix', target_path, 'SamouraiCoinJoins.txt')
+    find_txs_address_reuse('whirlpool_postmix', target_path, 'SamouraiPostMixTxs.txt')
+
+    find_txs_address_reuse('wasabi1_mix', target_path, 'WasabiCoinJoins.txt')
+    find_txs_address_reuse('wasabi1_postmix', target_path, 'WasabiPostMixTxs.txt')
+    find_txs_address_reuse('wasabi2_mix', target_path, 'Wasabi2CoinJoins.txt')
+    find_txs_address_reuse('wasabi2_mix', target_path, 'Wasabi2CoinJoins.txt', False)
+    find_txs_address_reuse('wasabi2_postmix', target_path, 'Wasabi2PostMixTxs.txt')
+
+
 if __name__ == "__main__":
     FULL_TX_SET = False
+    ANALYSIS_ADDRESS_REUSE = False
+    ANALYSIS_PROCESS_ALL_COINJOINS = False
+    ANALYSIS_PROCESS_ALL_COINJOINS_DEBUG = False
+    ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
+    ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS_DEBUG = False
+    ANALYSIS_INPUTS_DISTRIBUTION = True
 
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20231113\\'
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240215\\'
     target_path = os.path.join(target_base_path, 'Scanner')
     SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
 
-    # process_and_save_intervals('wasabi2', target_path, '2022-06-18 01:38:07.000', '2024-02-15 01:38:07.000',
-    #                            'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt')
+    # process_and_save_intervals_filter('whirlpool_test', MIX_PROTOCOL.WHIRLPOOL, target_path, '2019-04-17 01:38:07.000', '2024-02-15 01:38:07.000',
+    #                                   'sam_mix_test.txt', 'sam_postmix_test.txt', 'sam_premix_test.txt',
+    #                                   SAVE_BASE_FILES_JSON)
 
-    process_and_save_intervals_filter('wasabi2_test', target_path, '2023-12-01 01:38:07.000', '2024-02-15 01:38:07.000',
-                               'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt', None, SAVE_BASE_FILES_JSON)
+    # Extract distribution of mix fresh input sizes
+    if ANALYSIS_INPUTS_DISTRIBUTION:
+        extract_inputs_distribution('whirlpool_tx0_test', target_path, 'sam_premix_test.txt', True)
+        extract_inputs_distribution('whirlpool_tx0', target_path, 'SamouraiTx0s.txt', True)
+        extract_inputs_distribution('Wasabi2', target_path, 'Wasabi2CoinJoins.txt', True)
+        extract_inputs_distribution('Wasabi1', target_path, 'WasabiCoinJoins.txt', True)
 
-    # process_and_save_intervals_filter('wasabi2', target_path, '2022-06-18 01:38:07.000', '2024-02-15 01:38:07.000',
-    #                            'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON)
     #
-    # process_and_save_intervals_filter('wasabi1', target_path, '2018-07-19 01:38:07.000', '2024-02-15 01:38:07.000',
-    #                            'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', None, SAVE_BASE_FILES_JSON)
+    # Analyze address reuse in all mixes
     #
-    # process_and_save_intervals_filter('whirlpool', target_path, '2019-04-17 01:38:07.000', '2024-02-15 01:38:07.000',
-    #                            'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt', SAVE_BASE_FILES_JSON)
+    if ANALYSIS_ADDRESS_REUSE:
+        analyze_address_reuse(target_path)
+
+    if ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS:
+        process_and_save_intervals_filter('whirlpool', target_path, '2019-04-17 01:38:07.000', '2024-02-15 01:38:07.000',
+                                   'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt', SAVE_BASE_FILES_JSON)
+
+        process_and_save_intervals_filter('wasabi2', target_path, '2022-06-18 01:38:07.000', '2024-02-15 01:38:07.000',
+                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON)
+
+        process_and_save_intervals_filter('wasabi1', target_path, '2018-07-19 01:38:07.000', '2024-02-15 01:38:07.000',
+                                   'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', None, SAVE_BASE_FILES_JSON)
+
+    if ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS_DEBUG:
+        process_and_save_intervals_filter('wasabi2_feb24', target_path, '2024-02-11 01:38:07.000', '2024-02-11 23:38:07.000',
+                               'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt')
+
+        process_and_save_intervals_filter('wasabi2_test', target_path, '2023-12-01 01:38:07.000', '2024-02-15 01:38:07.000',
+                                   'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt', None, SAVE_BASE_FILES_JSON)
+
+        process_and_save_intervals_filter('wasabi2false', target_path, '2022-06-18 01:38:07.000', '2024-02-15 01:38:07.000',
+                                   'Wasabi2CoinJoins_false.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON)
+    #
+    # #
+    # # Analyze
+    # #
+    # if ANALYSIS_PROCESS_ALL_COINJOINS:
+    #     # All transactions
+    #     process_and_save_coinjoins('whirlpool', target_path, 'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt')
+    #     process_and_save_coinjoins('wasabi', target_path, 'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt')
+    #     process_and_save_coinjoins('wasabi2', target_path, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt')
+    #
+    # if ANALYSIS_PROCESS_ALL_COINJOINS_DEBUG:
+    #     # Smaller set for debugging
+    #     # process_and_save_coinjoins('whirlpool_test', target_path, True, 'sam_mix_test.txt', 'sam_postmix_test.txt', 'sam_premix_test.txt')
+    #     # process_and_save_coinjoins('wasabi_test', target_path, True, 'wasabi_mix_test.txt', 'wasabi_postmix_test.txt')
+    #     data = process_and_save_coinjoins('wasabi2_test', target_path,'wasabi2_mix_test.txt',
+    #                                       'wasabi2_postmix_test.txt', None, None, None)
+    #     first_coinjoin_date_str = min([data['coinjoins'][cjtx]['broadcast_time'] for cjtx in data['coinjoins'].keys()])
+    #     last_coinjoin_date_str = max([data['coinjoins'][cjtx]['broadcast_time'] for cjtx in data['coinjoins'].keys()])
+    #     process_and_save_intervals_filter('wasabi2_test', target_path, first_coinjoin_date_str, last_coinjoin_date_str,
+    #                                'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt')
+    #
+    #
+    # process_and_save_coinjoins('whirlpool', target_path, 'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt',
+    #                            'SamouraiTx0s.txt')
 
 
 
-    exit(1)
-
-    if FULL_TX_SET:
-        # All transactions
-        process_and_save_coinjoins('whirlpool', target_path, 'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt')
-        process_and_save_coinjoins('wasabi', target_path, 'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt')
-        process_and_save_coinjoins('wasabi2', target_path, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt')
-    else:
-        # Smaller set for debugging
-        # process_and_save_coinjoins('whirlpool_test', target_path, True, 'sam_mix_test.txt', 'sam_postmix_test.txt', 'sam_premix_test.txt')
-        # process_and_save_coinjoins('wasabi_test', target_path, True, 'wasabi_mix_test.txt', 'wasabi_postmix_test.txt')
-        data = process_and_save_coinjoins('wasabi2_test', target_path,'wasabi2_mix_test.txt',
-                                          'wasabi2_postmix_test.txt', None, None, None)
-        first_coinjoin_date_str = min([data['coinjoins'][cjtx]['broadcast_time'] for cjtx in data['coinjoins'].keys()])
-        last_coinjoin_date_str = max([data['coinjoins'][cjtx]['broadcast_time'] for cjtx in data['coinjoins'].keys()])
-        process_and_save_intervals('wasabi2_test', target_path, first_coinjoin_date_str, last_coinjoin_date_str,
-                                   'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt')
-
-        # 2022-06-18 01:38:07.000
-        # 2024-02-15 01:38:07.000
 
 
     print('### SUMMARY #############################')
     SM.print_summary()
     print('### END SUMMARY #########################')
+
+    # TODO: Compute ratio between fresh and remixed inputs
+    # TODO: Set x labels for histogram of frequencies to rounded denominations
+    # TODO: Detect likely cases of WW2 round split due to more than 400 inputs registered
+    #   (two coinjoins broadcasted close to each other, sum of inputs is close or higher than 400)
+
