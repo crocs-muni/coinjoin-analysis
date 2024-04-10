@@ -3272,7 +3272,8 @@ if __name__ == "__main__":
                          os.path.join(super_base_path, 'grid_pareto-static-1utxo'),
                          os.path.join(super_base_path, 'grid_pareto-static-5utxo'),
                          os.path.join(super_base_path, 'grid_pareto-static-30utxo'),
-                         os.path.join(super_base_path, 'grid_pareto-static-1utxo')]
+                         os.path.join(super_base_path, 'grid_pareto-static-1utxo'),
+                         os.path.join(super_base_path, 'grid_lognorm-static-1utxo')]
 
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
