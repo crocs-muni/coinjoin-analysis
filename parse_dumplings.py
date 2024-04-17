@@ -1541,7 +1541,7 @@ def wasabi2_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_v
             initial_cj_index = initial_cj_index + len(data['coinjoins'])
             #ax2.xaxis.set_major_formatter(ScalarFormatter(useMathText=False))
             #ax2.set_ylim(0, 6000)
-            ax.set_title(f'Type of inputs for given cjtx; liquidity in mix\n{mix_id} {file_name}')
+            ax.set_title(f'Type of inputs for given cjtx ({'values' if analyze_values else 'number'})\n{mix_id} {file_name}')
             logging.info(f'{target_base_path} inputs analyzed')
 
     plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
