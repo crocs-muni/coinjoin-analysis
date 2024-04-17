@@ -27,6 +27,9 @@ from tqdm import tqdm
 import anonymity_score
 import bitcoinlib.transactions
 from bitcoinlib.transactions import Transaction
+import cj_analysis as als
+from cj_analysis import MIX_PROTOCOL
+
 
 BTC_CLI_PATH = 'C:\\bitcoin-25.0\\bin\\bitcoin-cli'
 WASABIWALLET_DATA_DIR = 'c:\\Users\\xsvenda\\AppData\\Roaming'
@@ -519,10 +522,6 @@ def graphviz_tx_info(cjtx, address_wallet_mapping, graphdot):
                 graphviz_insert_address_address_mapping(addr1, addr2, edge_color, graphdot)
 
 
-def random_line_style():
-    return random.choice(LINE_STYLES)
-
-
 def insert_percentages_annotations(bar_data, fig):
     total = sum(bar_data)
     percentages = [(value / total) * 100 for value in bar_data]
@@ -572,6 +571,8 @@ class CoinJoinPlots:
     ax_coinjoins = None
     ax_logs = None
     ax_num_inoutputs = None
+    ax_inputs_type_value_ratio = None
+    ax_inputs_type_num_ratio = None
     ax_available_utxos = None
     ax_utxo_denom_anonscore = None
     ax_wallets_distrib = None
@@ -593,6 +594,7 @@ class CoinJoinPlots:
     ax_boltzmann_txcombinations = None
     ax_boltzmann_entropy_roundtime_wallets = None
 
+
     def __init__(self, plot):
         self.plot = plot
         self.clear()
@@ -609,26 +611,28 @@ class CoinJoinPlots:
             self.ax_coinjoins = self.axes[0]
             self.ax_logs = self.axes[1]
             self.ax_num_inoutputs = self.axes[2]
-            self.ax_available_utxos = self.axes[3]
-            self.ax_wallets_distrib = self.axes[4]
+            self.ax_inputs_type_num_ratio = self.axes[3]
+            self.ax_inputs_type_value_ratio = self.axes[4]
+            self.ax_available_utxos = self.axes[5]
+            self.ax_wallets_distrib = self.axes[6]
 
-            self.ax_utxo_provided = self.axes[5]
+            self.ax_utxo_provided = self.axes[7]
 
-            self.ax_anonscore_distrib_wallets = self.axes[6]
-            self.ax_anonscore_from_outputs = self.axes[7]
+            self.ax_anonscore_distrib_wallets = self.axes[8]
+            self.ax_anonscore_from_outputs = self.axes[9]
 
-            self.ax_utxo_entropy_from_outputs = self.axes[8]
-            self.ax_utxo_entropy_from_outputs_inoutsize = self.axes[9]
-            self.ax_utxo_denom_anonscore = self.axes[10]
-            self.ax_initial_final_utxos = self.axes[11]
+            self.ax_utxo_entropy_from_outputs = self.axes[10]
+            self.ax_utxo_entropy_from_outputs_inoutsize = self.axes[11]
+            self.ax_utxo_denom_anonscore = self.axes[12]
+            self.ax_initial_final_utxos = self.axes[13]
 
             # self.ax_mining_fees = ax11
 
-            self.ax_boltzmann_entropy_inoutsize = self.axes[12]
-            self.ax_boltzmann_entropy = self.axes[13]
-            self.ax_boltzmann_entropy_roundtime = self.axes[14]
-            self.ax_boltzmann_txcombinations = self.axes[15]
-            self.ax_boltzmann_entropy_roundtime_wallets = self.axes[16]
+            self.ax_boltzmann_entropy_inoutsize = self.axes[14]
+            self.ax_boltzmann_entropy = self.axes[15]
+            self.ax_boltzmann_entropy_roundtime = self.axes[16]
+            self.ax_boltzmann_txcombinations = self.axes[17]
+            self.ax_boltzmann_entropy_roundtime_wallets = self.axes[18]
 
     def savefig(self, save_file, experiment_name: str):
         self.plot.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
@@ -648,8 +652,11 @@ class CoinJoinPlots:
         self.ax_logs = None
         self.ax_utxo_denom_anonscore = None
         self.ax_num_inoutputs = None
+        self.ax_inputs_type_num_ratio = None
+        self.ax_inputs_type_value_ratio = None
         self.ax_available_utxos = None
         self.ax_wallets_distrib = None
+        self.ax_inputs_type_value_ratio = None
 
         self.ax_utxo_provided = None
 
@@ -750,7 +757,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
                         num_overmixed_utxos += 1
                     total_utxos += 1
     if total_utxos > 0:
-        print(f'Total overmixed outputs: {num_overmixed_utxos} / {total_utxos} ({round(num_overmixed_utxos/total_utxos, 1)*100}%)')
+        print(f'Total overmixed outputs: {num_overmixed_utxos} / {total_utxos} ({round((num_overmixed_utxos/total_utxos)*100, 1)}%)')
     else:
         print('Total overmixed outputs: nothing found.')
 
@@ -1553,6 +1560,16 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
 
     #!!! Add how many coinjoins given wallet participated in. Weighted number by number of input txos.
 
+    if cjplt.ax_inputs_type_value_ratio:
+        als.plot_inputs_type_ratio(f'{experiment_name}', cjtx_stats, 0, cjplt.ax_inputs_type_value_ratio,True)
+        ax2 = cjplt.ax_inputs_type_value_ratio.twinx()
+        als.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, 0, 0, ax2)
+
+    if cjplt.ax_inputs_type_num_ratio:
+        als.plot_inputs_type_ratio(f'{experiment_name}', cjtx_stats, 0, cjplt.ax_inputs_type_num_ratio, False)
+        ax2 = cjplt.ax_inputs_type_num_ratio.twinx()
+        als.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, 0, 0, ax2)
+
 
 # 'os^vD'
 SCENARIO_MARKER_MAPPINGS = {'paretosum-static-.*-30utxo': '*', 'paretosum-static-.*-5utxo': '^',
@@ -1785,9 +1802,10 @@ def analyze_aggregated_coinjoin_stats(multi_cjtx_stats, base_path):
     # Save results into file
     experiment_name = os.path.basename(base_path)
     plt.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
-    plt.subplots_adjust(bottom=0.1, wspace=0.1, hspace=0.5)
-    save_file = os.path.join(base_path, f"aggregated_coinjoin_stats{GLOBAL_IMG_SUFFIX}.png")
-    plt.savefig(save_file, dpi=300)
+    plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.5)
+    save_file = os.path.join(base_path, f"aggregated_coinjoin_stats{GLOBAL_IMG_SUFFIX}")
+    plt.savefig(f'{save_file}.png', dpi=300)
+    plt.savefig(f'{save_file}.pdf', dpi=300)
     plt.close()
     print('Aggregated coinjoins statistics saved into {}'.format(save_file))
 
@@ -2560,7 +2578,6 @@ def remove_link_between_inputs_and_outputs(coinjoins):
                 coinjoins[txid]['outputs'][index].pop('spend_by_txid')
 
 
-
 def compute_link_between_inputs_and_outputs(coinjoins, sorted_cjs_in_scope):
     """
     Compute backward and forward connection between all transactions in sorted_cjs_in_scope list. As a result,
@@ -2642,6 +2659,7 @@ def optimize_txvalue_info(cjtx_stats):
 
 
 def process_experiment(args):
+    mix_protocol = MIX_PROTOCOL.WASABI2
     base_path = args[0]
     save_figs = args[1]
     WASABIWALLET_DATA_DIR = base_path
@@ -2811,6 +2829,7 @@ def process_experiment(args):
     remove_link_between_inputs_and_outputs(cjtx_stats['coinjoins'])
     compute_link_between_inputs_and_outputs(cjtx_stats['coinjoins'],
                                             [cjtxid for cjtxid in cjtx_stats['coinjoins'].keys()])
+    als.analyze_input_out_liquidity(cjtx_stats['coinjoins'], cjtx_stats.get('postmix', {}), cjtx_stats.get('premix', {}), mix_protocol)
 
     # Analyze various coinjoins statistics.
     # Plot only if required (time-consuming, and not thread safe)
@@ -3151,7 +3170,8 @@ if __name__ == "__main__":
     #PARALLELIZE_COINJOIN_STATS = False
     #LOAD_WALLETS_INFO_VIA_RPC = False
     #LOAD_TXINFO_FROM_FILE = False
-    ASSUME_COORDINATOR_WALLET = False
+
+    ASSUME_COORDINATOR_WALLET = True
 
     #READ_ONLY_COINJOIN_TX_INFO = True
     SAVE_ANALYTICS_TO_FILE = False
@@ -3292,6 +3312,16 @@ if __name__ == "__main__":
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'unproccesed')]
 
+    super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    target_base_paths = [os.path.join(super_base_path, 'grid_lognorm-static-30utxo')]
+
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'random_skips_uniform-static_30utxo')]
+
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'uniform-500-30utxo')]
+
+
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'wasabi2_feb')]
 
@@ -3299,7 +3329,7 @@ if __name__ == "__main__":
     # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test3')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test3')]
+    # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test4')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'grid_100w')]
@@ -3338,3 +3368,11 @@ if __name__ == "__main__":
 
     # # Generate aggregated visualizations
     generate_aggregated_visualization(target_base_paths)
+
+    # TODO: Distribution of number of inputs per one wallet in given coinjoin -- dependency on other parameters.
+    #  Crucial for establishing likely number of wallets participating in single coinjoin.
+    # TODO: Add annotation of experiment name to aggregated graphs + possibility to change colors of lines
+    # TODO: Add numeric annotation to bar graphs with exact numbers
+    # TODO: Important: think what it means that we have always most of the inputs in remixed, not fresh
+    # TODO: Analyze if number of fresh/remixed inputs changes over the time
+    # TODO: Add computation of time required to finish given analysis => summary for easy identification of analyses to skip
