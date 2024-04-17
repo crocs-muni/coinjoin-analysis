@@ -8,6 +8,11 @@ import numpy as np
 #from jsonpickle import json
 import logging
 import json
+import mmap
+from cj_analysis import MIX_EVENT_TYPE
+from cj_analysis import MIX_PROTOCOL
+import cj_analysis as als
+
 
 from matplotlib import pyplot as plt
 from matplotlib.ticker import MaxNLocator, ScalarFormatter, NullFormatter
@@ -50,33 +55,8 @@ class ClusterIndex:
 CLUSTER_INDEX = ClusterIndex(0)
 
 
-class MIX_EVENT_TYPE(Enum):
-    MIX_ENTER = 'MIX_ENTER'  # New liquidity coming to mix
-    MIX_LEAVE = 'MIX_LEAVE'  # Liquidity leaving mix (postmix spend)
-    MIX_REMIX = 'MIX_REMIX'  # Remixed value within mix
-    MIX_REMIX_FRIENDS = 'MIX_REMIX_FRIENDS'  # Remixed value within mix, but not directly, but one hop friends (WW2)
-    MIX_STAY = 'MIX_STAY'    # Mix output not yet spend (may be remixed or leave mix later)
-
-class MIX_PROTOCOL(Enum):
-    UNSET = 'UNSET'  # not set yet
-    WASABI1 = 'WASABI1'  # Wasabi 1.0
-    WASABI2 = 'WASABI2'  # Wasabi 2.0
-    WHIRLPOOL = 'WHIRLPOOL'  # Whirlpool
-
-
-class SummaryMessages:
-    summary_messages = []
-
-    def print(self, message: str):
-        logging.info(message)
-        self.summary_messages.append(message)
-
-    def print_summary(self):
-        for message in self.summary_messages:
-            logging.info(message)
-
-
-SM = SummaryMessages()
+SM = als.SummaryMessages()
+als.SM = SM
 
 
 class CoinMixInfo:
@@ -121,11 +101,6 @@ def set_key_value_assert(data, key, value, hard_assert):
         data[key] = value
 
 
-def get_ratio_string(numerator, denominator) -> str:
-    if denominator != 0:
-        return f'{numerator}/{denominator} ({round(numerator/float(denominator) * 100, 1)}%)'
-    else:
-        return f'{numerator}/{0} (0%)'
 
 
 def get_input_name_string(txid, index):
@@ -134,13 +109,6 @@ def get_input_name_string(txid, index):
 
 def get_output_name_string(txid, index):
     return f'vout_{txid}_{index}'
-
-
-def extract_txid_from_inout_string(inout_string):
-    if inout_string.startswith('vin') or inout_string.startswith('vout'):
-        return inout_string[inout_string.find('_') + 1: inout_string.rfind('_')], inout_string[inout_string.rfind('_')+1:]
-    else:
-        assert False, f'Invalid inout string {inout_string}'
 
 
 def get_synthetic_address(create_txid, vout_index):
@@ -223,7 +191,7 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
             input = cj_stats[txid]['inputs'][index]
 
             if 'spending_tx' in input.keys():
-                tx, vout = extract_txid_from_inout_string(input['spending_tx'])
+                tx, vout = als.extract_txid_from_inout_string(input['spending_tx'])
                 # Try to find transaction and set its record
                 if tx in cj_stats.keys() and vout in cj_stats[tx]['outputs'].keys():
                     cj_stats[tx]['outputs'][vout]['spend_by_tx'] = get_input_name_string(txid, index)
@@ -244,93 +212,6 @@ def load_coinjoin_stats(base_path):
         coinjoin_stats[target_file]['coinjoins'] = load_coinjoin_stats_from_file(target_file)
 
     return coinjoin_stats
-
-
-def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL):
-    logging.debug('analyze_input_out_liquidity() started')
-    liquidity_events = []
-    total_inputs = 0
-    total_mix_entering = 0
-    total_outputs = 0
-    total_mix_leaving = 0
-    total_mix_staying = []
-    total_utxos = 0
-    broadcast_times = {cjtx: datetime.strptime(coinjoins[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for cjtx in coinjoins.keys()}
-    # Sort coinjoins based on time
-    cj_time = [{'txid': cjtxid, 'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
-    sorted_cj_times = sorted(cj_time, key=lambda x: x['broadcast_time'])
-    coinjoins_list = [cj['txid'] for cj in sorted_cj_times]
-
-    #!!!Detect friends from postmix_spend txs
-
-    for cjtx in coinjoins:
-        for input in coinjoins[cjtx]['inputs']:
-            total_inputs += 1
-            spending_tx, index = extract_txid_from_inout_string(coinjoins[cjtx]['inputs'][input]['spending_tx'])
-            if spending_tx not in coinjoins.keys():
-                # Direct previous transaction is from outside the mix => new input liquidity
-                if mix_protocol == MIX_PROTOCOL.WASABI2:
-                    # Either 1. New fresh liquidity entered or 2. One hop friend mixing (if WW2)
-                    is_friend_do_not_pay = False
-                    if spending_tx in premix_spend:
-                        # If all inputs of spending_tx is from ww2 coinjoin, consider it as friend premix
-                        non_ww2_input_detected = False
-                        for index in premix_spend[spending_tx]['inputs'].keys():
-                            if ('spending_tx' in premix_spend[spending_tx]['inputs'][index].keys()
-                                    and premix_spend[spending_tx]['inputs'][index]['spending_tx'] in coinjoins.keys()):
-                                # This input is spending from ww2 mix => ok
-                                continue
-                            else:
-                                non_ww2_input_detected = True
-                                break
-                        if not non_ww2_input_detected:
-                            is_friend_do_not_pay = True
-                    if not is_friend_do_not_pay:
-                        total_mix_entering += 1
-                        coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_ENTER.name
-                    else:
-                        coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name
-                        coinjoins[cjtx]['inputs'][input]['burn_time'] = round(
-                            (broadcast_times[cjtx] - broadcast_times[spending_tx]).total_seconds(), 0)
-                        coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] = coinjoins_list.index(
-                            cjtx) - coinjoins_list.index(spending_tx)
-                else:
-                    # All other protocols than WW2 do not have 'friends do not pay'
-                    total_mix_entering += 1
-                    coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_ENTER.name
-            else:
-                coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX.name
-                coinjoins[cjtx]['inputs'][input]['burn_time'] = round((broadcast_times[cjtx] - broadcast_times[spending_tx]).total_seconds(), 0)
-                coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] = coinjoins_list.index(cjtx) - coinjoins_list.index(spending_tx)
-
-        for output in coinjoins[cjtx]['outputs']:
-            total_outputs += 1
-            if 'spend_by_tx' not in coinjoins[cjtx]['outputs'][output].keys():
-                # This output is not spend by any tx => still utxo (stays within mixing pool)
-                total_utxos += 1
-                total_mix_staying.append(coinjoins[cjtx]['outputs'][output]['value'])
-                coinjoins[cjtx]['outputs'][output]['mix_event_type'] = MIX_EVENT_TYPE.MIX_STAY.name
-            else:
-                # This output is spend, figure out if by other mixing transaction or postmix spend
-                spend_by_tx, index = extract_txid_from_inout_string(coinjoins[cjtx]['outputs'][output]['spend_by_tx'])
-                if spend_by_tx not in coinjoins.keys():
-                    # Postmix spend: the spending transaction is outside mix => liquidity out
-                    if spend_by_tx not in postmix_spend.keys():
-                        logging.warning(f'Could not find spend_by_tx {spend_by_tx} in postmix_spend txs')
-                    total_mix_leaving += 1
-                    coinjoins[cjtx]['outputs'][output]['mix_event_type'] = MIX_EVENT_TYPE.MIX_LEAVE.name
-                else:
-                    # Mix spend: The output is spent by next coinjoin tx => stays in mix
-                    coinjoins[cjtx]['outputs'][output]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX.name
-                    coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] = coinjoins_list.index(spend_by_tx) - coinjoins_list.index(cjtx)
-                    coinjoins[cjtx]['outputs'][output]['burn_time'] = round((broadcast_times[spend_by_tx] - broadcast_times[cjtx]).total_seconds(), 0)
-
-    SM.print(f'  {get_ratio_string(total_mix_entering, total_inputs)} Inputs entering mix / total inputs used by mix transactions')
-    SM.print(f'  {get_ratio_string(total_mix_leaving, total_outputs)} Outputs leaving mix / total outputs by mix transactions')
-    SM.print(f'  {get_ratio_string(len(total_mix_staying), total_outputs)} Outputs staying in mix / total outputs by mix transactions')
-    SM.print(f'  {sum(total_mix_staying) / SATS_IN_BTC} btc, total value staying in mix')
-
-    logging.debug('analyze_input_out_liquidity() finished')
 
 
 def extract_wallets_info(data):
@@ -369,7 +250,7 @@ def extract_wallets_info(data):
             #coin.update({'confirmed': True, 'confirmations': 1, 'keyPath': '', 'block_hash': txs_data[cjtxid]['block_hash']})
             coin['is_from_cjtx'] = txs_data[cjtxid].get('is_cjtx', False)
             if 'spend_by_tx' in txs_data[cjtxid]['outputs'][index].keys():
-                spent_tx, spend_index = extract_txid_from_inout_string(txs_data[cjtxid]['outputs'][index]['spend_by_tx'])
+                spent_tx, spend_index = als.extract_txid_from_inout_string(txs_data[cjtxid]['outputs'][index]['spend_by_tx'])
                 coin['spentBy'] = spent_tx
                 coin['is_spent_by_cjtx'] = False if spent_tx not in txs_data.keys() else txs_data[spent_tx].get('is_cjtx', False)
                 if spent_tx in txs_data.keys():
@@ -399,7 +280,7 @@ def extract_wallets_info(data):
                 # Coin record was not found in any of the previous outputs of all analyzed transactions,
                 # Create new coin with information derived from output and transaction info
                 # Coin creation time set to artificial_min_cj_time . TODO: change to real value from blockchain
-                txid, vout = extract_txid_from_inout_string(txs_data[cjtxid]['inputs'][index]['spending_tx'])
+                txid, vout = als.extract_txid_from_inout_string(txs_data[cjtxid]['inputs'][index]['spending_tx'])
                 coin = {'txid': txid, 'index': vout, 'amount': txs_data[cjtxid]['inputs'][index]['value'],
                         'anonymityScore': -1, 'address': target_addr, 'create_time': artificial_min_cj_time,
                         'wallet_name': wallet_name, 'is_from_cjtx': False, 'is_spent_by_cjtx': False}
@@ -454,7 +335,7 @@ def compute_mix_postmix_link(data: dict):
         for index in data['postmix'][txid]['inputs'].keys():
             input = data['postmix'][txid]['inputs'][index]
             if 'spending_tx' in input.keys():
-                tx, vout = extract_txid_from_inout_string(input['spending_tx'])
+                tx, vout = als.extract_txid_from_inout_string(input['spending_tx'])
                 # Try to find transaction in mix (coinjoins) and set its record
                 if tx in data['coinjoins'].keys() and vout in data['coinjoins'][tx]['outputs'].keys():
                     data['coinjoins'][tx]['outputs'][vout]['spend_by_tx'] = get_input_name_string(txid, index)
@@ -466,7 +347,7 @@ def compute_mix_postmix_link(data: dict):
             for index in data['coinjoins'][txid]['inputs'].keys():
                 input = data['coinjoins'][txid]['inputs'][index]
                 if 'spending_tx' in input.keys():
-                    tx, vout = extract_txid_from_inout_string(input['spending_tx'])
+                    tx, vout = als.extract_txid_from_inout_string(input['spending_tx'])
                     # Try to find transaction in mix (coinjoins) and set its record
                     if tx in data['premix'].keys() and vout in data['premix'][tx]['outputs'].keys():
                         data['premix'][tx]['outputs'][vout]['spend_by_tx'] = get_input_name_string(txid, index)
@@ -524,7 +405,7 @@ def propagate_cluster_name_for_all_inputs(cluster_name, postmix_txs, txid, mix_t
         set_key_value_assert(postmix_txs[txid]['inputs'][input], 'cluster_id', cluster_name, CLUSTER_ID_CHECK_HARD_ASSERT)
         # Set also for outputs connected to these inputs
         if 'spending_tx' in postmix_txs[txid]['inputs'][input]:
-            tx, vout = extract_txid_from_inout_string(postmix_txs[txid]['inputs'][input]['spending_tx'])
+            tx, vout = als.extract_txid_from_inout_string(postmix_txs[txid]['inputs'][input]['spending_tx'])
             # Try to find transaction and set its record (postmix txs, coinjoin txs)
             if tx in postmix_txs.keys() and vout in postmix_txs[tx]['outputs'].keys():
                 # This is suspicious, one premix propagates to another premix (maybe badbank merged into next TX0?)
@@ -542,7 +423,7 @@ def propagate_cluster_name_for_all_outputs(cluster_name, premix_txs, txid, mix_t
 
         # set for inputs which are spending this output
         if 'spend_by_tx' in premix_txs[txid]['outputs'][output]:
-            tx, vin = extract_txid_from_inout_string(premix_txs[txid]['outputs'][output]['spend_by_tx'])
+            tx, vin = als.extract_txid_from_inout_string(premix_txs[txid]['outputs'][output]['spend_by_tx'])
             # Try to find transaction and set its record (premix txs, coinjoin txs)
             if tx in premix_txs.keys() and vin in premix_txs[tx]['inputs'].keys():
                 # This is suspicious, one premix propagates to another premix
@@ -586,9 +467,9 @@ def analyze_postmix_spends(tx_dict: dict) -> dict:
 
     # Compute total number of inputs used in postmix spending
     total_inputs = sum([len(postmix_txs[txid]['inputs']) for txid in postmix_txs.keys()])
-    SM.print(f'  {get_ratio_string(total_inputs_merged, total_inputs)} '
+    SM.print(f'  {als.get_ratio_string(total_inputs_merged, total_inputs)} '
              f'N:1 postmix merges detected (merged inputs / all inputs)')
-    SM.print(f'  {get_ratio_string(CLUSTER_INDEX.get_current_index() - offset, len(postmix_txs))} '
+    SM.print(f'  {als.get_ratio_string(CLUSTER_INDEX.get_current_index() - offset, len(postmix_txs))} '
              f'N:1 unique postmix clusters detected (clusters / all postmix txs)')
 
     return tx_dict
@@ -646,7 +527,7 @@ def analyze_premix_spends(tx_dict: dict) -> dict:
 
     # Compute total number of new premix clusters
     total_outputs = sum([len(premix_txs[txid]['outputs']) for txid in premix_txs.keys()])
-    SM.print(f'  {get_ratio_string(CLUSTER_INDEX.get_current_index() - offset, total_outputs)} '
+    SM.print(f'  {als.get_ratio_string(CLUSTER_INDEX.get_current_index() - offset, total_outputs)} '
              f'N:M new premix clusters detected (number clusters / total outputs in premix)')
 
     return tx_dict
@@ -657,7 +538,7 @@ def analyze_coinjoin_blocks(data):
     for txid in data['coinjoins'].keys():
         same_block_coinjoins[data['coinjoins'][txid]['block_hash']].append(txid)
     filtered_dict = {key: value for key, value in same_block_coinjoins.items() if len(value) > 1}
-    SM.print(f'  {get_ratio_string(len(filtered_dict), len(data['coinjoins']))} coinjoins in same block')
+    SM.print(f'  {als.get_ratio_string(len(filtered_dict), len(data['coinjoins']))} coinjoins in same block')
 
 
 def visualize_coinjoins_in_time(data, ax_num_coinjoins):
@@ -738,7 +619,7 @@ def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_b
             destruct_time = timestamp
             for index in coinjoins[cjtx]['inputs'].keys():
                 if 'spending_tx' in coinjoins[cjtx]['inputs'][index].keys():
-                    txid, vout = extract_txid_from_inout_string(coinjoins[cjtx]['inputs'][index]['spending_tx'])
+                    txid, vout = als.extract_txid_from_inout_string(coinjoins[cjtx]['inputs'][index]['spending_tx'])
                     if txid in broadcast_times_cjtxs.keys():
                         create_time = broadcast_times_cjtxs[txid]
                         time_diff = destruct_time - create_time
@@ -904,7 +785,7 @@ def visualize_coinjoins(data, events, base_path, experiment_name):
     # Fresh liquidity in/out of mix
     visualize_liquidity_in_time(events, ax_liquidity, ax_liquidity_boxplot, ax_fresh_inputs_value_boxplot,
                                 ax_fresh_outputs_value_boxplot, ax_inputs_value_bar, ax_outputs_value_bar,
-                                None, ['fresh inputs mixed', 'outputs leaving mix', ''], data['premix'])
+                                None, ['fresh inputs mixed', 'outputs leaving mix', ''], data.get('premix', None))
     ax_liquidity.set_ylabel('Number of new inputs / outputs')
     ax_liquidity.set_title('Number of fresh liquidity in and out of cjtx')
     ax_liquidity_boxplot.set_ylabel('Number of new inputs / outputs')
@@ -945,12 +826,12 @@ def process_coinjoins(target_path, mix_protocol: MIX_PROTOCOL, mix_filename, pos
     SM.print(f'Dates from {min_date} to {max_date}')
 
     SM.print('### Simple chain analysis')
-    analyze_input_out_liquidity(data['coinjoins'], data['postmix'], data['premix'], mix_protocol)
+    als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], data.get('premix', {}), mix_protocol)
     analyze_postmix_spends(data)
     analyze_premix_spends(data)
     analyze_coinjoin_blocks(data)
-    analyze_coordinator_fees(data, mix_protocol)
-    analyze_mining_fees(data['coinjoins'])
+    analyze_coordinator_fees(mix_filename, data, mix_protocol)
+    analyze_mining_fees(mix_filename, data)
 
     return data
 
@@ -1050,12 +931,26 @@ def process_and_save_intervals_onload(mix_id: str, mix_protocol: MIX_PROTOCOL, t
 
 
 def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: os.path, start_date: str, stop_date: str, mix_filename: str,
-                                      postmix_filename: str, premix_filename: str=None, save_base_files=True):
+                                      postmix_filename: str, premix_filename: str=None, save_base_files=True, load_base_files=False):
     # Create directory structure with files split per month (around 1000 subsequent coinjoins)
     # Load all coinjoins first, then filter based on intervals
-    SAVE_BASE_FILES_JSON = False
-    data = process_and_save_coinjoins(mix_id, mix_protocol, target_path, mix_filename, postmix_filename, premix_filename, None, None)
-    SAVE_BASE_FILES_JSON = save_base_files
+    if load_base_files:
+        # Load base files from already stored json
+        logging.info(f'Loading {target_path}/coinjoin_tx_info.json ...')
+
+        with open(os.path.join(target_path, f'coinjoin_tx_info.json'), "r") as file:
+            data = json.load(file)
+
+        # with open(os.path.join(target_path, f'coinjoin_tx_info.json'), mode="r", encoding="utf8") as file:
+        #     mmapped_file = mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ)
+        #     data = json.loads(mmapped_file.read().decode('utf-8'))
+
+        logging.info(f'{target_path}/coinjoin_tx_info.json loaded')
+    else:
+        # Compute base files (time intensive)
+        SAVE_BASE_FILES_JSON = False
+        data = process_and_save_coinjoins(mix_id, mix_protocol, target_path, mix_filename, postmix_filename, premix_filename, None, None)
+        SAVE_BASE_FILES_JSON = save_base_files
 
     if premix_filename:
         # Whirlpool
@@ -1097,7 +992,7 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
                                       if last_stop_date_str < data['coinjoins'][txid]['broadcast_time'] < current_stop_date_str}
         interval_data['postmix'] = {}
         interval_data['rounds'] = {roundid: data['rounds'][roundid] for roundid in data['rounds'].keys()
-                                   if last_stop_date_str < data['rounds'][roundid]['round_start_timestamp'] < current_stop_date_str}
+                                   if last_stop_date_str < data['rounds'][roundid]['round_start_time'] < current_stop_date_str}
         interval_data['wallets_coins'] = {wallet_name: [] for wallet_name in data['wallets_coins'].keys()}
         for wallet_name in data['wallets_coins'].keys():
             interval_data['wallets_coins'][wallet_name] = [coin for coin in data['wallets_coins'][wallet_name]
@@ -1255,7 +1150,7 @@ def analyze_interval_data(interval_data, stats: CoinJoinStats, results: dict):
 def process_inputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_filename: str, save_outputs = False):
     logging.info(f'Processing {mix_id}')
     txs = load_coinjoin_stats_from_file(os.path.join(target_path, tx_filename))
-    analyze_input_out_liquidity(txs, [], [], mix_protocol)
+    als.analyze_input_out_liquidity(txs, [], [], mix_protocol)
     # inputs_not_enter = [(txid, index) for txid in txs.keys() for index in txs[txid]['inputs'].keys()
     #           if txs[txid]['inputs'][index]['mix_event_type'] != MIX_EVENT_TYPE.MIX_ENTER.name]
 
@@ -1519,9 +1414,9 @@ def analyze_mining_fees(mix_id: str, data: dict):
 
 def analyze_coordinator_fees(mix_id: str, data, mix_protocol):
     if mix_protocol == MIX_PROTOCOL.WASABI1 or mix_protocol == MIX_PROTOCOL.WASABI2:
-        return wasabi_analyze_coordinator_fees(data)
+        return wasabi_analyze_coordinator_fees(mix_id, data)
     elif mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
-        return whirlpool_analyze_fees(data)
+        return whirlpool_analyze_fees(mix_id, data)
     else:
         assert False, f'Unexpected value of mix_protocol provided: {mix_protocol.name}'
 
@@ -1540,6 +1435,8 @@ def wasabi_analyze_coordinator_fees(mix_id: str, cjtxs: dict):
         coord_fee = sum([only_cjtxs[cjtx]['inputs'][index]['value'] * WW2_COORD_FEE for index in only_cjtxs[cjtx]['inputs'].keys()
                          if only_cjtxs[cjtx]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name and only_cjtxs[cjtx]['inputs'][index]['value'] >= PLEBS_SATS_LIMIT])
         cjtxs_coordinator_fee.append(coord_fee)
+
+    # TODO: analyze plebs-do-not-pay frequency
 
     print(f'Total coordination fee: {sum(cjtxs_coordinator_fee) / 100000000} btc ({sum(cjtxs_coordinator_fee)} sats)')
 
@@ -1575,7 +1472,7 @@ def whirlpool_analyze_coordinator_fees(mix_id: str, data: dict):
         pool = 0
         for index in tx0s[tx0]['outputs'].keys():
             if 'spend_by_tx' in tx0s[tx0]['outputs'][index]:
-                txid, vin = extract_txid_from_inout_string(tx0s[tx0]['outputs'][index]['spend_by_tx'])
+                txid, vin = als.extract_txid_from_inout_string(tx0s[tx0]['outputs'][index]['spend_by_tx'])
                 if txid in cjtxs.keys():
                     for pool_size in WHIRLPOOL_POOLS:
                         if abs(tx0s[tx0]['outputs'][index]['value'] - pool_size) < pool_size * 0.1:
@@ -1605,7 +1502,7 @@ def whirlpool_analyze_coordinator_fees(mix_id: str, data: dict):
 def whirlpool_analyse_remixes(mix_id: str, target_path: Path, tx_file: str):
     with open(os.path.join(target_path, tx_file), "r") as file:
         data = json.load(file)
-    analyze_input_out_liquidity(data['coinjoins'], data['postmix'], data['premix'], MIX_PROTOCOL.WHIRLPOOL)
+    als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], data['premix'], MIX_PROTOCOL.WHIRLPOOL)
     whirlpool_analyze_fees(mix_id, data)
     inputs_value_burntime_heatmap(mix_id, data)
     burntime_histogram(mix_id, data)
@@ -1614,16 +1511,51 @@ def whirlpool_analyse_remixes(mix_id: str, target_path: Path, tx_file: str):
 def wasabi2_analyse_remixes(mix_id: str, target_path: Path, tx_file: str):
     with open(os.path.join(target_path, tx_file), "r") as file:
         data = json.load(file)
+    als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], [], MIX_PROTOCOL.WASABI2)
 
     wasabi2_analyze_fees(mix_id, data)
     inputs_value_burntime_heatmap(mix_id, data)
     burntime_histogram(mix_id, data)
 
 
+def wasabi2_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_values: bool = True):
+    files = os.listdir(target_path) if os.path.exists(target_path) else print(
+        f'Path {target_path} does not exist')
+
+    fig = plt.figure(figsize=(40, 30))
+    ax_index = 1
+    initial_liquidity = 0
+    initial_cj_index = 0
+    for file_name in files:
+        target_base_path = os.path.join(target_path, file_name)
+        tx_json_file = os.path.join(target_base_path, tx_file)
+        if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
+            with open(tx_json_file, "r") as file:
+                data = json.load(file)
+
+            ax = fig.add_subplot(7, 3, ax_index)
+            ax_index += 1
+            als.plot_inputs_type_ratio(f'{mix_id} {file_name}', data, initial_cj_index, ax, analyze_values)
+            ax2 = ax.twinx()
+            initial_liquidity = als.plot_mix_liquidity(f'{mix_id} {file_name}', data, initial_liquidity, initial_cj_index, ax2)
+            initial_cj_index = initial_cj_index + len(data['coinjoins'])
+            #ax2.xaxis.set_major_formatter(ScalarFormatter(useMathText=False))
+            #ax2.set_ylim(0, 6000)
+            ax.set_title(f'Type of inputs for given cjtx; liquidity in mix\n{mix_id} {file_name}')
+            logging.info(f'{target_base_path} inputs analyzed')
+
+    plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
+
+    save_file = os.path.join(target_path, f'{mix_id}_input_types_{'values' if analyze_values else 'nums'}')
+    plt.savefig(f'{save_file}.png', dpi=300)
+    plt.savefig(f'{save_file}.pdf', dpi=300)
+    plt.close()
+
+
 def wasabi1_analyse_remixes(mix_id: str, target_path: Path, tx_file: str):
     with open(os.path.join(target_path, tx_file), "r") as file:
         data = json.load(file)
-    analyze_input_out_liquidity(data['coinjoins'], data['postmix'], [], MIX_PROTOCOL.WASABI1)
+    als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], [], MIX_PROTOCOL.WASABI1)
 
     wasabi1_analyze_fees(mix_id, data)
     inputs_value_burntime_heatmap(mix_id, data)
