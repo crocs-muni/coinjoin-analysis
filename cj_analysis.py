@@ -11,6 +11,7 @@ class MIX_EVENT_TYPE(Enum):
     MIX_LEAVE = 'MIX_LEAVE'  # Liquidity leaving mix (postmix spend)
     MIX_REMIX = 'MIX_REMIX'  # Remixed value within mix
     MIX_REMIX_FRIENDS = 'MIX_REMIX_FRIENDS'  # Remixed value within mix, but not directly, but one hop friends (WW2)
+    MIX_REMIX_FRIENDS_WW1 = 'MIX_REMIX_FRIENDS_WW1'  # Remixed value from WW1 mix (only for WW2)
     MIX_STAY = 'MIX_STAY'    # Mix output not yet spend (may be remixed or leave mix later)
 
 
@@ -176,12 +177,14 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity: int, initial_
     cj_time = [{'txid': cjtxid, 'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
     sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
 
-    output_types_nums = {}
     mix_enter = [sum([coinjoins[cjtx['txid']]['inputs'][index]['value'] for index in coinjoins[cjtx['txid']]['inputs'].keys()
                                 if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name])
                            for cjtx in sorted_cj_time]
     mix_remixfriend = [sum([coinjoins[cjtx['txid']]['inputs'][index]['value'] for index in coinjoins[cjtx['txid']]['inputs'].keys()
                                 if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name])
+                           for cjtx in sorted_cj_time]
+    mix_remixfriend_ww1 = [sum([coinjoins[cjtx['txid']]['inputs'][index]['value'] for index in coinjoins[cjtx['txid']]['inputs'].keys()
+                                if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name])
                            for cjtx in sorted_cj_time]
     mix_leave = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
                                     if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_LEAVE.name])
@@ -189,9 +192,9 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity: int, initial_
 
     liquidity = []
     curr_liquidity = initial_liquidity  # Take liquidity from previous interval
-    assert len(mix_enter) == len(mix_leave) == len(mix_remixfriend), logging.error(f'Mismatch in length of input/out sum arrays: {len(mix_enter)} vs. {len(mix_leave)}')
+    assert len(mix_enter) == len(mix_leave) == len(mix_remixfriend) == len(mix_remixfriend_ww1), logging.error(f'Mismatch in length of input/out sum arrays: {len(mix_enter)} vs. {len(mix_leave)}')
     for index in range(0, len(mix_enter)):
-        curr_liquidity = curr_liquidity + mix_enter[index] + mix_remixfriend[index] - mix_leave[index]
+        curr_liquidity = curr_liquidity + mix_enter[index] + mix_remixfriend[index] + mix_remixfriend_ww1[index] - mix_leave[index]
         liquidity.append(curr_liquidity)
 
     # Plot in btc
@@ -204,7 +207,7 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity: int, initial_
     return liquidity[-1]
 
 
-def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL):
+def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins={}, ww1_postmix_spend={}):
     logging.debug('analyze_input_out_liquidity() started')
     liquidity_events = []
     total_inputs = 0
@@ -229,17 +232,16 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
                 if spending_tx not in coinjoins.keys():
                     # Direct previous transaction is from outside the mix => potentially new input liquidity
                     if mix_protocol == MIX_PROTOCOL.WASABI2:
-                        # Either: 1. New fresh liquidity entered or 2. One hop friend mixing (if WW2)
-                        if spending_tx in postmix_spend.keys():
-                            # Friends do not pay tx
+                        # Either: 1. New fresh liquidity entered or 2. Friend-do-not-pay rule (if WW2/WW1, one or two hops)
+                        # If fresh input is coming from WW1, friends-do-not-pay may also still apply, check
+                        if (spending_tx in postmix_spend.keys() or
+                                spending_tx in ww1_coinjoins.keys() or
+                                spending_tx in ww1_postmix_spend.keys()):
+                            # Friends do not pay rule tx
                             coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name
                             total_mix_friends += 1
-
-                            # coinjoins[cjtx]['inputs'][input]['burn_time'] = round(
-                            #     (broadcast_times[cjtx] - broadcast_times[spending_tx]).total_seconds(), 0)
-                            # coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] = coinjoins_list.index(
-                            #     cjtx) - coinjoins_list.index(spending_tx)
                         else:
+                            # Fresh input coming from outside
                             total_mix_entering += 1
                             coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_ENTER.name
                     else:
