@@ -46,7 +46,6 @@ def extract_txid_from_inout_string(inout_string):
         return inout_string[0], inout_string[1]
 
 
-
 def get_ratio_string(numerator, denominator) -> str:
     if denominator != 0:
         return f'{numerator}/{denominator} ({round(numerator/float(denominator) * 100, 1)}%)'
@@ -54,7 +53,20 @@ def get_ratio_string(numerator, denominator) -> str:
         return f'{numerator}/{0} (0%)'
 
 
-def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, analyze_values: bool):
+def get_inputs_type_list(coinjoins, sorted_cj_time, event_type, in_or_out: str, burn_time_from, burn_time_to, analyze_values):
+    if analyze_values:
+        return [sum([coinjoins[cjtx['txid']][in_or_out][index]['value'] for index in coinjoins[cjtx['txid']][in_or_out].keys()
+                     if coinjoins[cjtx['txid']][in_or_out][index]['mix_event_type'] == event_type.name and
+                     coinjoins[cjtx['txid']][in_or_out][index].get('burn_time_cjtxs', -1) in range(burn_time_from, burn_time_to + 1)])
+            for cjtx in sorted_cj_time]
+    else:
+        return [sum([1 for index in coinjoins[cjtx['txid']][in_or_out].keys()
+                     if coinjoins[cjtx['txid']][in_or_out][index]['mix_event_type'] == event_type.name and
+                     coinjoins[cjtx['txid']][in_or_out][index].get('burn_time_cjtxs', -1) in range(burn_time_from, burn_time_to + 1)])
+            for cjtx in sorted_cj_time]
+
+
+def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, analyze_values: bool, normalize_values: bool):
     """
     Ratio between various types of inputs (fresh, remixed, remixed_friends)
     :param mix_id:
@@ -68,60 +80,95 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
     #sorted_cj_time = sorted_cj_time[0:500]
 
+    no_remix = {'inputs': [], 'outputs': []}
     for cjtx in sorted_cj_time:
         if sum([1 for index in coinjoins[cjtx['txid']]['inputs'].keys()
                 if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name]) == 0:
-            logging.warning(f'No remix detected for {cjtx}')
+            logging.warning(f'No input remix detected for {cjtx}')
+            no_remix['inputs'].append(cjtx['txid'])
+        if sum([1 for index in coinjoins[cjtx['txid']]['outputs'].keys()
+             if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name]) == 0:
+            logging.warning(f'No output remix detected for {cjtx}')
+            no_remix['outputs'].append(cjtx['txid'])
+
+    logging.warning(f'Txs with no input&output remix: {set(no_remix['inputs']).intersection(set(no_remix['outputs']))}')
 
     input_types_nums = {}
-    for type in MIX_EVENT_TYPE:
+    for event_type in MIX_EVENT_TYPE:
         if analyze_values:
             # Sum of values of inputs is taken
-            input_types_nums[type.name] = [sum([coinjoins[cjtx['txid']]['inputs'][index]['value'] for index in coinjoins[cjtx['txid']]['inputs'].keys()
-                                        if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == type.name])
-                                   for cjtx in sorted_cj_time]
+            input_types_nums[event_type.name] = [sum([coinjoins[cjtx['txid']]['inputs'][index]['value'] for index in coinjoins[cjtx['txid']]['inputs'].keys()
+                                            if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == event_type.name])
+                                            for cjtx in sorted_cj_time]
         else:
             # Only number of inputs is taken
-            input_types_nums[type.name] = [sum([1 for index in coinjoins[cjtx['txid']]['inputs'].keys()
-                                        if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == type.name])
+            input_types_nums[event_type.name] = [sum([1 for index in coinjoins[cjtx['txid']]['inputs'].keys()
+                                        if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == event_type.name])
                                    for cjtx in sorted_cj_time]
+
+    event_type = MIX_EVENT_TYPE.MIX_REMIX
+    BURN_TIME_RANGES = [('1-2', 1, 2), ('3-5', 3, 5), ('6-19', 6, 19), ('20+', 20, 1999), ('2000+', 2000, 1000000)]
+    for range_val in BURN_TIME_RANGES:
+        input_types_nums[f'{event_type.name}_{range_val[0]}'] = get_inputs_type_list(coinjoins, sorted_cj_time, event_type, 'inputs', range_val[1], range_val[2], analyze_values)
 
     short_exp_name = mix_id
 
+    # Normalize all values into range 0-1 (only MIX_ENTER, MIX_REMIX and MIX_REMIX_FRIENDS are considered for base total)
     input_types_nums_normalized = {}
-    total_values = (np.array(input_types_nums[MIX_EVENT_TYPE.MIX_ENTER.name]) + np.array(input_types_nums[MIX_EVENT_TYPE.MIX_REMIX.name])
-                    + np.array(input_types_nums[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name]))
-    input_types_nums_normalized[MIX_EVENT_TYPE.MIX_ENTER.name] = np.array(input_types_nums[MIX_EVENT_TYPE.MIX_ENTER.name]) / total_values
-    input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX.name] = np.array(input_types_nums[MIX_EVENT_TYPE.MIX_REMIX.name]) / total_values
-    input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name] = np.array(input_types_nums[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name]) / total_values
+    total_values = (np.array(input_types_nums[MIX_EVENT_TYPE.MIX_ENTER.name]) + np.array(input_types_nums[MIX_EVENT_TYPE.MIX_REMIX.name]) +
+                    np.array(input_types_nums[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name]) + np.array(input_types_nums[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name]))
+    # Normalize all values including 'MIX_REMIX_1-2' etc.
+    for item in input_types_nums.keys():
+        input_types_nums_normalized[item] = np.array(input_types_nums[item]) / total_values
 
-    input_types_nums = input_types_nums_normalized
     print(f'MIX_ENTER median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_ENTER.name]) * 100, 2)}%')
     print(f'MIX_REMIX median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX.name]) * 100, 2)}%')
+    for range_val in BURN_TIME_RANGES:
+        remix_name = f'{event_type.name}_{range_val[0]}'
+        print(f'{remix_name} median ratio: {round(np.median(input_types_nums_normalized[remix_name]) * 100, 2)}%')
     print(f'MIX_REMIX_FRIENDS median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name]) * 100, 2)}%')
+    print(f'MIX_REMIX_FRIENDS_WW1 median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name]) * 100, 2)}%')
+
+    # Set normalized or non-normalized version to use
+    input_types = input_types_nums_normalized if normalize_values else input_types_nums
 
     bar_width = 0.3
     categories = range(0, len(sorted_cj_time))
-    first = (input_types_nums[MIX_EVENT_TYPE.MIX_ENTER.name], 'MIX_ENTER', 'blue', 0.9)
-    second = (input_types_nums[MIX_EVENT_TYPE.MIX_REMIX.name], 'MIX_REMIX', 'orange', 0.5)
-    third = (input_types_nums[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name], 'MIX_REMIX_FRIENDS', 'green', 0.9)
 
-    ax.bar(categories, first[0], bar_width, label=f'{first[1]} {short_exp_name}', alpha=first[3], color=first[2], linewidth=0)
-    ax.bar(categories, second[0], bar_width, label=f'{second[1]} {short_exp_name}', alpha=second[3], color=second[2],
-            bottom=np.array(first[0]), linewidth=0)
-    ax.bar(categories, third[0], bar_width, label=f'{third[1]} {short_exp_name}', alpha=third[3], color=third[2],
-            bottom=np.array(first[0]) + np.array(second[0]), linewidth=0)
+    # New version with separated remixes
+    bars = []
+    bars.append((input_types[MIX_EVENT_TYPE.MIX_ENTER.name], 'MIX_ENTER', 'blue', 0.9))
+    #bars.append((input_types_nums[MIX_EVENT_TYPE.MIX_REMIX.name], 'MIX_REMIX', 'orange', 0.5))
+    bars.append((input_types['MIX_REMIX_1-2'], 'MIX_REMIX_1-2', 'gold', 0.9))
+    bars.append((input_types['MIX_REMIX_3-5'], 'MIX_REMIX_3-5', 'orange', 0.5))
+    bars.append((input_types['MIX_REMIX_6-19'], 'MIX_REMIX_6-19', 'moccasin', 0.5))
+    bars.append((input_types['MIX_REMIX_20+'], 'MIX_REMIX_20+', 'lightcoral', 0.7))
+    bars.append((input_types['MIX_REMIX_2000+'], 'MIX_REMIX_2000+', 'peru', 0.7))
+    bars.append((input_types[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name], 'MIX_REMIX_FRIENDS', 'green', 0.5))
+    bars.append((input_types[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name], 'MIX_REMIX_FRIENDS_WW1', 'green', 0.9))
 
-    #ax.set_xticklabels(range(initial_cj_index, initial_cj_index + len(sorted_cj_time)))
-    # current_ticks = ax.get_xticks()[0]
-    # current_ticks_positions, current_tick_labels = ax.get_xticks(minor=False)
-    # ticks_to_change = [tick for tick in current_ticks]
-    # new_tick_labels = {tick: str(tick) for tick in current_ticks}  # Dictionary with new tick labels
-    # ax.set_xticks(list(new_tick_labels.keys()), list(new_tick_labels.values()))
-    #ax.set_xticks(current_ticks, [tick + initial_cj_index for tick in current_ticks])
+    # Draw all inserted bars atop each other
+    bar_bottom = None
+    for bar_item in bars:
+        if bar_bottom is None:
+            ax.bar(categories, bar_item[0], bar_width, label=f'{bar_item[1]} {short_exp_name}', alpha=bar_item[3],
+                   color=bar_item[2], linewidth=0)
+            bar_bottom = np.array(bar_item[0])
+        else:
+            ax.bar(categories, bar_item[0], bar_width, label=f'{bar_item[1]} {short_exp_name}', alpha=bar_item[3], color=bar_item[2],
+                    bottom=bar_bottom, linewidth=0)
+            bar_bottom = bar_bottom + np.array(bar_item[0])
+
     ax.set_title(f'Type of inputs for given cjtx ({'values' if analyze_values else 'number'})\n{short_exp_name}')
     ax.set_xlabel('Coinjoin in time')
-    ax.set_ylabel('Fraction of inputs')
+    if analyze_values and normalize_values:
+        ax.set_ylabel('Fraction of input values')
+    if analyze_values and not normalize_values:
+        ax.set_ylabel('Size of inputs')
+    if not analyze_values and normalize_values:
+        ax.set_ylabel('Fraction of number of inputs')
+    if analyze_values and not normalize_values:
+        ax.set_ylabel('Number of inputs')
 
 
 def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity: int, initial_cj_index: int, ax):
