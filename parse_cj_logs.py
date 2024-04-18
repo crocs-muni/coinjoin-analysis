@@ -1561,12 +1561,12 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
     #!!! Add how many coinjoins given wallet participated in. Weighted number by number of input txos.
 
     if cjplt.ax_inputs_type_value_ratio:
-        als.plot_inputs_type_ratio(f'{experiment_name}', cjtx_stats, 0, cjplt.ax_inputs_type_value_ratio,True)
+        als.plot_inputs_type_ratio(f'{experiment_name}', cjtx_stats, 0, cjplt.ax_inputs_type_value_ratio,True, False)
         ax2 = cjplt.ax_inputs_type_value_ratio.twinx()
         als.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, 0, 0, ax2)
 
     if cjplt.ax_inputs_type_num_ratio:
-        als.plot_inputs_type_ratio(f'{experiment_name}', cjtx_stats, 0, cjplt.ax_inputs_type_num_ratio, False)
+        als.plot_inputs_type_ratio(f'{experiment_name}', cjtx_stats, 0, cjplt.ax_inputs_type_num_ratio, False, True)
         ax2 = cjplt.ax_inputs_type_num_ratio.twinx()
         als.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, 0, 0, ax2)
 
@@ -2831,6 +2831,10 @@ def process_experiment(args):
                                             [cjtxid for cjtxid in cjtx_stats['coinjoins'].keys()])
     als.analyze_input_out_liquidity(cjtx_stats['coinjoins'], cjtx_stats.get('postmix', {}), cjtx_stats.get('premix', {}), mix_protocol)
 
+    if not READ_ONLY_COINJOIN_TX_INFO:
+        with open(save_file, "w") as file:
+            file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
+
     # Analyze various coinjoins statistics.
     # Plot only if required (time-consuming, and not thread safe)
     cjplots = CoinJoinPlots(plt)  # Always provide coinjoin plots, but empty by default (no graph generation)
@@ -3309,11 +3313,11 @@ if __name__ == "__main__":
     # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2'),
     #                      os.path.join(super_base_path, 'grid_uniform_test2')]
 
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'unproccesed')]
-
     super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    target_base_paths = [os.path.join(super_base_path, 'grid_lognorm-static-30utxo')]
+    target_base_paths = [os.path.join(super_base_path, 'unproccesed')]
+
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'grid_lognorm-static-30utxo')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'random_skips_uniform-static_30utxo')]
