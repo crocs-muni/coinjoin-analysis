@@ -1518,7 +1518,7 @@ def wasabi2_analyse_remixes(mix_id: str, target_path: Path, tx_file: str):
     burntime_histogram(mix_id, data)
 
 
-def wasabi2_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_values: bool = True):
+def wasabi2_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_values: bool = True, normalize_values: bool = True):
     files = os.listdir(target_path) if os.path.exists(target_path) else print(
         f'Path {target_path} does not exist')
 
@@ -1533,20 +1533,20 @@ def wasabi2_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_v
             with open(tx_json_file, "r") as file:
                 data = json.load(file)
 
-            ax = fig.add_subplot(7, 3, ax_index)
+            ax = fig.add_subplot(8, 3, ax_index)  # Get next subplot
             ax_index += 1
-            als.plot_inputs_type_ratio(f'{mix_id} {file_name}', data, initial_cj_index, ax, analyze_values)
+            # Plot bars corresponding to different input types
+            als.plot_inputs_type_ratio(f'{mix_id} {file_name}', data, initial_cj_index, ax, analyze_values, normalize_values)
             ax2 = ax.twinx()
+            # Add current total mix liquidity into the same graph
             initial_liquidity = als.plot_mix_liquidity(f'{mix_id} {file_name}', data, initial_liquidity, initial_cj_index, ax2)
             initial_cj_index = initial_cj_index + len(data['coinjoins'])
-            #ax2.xaxis.set_major_formatter(ScalarFormatter(useMathText=False))
-            #ax2.set_ylim(0, 6000)
             ax.set_title(f'Type of inputs for given cjtx ({'values' if analyze_values else 'number'})\n{mix_id} {file_name}')
             logging.info(f'{target_base_path} inputs analyzed')
 
     plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
 
-    save_file = os.path.join(target_path, f'{mix_id}_input_types_{'values' if analyze_values else 'nums'}')
+    save_file = os.path.join(target_path, f'{mix_id}_input_types_{'values' if analyze_values else 'nums'}_{'norm' if normalize_values else ''}')
     plt.savefig(f'{save_file}.png', dpi=300)
     plt.savefig(f'{save_file}.pdf', dpi=300)
     plt.close()
@@ -1562,6 +1562,50 @@ def wasabi1_analyse_remixes(mix_id: str, target_path: Path, tx_file: str):
     burntime_histogram(mix_id, data)
 
 
+def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: Path):
+    #'wasabi2', target_path, os.path.join(target_path, 'wasabi1_burn', 'coinjoin_tx_info.json.full'))
+    # Load Wasabi1 files, then update MIX_ENTER for Wasabi2 where friends-do-not-pay rule does not apply
+    ww1_coinjoins = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiCoinJoins.txt'))
+    ww1_postmix_spend = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
+
+    target_path = os.path.join(target_path, mix_id)  # Go into target ww2 folder
+
+
+    paths_to_process = [target_path]  # Always process 'coinjoin_tx_info.json' with all transactions
+    #paths_to_process = []  # Do not process large .json with all txs
+    # Add subpaths for months if present
+    files = os.listdir(target_path)
+    for file_name in files:
+        target_base_path = os.path.join(target_path, file_name)
+        tx_json_file = os.path.join(target_base_path, 'coinjoin_tx_info.json')
+        if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
+            paths_to_process.append(target_base_path)
+
+    # Now fix all prepared paths
+    for path in paths_to_process:
+        with open(os.path.join(path, 'coinjoin_tx_info.json'), "r") as file:
+            ww2_data = json.load(file)
+
+        # For all values with mix_event_type equal to MIX_ENTER check if they are not from WW1
+        # with friends-do-not-pay rule
+        coinjoins = ww2_data['coinjoins']
+
+        total_ww1_inputs = 0
+        for cjtx in coinjoins:
+            for input in coinjoins[cjtx]['inputs']:
+                if coinjoins[cjtx]['inputs'][input]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name:
+                    if 'spending_tx' in coinjoins[cjtx]['inputs'][input].keys():
+                        spending_tx, index = als.extract_txid_from_inout_string(coinjoins[cjtx]['inputs'][input]['spending_tx'])
+                        if spending_tx in ww1_coinjoins.keys() or spending_tx in ww1_postmix_spend.keys():
+                            # Friends do not pay rule tx - change to MIX_REMIX_FRIENDS_WW1
+                            coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name
+                            total_ww1_inputs += 1
+
+        print(f'Total WW1 inputs with friends-do-not-pay rule: {total_ww1_inputs}')
+        with open(os.path.join(path, 'coinjoin_tx_info.json.fixed'), "w") as file:
+            file.write(json.dumps(dict(sorted(ww2_data.items())), indent=4))
+
+
 if __name__ == "__main__":
     FULL_TX_SET = False
     ANALYSIS_ADDRESS_REUSE = False
@@ -1571,15 +1615,36 @@ if __name__ == "__main__":
     ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS_DEBUG = False
     ANALYSIS_INPUTS_DISTRIBUTION = False  # OK
     ANALYSIS_BURN_TIME = True
+    PLOT_REMIXES = True
 
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240215\\'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240417\\'
     target_path = os.path.join(target_base_path, 'Scanner')
     SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
 
-    # SAVE_BASE_FILES_JSON = False
-    # process_and_save_intervals_filter('wasabi2_burn', MIX_PROTOCOL.WASABI2, target_path, '2022-06-18 01:38:07.000', '2024-02-15 01:38:07.000',
-    #                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON)
+    # SAVE_BASE_FILES_JSON = True
+    # process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-18 01:38:07.000', '2024-04-18 01:38:07.000',
+    #                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
+    # fix_ww2_for_fdnp_ww1('wasabi2', target_path)
     # exit(1)
+
+    if PLOT_REMIXES:
+        wasabi2_plot_remixes('wasabi2',
+                             os.path.join(target_path, 'wasabi2'),
+                             'coinjoin_tx_info.json', True, False)
+        wasabi2_plot_remixes('wasabi2',
+                             os.path.join(target_path, 'wasabi2'),
+                             'coinjoin_tx_info.json', False, True)
+        # wasabi2_plot_remixes('wasabi2_burn',
+        #                      os.path.join(target_path, 'wasabi2_burn', '2024-02-01 00-00-00--2024-03-01 00-00-00_unknown-static-100-1utxo/'),
+        #                      'coinjoin_tx_info.json')
+        exit(1)
+
+    # SAVE_BASE_FILES_JSON = True
+    # process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-18 01:38:07.000', '2024-02-15 01:38:07.000',
+    #                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, True)
+
+    #exit(1)
 
     if ANALYSIS_BURN_TIME:
         DEBUG_FILE = False
