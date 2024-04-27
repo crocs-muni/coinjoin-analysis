@@ -130,6 +130,10 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     print(f'MIX_REMIX_FRIENDS median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name]) * 100, 2)}%')
     print(f'MIX_REMIX_FRIENDS_WW1 median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name]) * 100, 2)}%')
 
+    # Convert non-normalized values from sats to btc
+    for item in input_types_nums.keys():
+        input_types_nums[item] = np.array(input_types_nums[item]) / SATS_IN_BTC
+
     # Set normalized or non-normalized version to use
     input_types = input_types_nums_normalized if normalize_values else input_types_nums
 
@@ -144,7 +148,7 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     bars.append((input_types['MIX_REMIX_3-5'], 'MIX_REMIX_3-5', 'orange', 0.5))
     bars.append((input_types['MIX_REMIX_6-19'], 'MIX_REMIX_6-19', 'moccasin', 0.5))
     bars.append((input_types['MIX_REMIX_20+'], 'MIX_REMIX_20+', 'lightcoral', 0.7))
-    bars.append((input_types['MIX_REMIX_2000+'], 'MIX_REMIX_2000+', 'peru', 0.7))
+    bars.append((input_types['MIX_REMIX_2000+'], 'MIX_REMIX_2000+', 'sienna', 1))
     bars.append((input_types[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name], 'MIX_REMIX_FRIENDS', 'green', 0.5))
     bars.append((input_types[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name], 'MIX_REMIX_FRIENDS_WW1', 'green', 0.9))
 
@@ -163,16 +167,16 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     ax.set_title(f'Type of inputs for given cjtx ({'values' if analyze_values else 'number'})\n{short_exp_name}')
     ax.set_xlabel('Coinjoin in time')
     if analyze_values and normalize_values:
-        ax.set_ylabel('Fraction of input values')
+        ax.set_ylabel('Fraction of inputs sizes')
     if analyze_values and not normalize_values:
-        ax.set_ylabel('Size of inputs')
+        ax.set_ylabel('Inputs sizes (btc)')
     if not analyze_values and normalize_values:
-        ax.set_ylabel('Fraction of number of inputs')
-    if analyze_values and not normalize_values:
-        ax.set_ylabel('Number of inputs')
+        ax.set_ylabel('Fraction of input numbers')
+    if not analyze_values and not normalize_values:
+        ax.set_ylabel('Input numbers')
 
 
-def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity: int, initial_cj_index: int, ax):
+def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudity: dict, initial_cj_index: int, ax):
     coinjoins = data['coinjoins']
     cj_time = [{'txid': cjtxid, 'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
     sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
@@ -189,25 +193,73 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity: int, initial_
     mix_leave = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
                                     if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_LEAVE.name])
                                for cjtx in sorted_cj_time]
+    mix_stay = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
+                                    if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_STAY.name])
+                               for cjtx in sorted_cj_time]
 
-    liquidity = []
-    curr_liquidity = initial_liquidity  # Take liquidity from previous interval
-    assert len(mix_enter) == len(mix_leave) == len(mix_remixfriend) == len(mix_remixfriend_ww1), logging.error(f'Mismatch in length of input/out sum arrays: {len(mix_enter)} vs. {len(mix_leave)}')
+
+    cjtx_cummulative_liquidity = []
+    curr_liquidity = initial_liquidity[0]  # Take last cummulative liquidity (MIX_ENTERxxx - MIX_LEAVE) from previous interval
+    assert len(mix_enter) == len(mix_leave) == len(mix_remixfriend) == len(mix_remixfriend_ww1) == len(mix_stay), logging.error(f'Mismatch in length of input/out sum arrays: {len(mix_enter)} vs. {len(mix_leave)}')
+    # Change in liquidity as observed by each coinjoin (increase directly when mix_enter, decrease directly even when mix_leave happens later)
     for index in range(0, len(mix_enter)):
         curr_liquidity = curr_liquidity + mix_enter[index] + mix_remixfriend[index] + mix_remixfriend_ww1[index] - mix_leave[index]
-        liquidity.append(curr_liquidity)
+        cjtx_cummulative_liquidity.append(curr_liquidity)
+
+    # Cummulative liquidity never remixed or leaving mix (MIX_STAY coins)
+    stay_liquidity = []
+    curr_stay_liquidity = initial_liquidity[1]  # Take last cummulative liquidity (MIX_STAY) from previous interval
+    for index in range(0, len(mix_stay)):
+        curr_stay_liquidity = curr_stay_liquidity + mix_stay[index]
+        stay_liquidity.append(curr_stay_liquidity)
 
     # Plot in btc
-    liquidity_btc = [item / SATS_IN_BTC for item in liquidity]
+    liquidity_btc = [item / SATS_IN_BTC for item in cjtx_cummulative_liquidity]
+    stay_liquidity_btc = [item / SATS_IN_BTC for item in stay_liquidity]
     #x_ticks = range(initial_cj_index, initial_cj_index + len(liquidity_btc))
-    ax.plot(liquidity_btc, color='royalblue')
+    ax.plot(liquidity_btc, color='royalblue', alpha=0.6)
+    #ax.plot(stay_liquidity_btc, color='royalblue', alpha=0.6, linestyle='--')
     ax.set_ylabel('btc in mix', color='royalblue')
     ax.tick_params(axis='y', colors='royalblue')
 
-    return liquidity[-1]
+    return cjtx_cummulative_liquidity, stay_liquidity
+
+
+def plot_mining_fee_rates(mix_id: str, data: dict, mining_fees: dict, ax):
+    coinjoins = data['coinjoins']
+    cj_time = [{'txid': cjtxid,
+                'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for
+               cjtxid in coinjoins.keys()]
+    sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
+
+    # For each coinjoin find the closest fee rate record and plot it
+    fee_rates = []
+    fee_start_index = 0
+    for cj in sorted_cj_time:
+        timestamp = cj['broadcast_time'].timestamp()
+        while timestamp > mining_fees[fee_start_index]['timestamp']:
+            fee_start_index = fee_start_index + 1
+        closest_fee = mining_fees[fee_start_index - 1]['avgFee_90']
+        fee_rates.append(closest_fee)
+
+    ax.plot(fee_rates, color='gray', alpha=0.4, linewidth=1, linestyle='--')
+    ax.tick_params(axis='y', colors='gray', labelsize=6)
+    ax.set_ylabel('Mining fee rate sats/vB (90th percentil)', color='gray', fontsize='6')
+
+    return fee_rates
 
 
 def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins={}, ww1_postmix_spend={}):
+    """
+    Requires performance speedup, will not finish (after 8 hours) for Whirlpool with very large number of coins
+    :param coinjoins:
+    :param postmix_spend:
+    :param premix_spend:
+    :param mix_protocol:
+    :param ww1_coinjoins:
+    :param ww1_postmix_spend:
+    :return:
+    """
     logging.debug('analyze_input_out_liquidity() started')
     liquidity_events = []
     total_inputs = 0
@@ -272,6 +324,7 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
                         logging.warning(f'Could not find spend_by_tx {spend_by_tx} in postmix_spend txs')
                     total_mix_leaving += 1
                     coinjoins[cjtx]['outputs'][output]['mix_event_type'] = MIX_EVENT_TYPE.MIX_LEAVE.name
+                    coinjoins[cjtx]['outputs'][output]['burn_time'] = round((broadcast_times[spend_by_tx] - broadcast_times[cjtx]).total_seconds(), 0)
                 else:
                     # Mix spend: The output is spent by next coinjoin tx => stays in mix
                     coinjoins[cjtx]['outputs'][output]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX.name
