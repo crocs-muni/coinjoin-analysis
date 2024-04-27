@@ -12,7 +12,8 @@ import mmap
 from cj_analysis import MIX_EVENT_TYPE
 from cj_analysis import MIX_PROTOCOL
 import cj_analysis as als
-
+from mpl_toolkits.axes_grid1 import host_subplot
+import mpl_toolkits.axisartist as AA
 
 from matplotlib import pyplot as plt
 from matplotlib.ticker import MaxNLocator, ScalarFormatter, NullFormatter
@@ -31,7 +32,7 @@ SATS_IN_BTC = 100000000
 # TODO: Systematic solution requires merging and resolving different cluster ids
 CLUSTER_ID_CHECK_HARD_ASSERT = False
 
-SAVE_BASE_FILES_JSON = False
+SAVE_BASE_FILES_JSON = True
 
 # SLOT_WIDTH_SECONDS = 3600 * 24 * 7  # week
 #SLOT_WIDTH_SECONDS = 3600 * 24  # day
@@ -808,8 +809,9 @@ def visualize_coinjoins(data, events, base_path, experiment_name):
     # save graph
     plt.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
     plt.subplots_adjust(bottom=0.1, wspace=0.5, hspace=0.5)
-    save_file = os.path.join(base_path, f'{experiment_name}_coinjoin_stats.png')
-    plt.savefig(save_file, dpi=300)
+    save_file = os.path.join(base_path, f'{experiment_name}_coinjoin_stats')
+    plt.savefig(f'{save_file}.png', dpi=300)
+    plt.savefig(f'{save_file}.pdf', dpi=300)
     plt.close()
     logging.info('Basic coinjoins statistics saved into {}'.format(save_file))
 
@@ -1518,35 +1520,84 @@ def wasabi2_analyse_remixes(mix_id: str, target_path: Path, tx_file: str):
     burntime_histogram(mix_id, data)
 
 
-def wasabi2_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_values: bool = True, normalize_values: bool = True):
+def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_values: bool = True, normalize_values: bool = True):
     files = os.listdir(target_path) if os.path.exists(target_path) else print(
         f'Path {target_path} does not exist')
 
-    fig = plt.figure(figsize=(40, 30))
+    # Load fee rates
+    with open(os.path.join(target_path, 'fee_rates.json'), "r") as file:
+        mining_fee_rates = json.load(file)
+
+    # Compute number of required month subgraphs
+    num_months = sum([1 for dir_name in files
+                      if os.path.isdir(os.path.join(target_path, dir_name)) and
+                      os.path.exists(os.path.join(target_path, dir_name, tx_file))])
+
+    NUM_ADDITIONAL_GRAPHS = 1
+    NUM_COLUMNS = 3
+    NUM_ROWS = int((num_months + NUM_ADDITIONAL_GRAPHS) / NUM_COLUMNS + 1)
+    fig = plt.figure(figsize=(40, NUM_ROWS * 5))
+
     ax_index = 1
-    initial_liquidity = 0
+    changing_liquidity = [0]  # Cummulative liquidity in mix from the perspective of given coinjoin
+    stay_liquidity = [0]  # Absolute cummulative liquidity staying in the mix
+    mining_fee_rate = []  # Mining fee rate
+    coord_fee_rate = []  # Coordinator fee payments
     initial_cj_index = 0
-    for file_name in files:
-        target_base_path = os.path.join(target_path, file_name)
+    time_liquidity = {}  # If MIX_LEAVE is detected, out liquidity is put into dictionary for future display
+    for dir_name in files:
+        target_base_path = os.path.join(target_path, dir_name)
         tx_json_file = os.path.join(target_base_path, tx_file)
         if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
             with open(tx_json_file, "r") as file:
                 data = json.load(file)
 
-            ax = fig.add_subplot(8, 3, ax_index)  # Get next subplot
+            ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
             ax_index += 1
+
             # Plot bars corresponding to different input types
-            als.plot_inputs_type_ratio(f'{mix_id} {file_name}', data, initial_cj_index, ax, analyze_values, normalize_values)
-            ax2 = ax.twinx()
+            als.plot_inputs_type_ratio(f'{mix_id} {dir_name}', data, initial_cj_index, ax, analyze_values, normalize_values)
+
             # Add current total mix liquidity into the same graph
-            initial_liquidity = als.plot_mix_liquidity(f'{mix_id} {file_name}', data, initial_liquidity, initial_cj_index, ax2)
+            ax2 = ax.twinx()
+            changing_liquidity_interval, stay_liquidity_interval = als.plot_mix_liquidity(f'{mix_id} {dir_name}', data, (changing_liquidity[-1], stay_liquidity[-1]), time_liquidity, initial_cj_index, ax2)
+            changing_liquidity.extend(changing_liquidity_interval)
+            stay_liquidity.extend(stay_liquidity_interval)
+
+            # Add fee rate into the same graph
+            ax3 = ax.twinx()
+            ax3.spines['right'].set_position(('outward', -28))  # Adjust position of the third axis
+            mining_fee_rate_interval = als.plot_mining_fee_rates(f'{mix_id} {dir_name}', data, mining_fee_rates, ax3)
+            mining_fee_rate.extend(mining_fee_rate_interval)
+
             initial_cj_index = initial_cj_index + len(data['coinjoins'])
-            ax.set_title(f'Type of inputs for given cjtx ({'values' if analyze_values else 'number'})\n{mix_id} {file_name}')
+            ax.set_title(f'Type of inputs for given cjtx ({'values' if analyze_values else 'number'})\n{mix_id} {dir_name}')
             logging.info(f'{target_base_path} inputs analyzed')
 
-    plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
+    # Add additional cummulative plots
+    ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
+    ax_index += 1
 
-    save_file = os.path.join(target_path, f'{mix_id}_input_types_{'values' if analyze_values else 'nums'}_{'norm' if normalize_values else ''}')
+    ax.plot(mining_fee_rate, color='gray', alpha=0.4, linewidth=1, linestyle='-.', label='Mining fee (90th percentil)')
+    ax.tick_params(axis='y', colors='gray', labelsize=6)
+    ax.set_ylabel('Mining fee rate sats/vB (90th percentil)', color='gray', fontsize='6')
+    ax.set_xlabel('Coinjoin in time')
+    ax.set_title(f'{mix_id}: Cummulative liquidity and fee rates in time')
+
+    ax2 = ax.twinx()
+    changing_liquidity_btc = [item / SATS_IN_BTC for item in changing_liquidity]
+    stay_liquidity_btc = [item / SATS_IN_BTC for item in stay_liquidity]
+    ax2.plot(changing_liquidity_btc, color='royalblue', alpha=0.6, label='Changing liquidity (cjtx centric)')
+    ax2.plot(stay_liquidity_btc, color='royalblue', alpha=0.6, linestyle='--', label='Unmoved liquidity (MIX_STAY)')
+    ax2.set_ylabel('btc in mix', color='royalblue')
+    ax2.tick_params(axis='y', colors='royalblue')
+
+    ax.legend(loc='center left')
+    ax2.legend()
+
+    # Finalize graph
+    plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
+    save_file = os.path.join(target_path, f'{mix_id}_input_types_{'values' if analyze_values else 'nums'}_{'norm' if normalize_values else 'notnorm'}')
     plt.savefig(f'{save_file}.png', dpi=300)
     plt.savefig(f'{save_file}.pdf', dpi=300)
     plt.close()
