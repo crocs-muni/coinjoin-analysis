@@ -689,11 +689,15 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
 
     experiment_name = os.path.basename(base_path)
     print(f"Starting analyze_coinjoin_stats() analysis for {base_path}")
+
     coinjoins = cjtx_stats['coinjoins']
     address_wallet_mapping = cjtx_stats['address_wallet_mapping']
     wallets_info = cjtx_stats['wallets_info']
     wallets_coins = cjtx_stats['wallets_coins']
     rounds = cjtx_stats['rounds']
+
+    analysis_stats = {}
+
     cj_time = []
     for cjtxid in coinjoins.keys():
         cj_time.append({'txid':cjtxid, 'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")})
@@ -769,18 +773,25 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
 
     # For each coinjoin, reconstruct set of coins available in wallets and eligible for mixing
     # Use [round_start_time, broadcast_time] for more precise interval when coin is evaluated
+    # Additionally, store computed statistics in more details per single wallet per_wallet_stats
+    per_wallet_stats = {cjtx: {wallet_name: {}} for cjtx in coinjoins.keys() for wallet_name in wallets_coins.keys()}
     for cjtx in [cjtx['txid'] for cjtx in sorted_cj_time]:
-        unmixed_utxos = []
-        mixed_utxos = []
-        finished_utxos = []
+        unmixed_utxos_all = []
+        mixed_utxos_all = []
+        finished_utxos_all = []
         #cjtx_creation_time = coinjoins[cjtx]['round_start_time']
         cjtx_creation_time = coinjoins[cjtx]['broadcast_time']
 
-        if 'unmixed_utxos_in_wallets' not in coinjoins[cjtx]['analysis2'].keys() and \
-            'unmixed_utxos_in_wallets' not in coinjoins[cjtx]['analysis2'].keys() and \
-            'mixed_utxos_in_wallets' not in coinjoins[cjtx]['analysis2'].keys():
+        if True:  # Always compute
+        # if 'unmixed_utxos_in_wallets' not in coinjoins[cjtx]['analysis2'].keys() and \
+        #     'unmixed_utxos_in_wallets' not in coinjoins[cjtx]['analysis2'].keys() and \
+        #     'mixed_utxos_in_wallets' not in coinjoins[cjtx]['analysis2'].keys():
 
             for wallet_name in wallets_coins.keys():
+                unmixed_utxos = []
+                mixed_utxos = []
+                finished_utxos = []
+
                 for coin in wallets_coins[wallet_name]:
                     # get coin destroy time - if not used by any tx, then set to year 9999
                     coin_destroy_time = '9999-01-25 09:44:48.000' if 'destroy_time' not in coin.keys() else coin['destroy_time']
@@ -821,9 +832,24 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
                         # Coin was created only later in time after this coinjoin, do nothing
                         a = 5
 
-            coinjoins[cjtx]['analysis2']['unmixed_utxos_in_wallets'] = unmixed_utxos
-            coinjoins[cjtx]['analysis2']['mixed_utxos_in_wallets'] = mixed_utxos
-            coinjoins[cjtx]['analysis2']['finished_utxos_in_wallets'] = finished_utxos
+                # Append wallet-specific coins to list fo all coins
+                unmixed_utxos_all.extend(unmixed_utxos)
+                mixed_utxos_all.extend(mixed_utxos)
+                finished_utxos_all.extend(finished_utxos)
+
+                # Compute stats of this wallet involvement in the current coinjoin cjtx
+                num_inputs_from_wallet = sum([1 for index in coinjoins[cjtx]['inputs'].keys() if coinjoins[cjtx]['inputs'][index]['wallet_name'] == wallet_name])
+                num_outputs_from_wallet = sum([1 for index in coinjoins[cjtx]['outputs'].keys() if coinjoins[cjtx]['outputs'][index]['wallet_name'] == wallet_name])
+                per_wallet_stats[cjtx][wallet_name] = {'num_unmixed': len(unmixed_utxos), 'num_mixed': len(mixed_utxos), 'num_finished': len(finished_utxos),
+                                                       'num_inputs_wallet': num_inputs_from_wallet, 'num_outputs_wallet': num_outputs_from_wallet}
+
+            # Store computed results
+            analysis_stats['wallets_participation'] = per_wallet_stats
+
+            coinjoins[cjtx]['analysis2']['unmixed_utxos_in_wallets'] = unmixed_utxos_all
+            coinjoins[cjtx]['analysis2']['mixed_utxos_in_wallets'] = mixed_utxos_all
+            coinjoins[cjtx]['analysis2']['finished_utxos_in_wallets'] = finished_utxos_all
+
 
     print('Starting graph plotting')
     #
@@ -1561,14 +1587,17 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
     #!!! Add how many coinjoins given wallet participated in. Weighted number by number of input txos.
 
     if cjplt.ax_inputs_type_value_ratio:
+        time_liquidity = {}
         als.plot_inputs_type_ratio(f'{experiment_name}', cjtx_stats, 0, cjplt.ax_inputs_type_value_ratio,True, False)
         ax2 = cjplt.ax_inputs_type_value_ratio.twinx()
-        als.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, 0, 0, ax2)
+        als.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, (0, 0), time_liquidity, 0, ax2)
 
     if cjplt.ax_inputs_type_num_ratio:
         als.plot_inputs_type_ratio(f'{experiment_name}', cjtx_stats, 0, cjplt.ax_inputs_type_num_ratio, False, True)
         ax2 = cjplt.ax_inputs_type_num_ratio.twinx()
-        als.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, 0, 0, ax2)
+        als.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, (0, 0), time_liquidity, 0, ax2)
+
+    return analysis_stats
 
 
 # 'os^vD'
@@ -2665,6 +2694,7 @@ def process_experiment(args):
     WASABIWALLET_DATA_DIR = base_path
     print(f'INPUT PATH: {base_path}')
     save_file = os.path.join(WASABIWALLET_DATA_DIR, "coinjoin_tx_info.json")
+    save_file_stats = os.path.join(WASABIWALLET_DATA_DIR, "coinjoin_tx_info_stats.json")
     if LOAD_TXINFO_FROM_FILE:
         # Load parsed coinjoin transactions again
         with open(save_file, "r") as file:
@@ -2842,11 +2872,13 @@ def process_experiment(args):
         cjplots.new_figure()  # If required, generate and set graph Axes for generation
     #short_exp_name = os.path.basename(WASABIWALLET_DATA_DIR)
     short_exp_name = ''
-    analyze_coinjoin_stats(cjtx_stats, WASABIWALLET_DATA_DIR, cjplots, short_exp_name)
+    analysis_results = analyze_coinjoin_stats(cjtx_stats, WASABIWALLET_DATA_DIR, cjplots, short_exp_name)
     if save_figs:  # If required, render and save visual graph
         experiment_name = os.path.basename(base_path)
-        fig_save_file = os.path.join(base_path, f"coinjoin_stats{GLOBAL_IMG_SUFFIX}.png")
-        fig_save_file = cjplots.savefig(fig_save_file, experiment_name)
+        fig_save_file = os.path.join(base_path, f"coinjoin_stats{GLOBAL_IMG_SUFFIX}")
+        cjplots.savefig(f'{fig_save_file}.png', short_exp_name)
+        cjplots.savefig(f'{fig_save_file}.pdf', short_exp_name)
+
         cjplots.clear()
         print(f'Basic coinjoins statistics saved into {fig_save_file}')
 
@@ -2855,7 +2887,11 @@ def process_experiment(args):
         with open(save_file, "w") as file:
             file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
-    # Visualize coinjoins in agrregated fashion
+    # Save updated information with analysis results
+    with open(save_file_stats, "w") as file:
+        file.write(json.dumps(dict(sorted(analysis_results.items())), indent=4))
+
+    # Visualize coinjoins in aggregated fashion
     if GENERATE_COINJOIN_GRAPH_BLIND:
         visualize_coinjoins_aggregated(cjtx_stats, WASABIWALLET_DATA_DIR, 'coinjoin_graph_aggregated', False)
 
@@ -3010,10 +3046,33 @@ def visualize_aggregated_graphs(experiment_paths_sorted, graphs, base_path: str,
 
         # Save figure will all subgraphs
         experiment_name = os.path.basename(base_path)
-        fig_save_file = os.path.join(base_path, f"cj_singletype_{graph_type}_{'collated_' if collate_same_num_wallets else ''}stats{GLOBAL_IMG_SUFFIX}.png")
-        fig_save_file = cjplots.savefig(fig_save_file, experiment_name)
+        fig_save_file = os.path.join(base_path, f"cj_singletype_{graph_type}_{'collated_' if collate_same_num_wallets else ''}stats{GLOBAL_IMG_SUFFIX}")
+        fig_save_file = cjplots.savefig(f'{fig_save_file}.png', experiment_name)
+        fig_save_file = cjplots.savefig(f'{fig_save_file}.pdf', experiment_name)
         cjplots.clear()
         print(f'Aggregated coinjoins statistics saved into {fig_save_file}')
+
+
+def get_experiments_paths_info(paths_to_process: list):
+    # Load all experiment paths found on paths_to_process
+    experiment_paths_temp = []
+    for base_path in paths_to_process:
+        experiment_paths = get_experiments_base_paths(base_path)
+
+        # Sort paths based on some property (e.g., number of wallets incrementally)
+        reg = '_(?P<distribution>[a-zA-Z]+)-static-(?P<num_wallets>[0-9]+)-(?P<num_utxo>[0-9]+)utxo'
+        for experiment_path in experiment_paths:
+            match = re.search(reg, experiment_path)
+            assert match, f'Failed to match regular expression \'{reg}\' to experiment_path \'{experiment_path}\''
+            if match:
+                num_wallets = int(match.groupdict()['num_wallets'])
+                num_utxo = int(match.groupdict()['num_utxo'])
+                distribution = match.groupdict()['distribution']
+                experiment_paths_temp.append((experiment_path, num_wallets, num_utxo, distribution))
+
+    experiment_paths_sorted = sorted(experiment_paths_temp, key=lambda x: x[1])
+
+    return experiment_paths_sorted
 
 
 def generate_aggregated_visualization(paths_to_process: list):
@@ -3027,29 +3086,153 @@ def generate_aggregated_visualization(paths_to_process: list):
 
     # Load all experiment paths found on paths_to_process
     for base_path in paths_to_process:
-        experiment_paths = get_experiments_base_paths(base_path)
-
-        # Sort paths based on some property (e.g., number of wallets incrementally)
-        reg = 'static-(?P<num_wallets>[0-9]+)-'
-        experiment_paths_temp = []
-        for experiment_path in experiment_paths:
-            match = re.search(reg, experiment_path)
-            assert match, f'Failed to match regular expression \'{reg}\' to experiment_path \'{experiment_path}\''
-            if match:
-                num_wallets = int(match.groupdict()['num_wallets'])
-                experiment_paths_temp.append((experiment_path, num_wallets))
-        experiment_paths_sorted = sorted(experiment_paths_temp, key=lambda x: x[1])
-        assert len(experiment_paths_sorted) == len(experiment_paths)
+        experiment_paths = get_experiments_paths_info(paths_to_process)
 
         # Visualize data batched based on the number of wallets (only selected types of graphs which will not overload the plot)
         graphs = ['ax_num_inoutputs', 'ax_available_utxos', 'ax_utxo_entropy_from_outputs', 'ax_utxo_entropy_from_outputs_inoutsize', 'ax_utxo_denom_anonscore']
-        visualize_aggregated_graphs(experiment_paths_sorted, graphs, base_path, True)
+        visualize_aggregated_graphs(experiment_paths, graphs, base_path, True)
 
         # Visualize data of given type into single graph
         graphs = ['ax_num_inoutputs', 'ax_available_utxos', 'ax_wallets_distrib', 'ax_utxo_provided', 'ax_anonscore_distrib_wallets',
                   'ax_anonscore_from_outputs', 'ax_utxo_entropy_from_outputs', 'ax_utxo_denom_anonscore',
                   'ax_utxo_entropy_from_outputs_inoutsize', 'ax_initial_final_utxos']
-        visualize_aggregated_graphs(experiment_paths_sorted, graphs, base_path, False)
+        visualize_aggregated_graphs(experiment_paths, graphs, base_path, False)
+
+
+def analyze_wallet_usage_frequency(base_path: str, paths_to_process: list):
+    # Load all experiment paths found on paths_to_process
+    experiment_paths = get_experiments_paths_info(paths_to_process)
+    distributions = list(set([experiment[3] for experiment in experiment_paths]))
+
+    wallets_participation = {}
+    for experiment in experiment_paths:
+        # Load coinjoin_tx_info_stats.json
+        with open(os.path.join(experiment[0], 'coinjoin_tx_info_stats.json'), "r") as file:
+            stats = json.load(file)
+
+        # Extract all results, compute ratio of registered inputs to all available inputs in given wallet
+        #num_unmixed num_mixed num_inputs_wallet num_outputs_wallet
+        all_results_but_zero = []
+        for cjtx in stats['wallets_participation'].keys():
+            for wallet in stats['wallets_participation'][cjtx].keys():
+                record = stats['wallets_participation'][cjtx][wallet]
+                total_coins = record['num_unmixed'] + record['num_mixed']
+                #total_coins = record['num_inputs_wallet'] + record['num_unmixed'] + record['num_mixed']
+                if record['num_inputs_wallet'] > 0:  # consider only cases where wallet registered at least one input
+                    all_results_but_zero.append((record['num_inputs_wallet'], record['num_outputs_wallet'],
+                                        0 if total_coins == 0 else record['num_inputs_wallet'] / total_coins,
+                                        total_coins, experiment[2], experiment[3]))
+
+        if experiment[1] not in wallets_participation.keys():
+            wallets_participation[experiment[1]] = []
+        wallets_participation[experiment[1]].extend(all_results_but_zero)
+
+    # Visualize results
+    NUM_BINS = 11
+    DISTRIB_COLORS = ['red', 'green', 'blue', 'black', 'magenta', 'violet']
+    BAR_WIDTH = 0.15
+
+    NUM_COLUMNS = 4
+    NUM_ROWS = 10
+    ax_index = 1
+    fig = plt.figure(figsize=(40, NUM_ROWS * 5))
+    for num_wallets in wallets_participation.keys():
+        ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index)  # Get next subplot
+        ax_index += 1
+        color_index = 0
+        for distrib in sorted(distributions):
+            utxo_value_counts = [record[0] for record in wallets_participation[num_wallets] if record[5] == distrib]
+            if len(utxo_value_counts) > 0:
+                category_counts = Counter(utxo_value_counts)
+                categories, counts_n = zip(*sorted(category_counts.items()))
+                counts = [count/sum(counts_n) for count in counts_n]
+                x = np.arange(1, len(categories) + 1)
+                ax.bar(x + color_index * BAR_WIDTH, counts, width=BAR_WIDTH, label=f'{distrib}', color=DISTRIB_COLORS[color_index], alpha=0.5)
+                ax.plot(x, counts, linestyle='-', color=DISTRIB_COLORS[color_index], alpha=0.5)
+                print(f'Average of inputs for {num_wallets}wallets/{distrib}: {np.average(utxo_value_counts)}')
+
+            color_index += 1
+        ax.set_title(f'Histogram of number of registered inputs for experiments with {num_wallets} wallets')
+        ax.set_xlabel('Number of inputs registered')
+        ax.set_ylabel('Frequency')
+        ax.set_xlim(left=0.5)
+        ax.legend()
+
+        ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index)  # Get next subplot
+        ax_index += 1
+        color_index = 0
+        for distrib in distributions:
+            utxo_value_counts = [record[1] for record in wallets_participation[num_wallets] if record[5] == distrib]
+            if len(utxo_value_counts) > 0:
+                category_counts = Counter(utxo_value_counts)
+                categories, counts_n = zip(*sorted(category_counts.items()))
+                counts = [count/sum(counts_n) for count in counts_n]
+                x = np.arange(1, len(categories) + 1)
+                ax.bar(x + color_index * BAR_WIDTH, counts, width=BAR_WIDTH, label=f'{distrib}', color=DISTRIB_COLORS[color_index], alpha=0.5)
+                ax.plot(x, counts, linestyle='-', color=DISTRIB_COLORS[color_index], alpha=0.5)
+                print(f'Average of outputs for {num_wallets}wallets/{distrib}: {np.average(utxo_value_counts)}')
+
+            color_index += 1
+        ax.set_title(f'Histogram of number of registered outputs for experiments with {num_wallets} wallets')
+        ax.set_xlabel('Number of outputs registered')
+        ax.set_ylabel('Frequency')
+        ax.set_xlim(left=0.5)
+        ax.legend()
+
+        ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index)  # Get next subplot
+        ax_index += 1
+        color_index = 0
+        for distrib in distributions:
+            data = [record[2] for record in wallets_participation[num_wallets] if record[5] == distrib]
+            hist, bins = np.histogram(data, bins=20)
+            hist_normalized = hist / np.sum(hist)
+            ax.bar(bins[:-1], hist_normalized, width=np.diff(bins), edgecolor='k', label=f'{distrib}', color=DISTRIB_COLORS[color_index], alpha=0.2)
+            ax.set_title(f'Histogram of number of ratio of registered inputs to total coins available for experiments with {num_wallets} wallets')
+            ax.set_xlabel('Ratio of inputs registered to all coins')
+            ax.set_ylabel('Frequency')
+            ax.set_xlim(left=0)
+            ax.set_xlim(right=1.1)
+            ax.legend()
+
+            color_index += 1
+
+
+        ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index)  # Get next subplot
+        ax_index += 1
+
+        color_index = 0
+        for distrib in distributions:
+            x_y_utxo = [(record[3], record[0]) for record in wallets_participation[num_wallets] if record[5] == distrib]
+            utxo_value_counts = Counter(x_y_utxo)
+            if len(utxo_value_counts) > 0:
+                coin = utxo_value_counts.most_common()[int(len(utxo_value_counts) / 2)]
+                ax.scatter([coin[0][0]], [coin[0][1]], label=f'{distrib}', color=DISTRIB_COLORS[color_index],
+                               s=10*coin[1], alpha=0.2)
+
+                for coin in list(utxo_value_counts.keys()):
+                    ax.scatter([coin[0] + color_index * 10], [coin[1]], color=DISTRIB_COLORS[color_index],
+                               s=10*coin[1], alpha=0.2)
+            else:
+                print(f'No values found for (len(utxo_value_counts)) {distrib} distribution with {num_wallets}')
+            color_index += 1
+
+        ax.set_title(f'Scatter plot of total available to total registered inputs with {num_wallets} wallets')
+        ax.set_xlabel('Total available coins')
+        ax.set_ylabel('Total registered inputs')
+        ax.legend()
+        ax.set_xlim(left=0)
+
+    print(f'Wallets registered inputs behavior, total {len(experiment_paths)} experiments analyzed,\n'
+              f'{list(wallets_participation.keys())} number of participating wallets\n'
+              f'{sum([len(wallets_participation[wallet_num]) for wallet_num in wallets_participation.keys()])} total cases examined')
+
+
+    # Finalize graph
+    plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
+    save_file = os.path.join(base_path, f'coinjoin_tx_info_stats.json')
+    plt.savefig(f'{save_file}.png', dpi=300)
+    plt.savefig(f'{save_file}.pdf', dpi=300)
+    plt.close()
 
 
 class AnalysisType(Enum):
@@ -3297,7 +3480,9 @@ if __name__ == "__main__":
                          os.path.join(super_base_path, 'grid_pareto-static-5utxo'),
                          os.path.join(super_base_path, 'grid_pareto-static-30utxo'),
                          os.path.join(super_base_path, 'grid_pareto-static-1utxo'),
-                         os.path.join(super_base_path, 'grid_lognorm-static-1utxo')]
+                         os.path.join(super_base_path, 'grid_lognorm-static-1utxo'),
+                         os.path.join(super_base_path, 'grid_lognorm-static-5utxo'),
+                         os.path.join(super_base_path, 'grid_lognorm-static-30utxo')]
 
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
@@ -3311,13 +3496,19 @@ if __name__ == "__main__":
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2'),
-    #                      os.path.join(super_base_path, 'grid_uniform_test2')]
-
-    super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    target_base_paths = [os.path.join(super_base_path, 'unproccesed')]
+    #                      os.path.join(super_base_path, 'grid_uniform_test3')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_lognorm-static-30utxo')]
+    # target_base_paths = [os.path.join(super_base_path, 'unproccesed')]
+
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'long_runs')]
+
+
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'grid_lognorm-static-1utxo'),
+    #                      os.path.join(super_base_path, 'grid_lognorm-static-5utxo'),
+    #                      os.path.join(super_base_path, 'grid_lognorm-static-30utxo')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'random_skips_uniform-static_30utxo')]
