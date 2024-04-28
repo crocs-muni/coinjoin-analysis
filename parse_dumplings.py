@@ -1556,6 +1556,16 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
             ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
             ax_index += 1
 
+            # Plot lines as separators corresponding to days
+            dates = [precomp_datetime.strptime(data['coinjoins'][cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for cjtx in data['coinjoins'].keys()]
+            new_day_indices = [0]  # Start with the first index
+            for i in range(1, len(dates)):
+                if dates[i].date() != dates[i - 1].date():
+                    new_day_indices.append(i)
+            print(new_day_indices)
+            for pos in new_day_indices:
+                ax.axvline(x=pos, color='gray', linewidth=1, alpha=0.2)
+
             # Plot bars corresponding to different input types
             als.plot_inputs_type_ratio(f'{mix_id} {dir_name}', data, initial_cj_index, ax, analyze_values, normalize_values)
 
@@ -1566,14 +1576,23 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
             stay_liquidity.extend(stay_liquidity_interval)
 
             # Add fee rate into the same graph
-            ax3 = ax.twinx()
-            ax3.spines['right'].set_position(('outward', -28))  # Adjust position of the third axis
+            PLOT_FEERATE = False
+            if PLOT_FEERATE:
+                ax3 = ax.twinx()
+                ax3.spines['right'].set_position(('outward', -28))  # Adjust position of the third axis
+            else:
+                ax3 = None
             mining_fee_rate_interval = als.plot_mining_fee_rates(f'{mix_id} {dir_name}', data, mining_fee_rates, ax3)
             mining_fee_rate.extend(mining_fee_rate_interval)
 
             initial_cj_index = initial_cj_index + len(data['coinjoins'])
             ax.set_title(f'Type of inputs for given cjtx ({'values' if analyze_values else 'number'})\n{mix_id} {dir_name}')
             logging.info(f'{target_base_path} inputs analyzed')
+
+            # Extend the y-limits to ensure the vertical lines go beyond the plot edges
+            y_range = ax.get_ylim()
+            padding = 0.02 * (y_range[1] - y_range[0])
+            ax.set_ylim(y_range[0] - padding, y_range[1] + padding)
 
     # Add additional cummulative plots
     ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
