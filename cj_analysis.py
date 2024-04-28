@@ -6,6 +6,18 @@ from enum import Enum
 SATS_IN_BTC = 100000000
 
 
+class PRECOMP_STRPTIME():
+    precomp_strptime = {}
+
+    def strptime(self, datestr: str, datestr_format: str) -> datetime:
+        if datestr not in self.precomp_strptime:
+            self.precomp_strptime[datestr] = datetime.strptime(datestr, datestr_format)
+        return self.precomp_strptime[datestr]
+
+
+precomp_datetime = PRECOMP_STRPTIME()
+
+
 class MIX_EVENT_TYPE(Enum):
     MIX_ENTER = 'MIX_ENTER'  # New liquidity coming to mix
     MIX_LEAVE = 'MIX_LEAVE'  # Liquidity leaving mix (postmix spend)
@@ -37,12 +49,17 @@ class SummaryMessages:
 SM = SummaryMessages()
 
 
+txid_precomp = {}  # Precomputed list of values to save on string extraction operations
+
+
 def extract_txid_from_inout_string(inout_string):
     if isinstance(inout_string, str):
-        if inout_string.startswith('vin') or inout_string.startswith('vout'):
-            return inout_string[inout_string.find('_') + 1: inout_string.rfind('_')], inout_string[inout_string.rfind('_')+1:]
-        else:
-            assert False, f'Invalid inout string {inout_string}'
+        if inout_string not in txid_precomp:
+            if inout_string.startswith('vin') or inout_string.startswith('vout'):
+                txid_precomp[inout_string] = (inout_string[inout_string.find('_') + 1: inout_string.rfind('_')], inout_string[inout_string.rfind('_') + 1:])
+            else:
+                assert False, f'Invalid inout string {inout_string}'
+        return txid_precomp[inout_string]
     else:
         return inout_string[0], inout_string[1]
 
@@ -77,7 +94,7 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     :return:
     """
     coinjoins = data['coinjoins']
-    cj_time = [{'txid': cjtxid, 'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
+    cj_time = [{'txid': cjtxid, 'broadcast_time': precomp_datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
     sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
     #sorted_cj_time = sorted_cj_time[0:500]
 
@@ -178,7 +195,7 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
 
 def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudity: dict, initial_cj_index: int, ax):
     coinjoins = data['coinjoins']
-    cj_time = [{'txid': cjtxid, 'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
+    cj_time = [{'txid': cjtxid, 'broadcast_time': precomp_datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
     sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
 
     mix_enter = [sum([coinjoins[cjtx['txid']]['inputs'][index]['value'] for index in coinjoins[cjtx['txid']]['inputs'].keys()
@@ -228,7 +245,7 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudit
 def plot_mining_fee_rates(mix_id: str, data: dict, mining_fees: dict, ax):
     coinjoins = data['coinjoins']
     cj_time = [{'txid': cjtxid,
-                'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for
+                'broadcast_time': precomp_datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for
                cjtxid in coinjoins.keys()]
     sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
 
@@ -269,14 +286,19 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
     total_mix_leaving = 0
     total_mix_staying = []
     total_utxos = 0
-    broadcast_times = {cjtx: datetime.strptime(coinjoins[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for cjtx in coinjoins.keys()}
-    broadcast_times.update({tx: datetime.strptime(postmix_spend[tx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for tx in postmix_spend.keys()})
+    broadcast_times = {cjtx: precomp_datetime.strptime(coinjoins[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for cjtx in coinjoins.keys()}
+    broadcast_times.update({tx: precomp_datetime.strptime(postmix_spend[tx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for tx in postmix_spend.keys()})
     # Sort coinjoins based on time
-    cj_time = [{'txid': cjtxid, 'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
+    cj_time = [{'txid': cjtxid, 'broadcast_time': precomp_datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
     sorted_cj_times = sorted(cj_time, key=lambda x: x['broadcast_time'])
-    coinjoins_list = [cj['txid'] for cj in sorted_cj_times]
+    #coinjoins_list = [cj['txid'] for cj in sorted_cj_times]
+    coinjoins_index = {}  # Precomputed mapping of txid to index for fast buntime computation
+    for i in range(0, len(sorted_cj_times)):
+        coinjoins_index[sorted_cj_times[i]['txid']] = i
 
     for cjtx in coinjoins:
+        if coinjoins_index[cjtx] % 10000 == 0:
+            print(f'  {coinjoins_index[cjtx]} coinjoins processed')
         for input in coinjoins[cjtx]['inputs']:
             total_inputs += 1
             if 'spending_tx' in coinjoins[cjtx]['inputs'][input].keys():
@@ -303,7 +325,7 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
                 else:  # Direct mix to mix transaction
                     coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX.name
                     coinjoins[cjtx]['inputs'][input]['burn_time'] = round((broadcast_times[cjtx] - broadcast_times[spending_tx]).total_seconds(), 0)
-                    coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] = coinjoins_list.index(cjtx) - coinjoins_list.index(spending_tx)
+                    coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] = coinjoins_index[cjtx] - coinjoins_index[spending_tx]
             else:
                 total_mix_entering += 1
                 coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_ENTER.name
@@ -322,13 +344,14 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
                     # Postmix spend: the spending transaction is outside mix => liquidity out
                     if spend_by_tx not in postmix_spend.keys():
                         logging.warning(f'Could not find spend_by_tx {spend_by_tx} in postmix_spend txs')
+                    else:
+                        coinjoins[cjtx]['outputs'][output]['burn_time'] = round((broadcast_times[spend_by_tx] - broadcast_times[cjtx]).total_seconds(), 0)
                     total_mix_leaving += 1
                     coinjoins[cjtx]['outputs'][output]['mix_event_type'] = MIX_EVENT_TYPE.MIX_LEAVE.name
-                    coinjoins[cjtx]['outputs'][output]['burn_time'] = round((broadcast_times[spend_by_tx] - broadcast_times[cjtx]).total_seconds(), 0)
                 else:
                     # Mix spend: The output is spent by next coinjoin tx => stays in mix
                     coinjoins[cjtx]['outputs'][output]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX.name
-                    coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] = coinjoins_list.index(spend_by_tx) - coinjoins_list.index(cjtx)
+                    coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] = coinjoins_index[spend_by_tx] - coinjoins_index[cjtx]
                     coinjoins[cjtx]['outputs'][output]['burn_time'] = round((broadcast_times[spend_by_tx] - broadcast_times[cjtx]).total_seconds(), 0)
 
     SM.print(f'  {get_ratio_string(total_mix_entering, total_inputs)} Inputs entering mix / total inputs used by mix transactions')
