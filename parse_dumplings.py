@@ -1002,6 +1002,9 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
                     if last_stop_date_str < coin['create_time'] < current_stop_date_str
                     or 'destroy_time' in coin.keys() and last_stop_date_str < coin['destroy_time'] < current_stop_date_str]
         interval_data['wallets_info'] = data['wallets_info']
+        if premix_filename:  # Only for Whirlpool
+            interval_data['premix'] = {txid: data['premix'][txid] for txid in data['premix'].keys()
+                                          if last_stop_date_str < data['premix'][txid]['broadcast_time'] < current_stop_date_str}
 
         with open(os.path.join(interval_path, f'coinjoin_tx_info.json'), "w") as file:
             file.write(json.dumps(dict(sorted(interval_data.items())), indent=4))
