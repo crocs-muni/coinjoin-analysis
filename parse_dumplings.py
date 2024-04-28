@@ -11,6 +11,7 @@ import json
 import mmap
 from cj_analysis import MIX_EVENT_TYPE
 from cj_analysis import MIX_PROTOCOL
+from cj_analysis import precomp_datetime
 import cj_analysis as als
 from mpl_toolkits.axes_grid1 import host_subplot
 import mpl_toolkits.axisartist as AA
@@ -227,10 +228,10 @@ def extract_wallets_info(data):
     min_cj_time = min([txs_data[cjtxid]['broadcast_time'] for cjtxid in txs_data.keys()])  # Time of the earliest coinjoin
     max_cj_time = max([txs_data[cjtxid]['broadcast_time'] for cjtxid in txs_data.keys()])  # Time of the latest coinjoin
     # Use it as the earliest creation of coin
-    datetime_obj = datetime.strptime(min_cj_time, "%Y-%m-%d %H:%M:%S.%f")
+    datetime_obj = precomp_datetime.strptime(min_cj_time, "%Y-%m-%d %H:%M:%S.%f")
     datetime_obj = datetime_obj - timedelta(minutes=60)
     artificial_min_cj_time = datetime_obj.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    datetime_obj = datetime.strptime(max_cj_time, "%Y-%m-%d %H:%M:%S.%f")
+    datetime_obj = precomp_datetime.strptime(max_cj_time, "%Y-%m-%d %H:%M:%S.%f")
     datetime_obj = datetime_obj + timedelta(minutes=60)
     artificial_max_cj_time = datetime_obj.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
@@ -547,7 +548,7 @@ def visualize_coinjoins_in_time(data, ax_num_coinjoins):
     # Number of coinjoins per given time interval (e.g., day)
     #
     coinjoins = data['coinjoins']
-    broadcast_times = [datetime.strptime(coinjoins[item]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for item in
+    broadcast_times = [precomp_datetime.strptime(coinjoins[item]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for item in
                        coinjoins.keys()]
     experiment_start_time = min(broadcast_times)
     slot_start_time = experiment_start_time
@@ -557,7 +558,7 @@ def visualize_coinjoins_in_time(data, ax_num_coinjoins):
     cjtx_in_hours = {hour: [] for hour in range(0, num_slots + 1)}
     rounds_started_in_hours = {hour: [] for hour in range(0, num_slots + 1)}
     for cjtx in coinjoins.keys():  # go over all coinjoin transactions
-        timestamp = datetime.strptime(coinjoins[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")
+        timestamp = precomp_datetime.strptime(coinjoins[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")
         cjtx_hour = int((timestamp - slot_start_time).total_seconds() // SLOT_WIDTH_SECONDS)
         cjtx_in_hours[cjtx_hour].append(cjtx)
     # remove last slot(s) if no coinjoins are available there
@@ -590,7 +591,7 @@ def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_b
     # Number of coinjoins per given time interval (e.g., day)
     #
     coinjoins = events
-    broadcast_times_cjtxs = {item: datetime.strptime(coinjoins[item]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for item in
+    broadcast_times_cjtxs = {item: precomp_datetime.strptime(coinjoins[item]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for item in
                        coinjoins.keys()}
     broadcast_times = list(broadcast_times_cjtxs.values())
     experiment_start_time = min(broadcast_times)
@@ -606,7 +607,7 @@ def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_b
     outputs_values_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
     inputs_burned_time_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
     for cjtx in coinjoins.keys():  # go over all coinjoin transactions
-        timestamp = datetime.strptime(coinjoins[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")
+        timestamp = precomp_datetime.strptime(coinjoins[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")
         cjtx_hour = int((timestamp - slot_start_time).total_seconds() // SLOT_WIDTH_SECONDS)
         inputs_cjtx_in_slot[cjtx_hour].append(len(coinjoins[cjtx]['inputs']))
         outputs_cjtx_in_slot[cjtx_hour].append(len(coinjoins[cjtx]['outputs']))
@@ -629,7 +630,7 @@ def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_b
 
     # If provided, process also TX0 premix
     if events_premix and len(events_premix) > 0:
-        tx0_broadcast_times_cjtxs = {item: datetime.strptime(events_premix[item]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for
+        tx0_broadcast_times_cjtxs = {item: precomp_datetime.strptime(events_premix[item]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for
                                  item in events_premix.keys()}
         broadcast_times = list(tx0_broadcast_times_cjtxs.values())
         experiment_start_time = min(broadcast_times)
@@ -640,7 +641,7 @@ def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_b
         tx0_inputs_values_in_slot = {hour: [] for hour in range(0, num_slots + 1)}
 
         for cjtx in events_premix.keys():
-            timestamp = datetime.strptime(events_premix[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")
+            timestamp = precomp_datetime.strptime(events_premix[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")
             cjtx_hour = int((timestamp - slot_start_time).total_seconds() // SLOT_WIDTH_SECONDS)
             tx0_inputs_values_in_slot[cjtx_hour].extend(
                 [events_premix[cjtx]['inputs'][index]['value'] for index in events_premix[cjtx]['inputs'].keys()])
@@ -899,11 +900,11 @@ def process_and_save_intervals_onload(mix_id: str, mix_protocol: MIX_PROTOCOL, t
     # Create directory structure with files split per month (around 1000 subsequent coinjoins)
 
     # Find first day of a month when first coinjoin ocured
-    start_date_obj = datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S.%f")
+    start_date_obj = precomp_datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S.%f")
     start_date = datetime(start_date_obj.year, start_date_obj.month, 1)
 
     # Month After the last coinjoin occured
-    last_date_obj = datetime.strptime(stop_date, "%Y-%m-%d %H:%M:%S.%f")
+    last_date_obj = precomp_datetime.strptime(stop_date, "%Y-%m-%d %H:%M:%S.%f")
     last_date_obj = last_date_obj + timedelta(days=32)
     last_date_str = last_date_obj.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -962,11 +963,11 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
         extract_inputs_distribution(mix_id, target_path, mix_filename, data['coinjoins'], True)
 
     # Find first day of a month when first coinjoin ocured
-    start_date_obj = datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S.%f")
+    start_date_obj = precomp_datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S.%f")
     start_date = datetime(start_date_obj.year, start_date_obj.month, 1)
 
     # Month After the last coinjoin occured
-    last_date_obj = datetime.strptime(stop_date, "%Y-%m-%d %H:%M:%S.%f")
+    last_date_obj = precomp_datetime.strptime(stop_date, "%Y-%m-%d %H:%M:%S.%f")
     last_date_obj = last_date_obj + timedelta(days=32)
     last_date_str = last_date_obj.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -1271,7 +1272,7 @@ def plot_analyze_liquidity(mix_id: str, cjtxs):
     plt.figure()
 
     short_exp_name = 'remix'
-    cj_time = [{'txid':cjtxid, 'broadcast_time': datetime.strptime(cjtxs[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in cjtxs.keys()]
+    cj_time = [{'txid':cjtxid, 'broadcast_time': precomp_datetime.strptime(cjtxs[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in cjtxs.keys()]
     sorted_cj_time = sorted(cj_time,  key=lambda x: x['broadcast_time'])
 
     
@@ -1373,7 +1374,7 @@ def wasabi1_analyze_fees(mix_id: str, cjtxs):
 
 def analyze_mining_fees(mix_id: str, data: dict):
     cjtxs = data['coinjoins']
-    cj_time = [{'txid': cjtxid, 'broadcast_time': datetime.strptime(cjtxs[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")}
+    cj_time = [{'txid': cjtxid, 'broadcast_time': precomp_datetime.strptime(cjtxs[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")}
         for cjtxid in cjtxs.keys()]
     sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
 
@@ -1425,7 +1426,7 @@ def analyze_coordinator_fees(mix_id: str, data, mix_protocol):
 
 def wasabi_analyze_coordinator_fees(mix_id: str, cjtxs: dict):
     only_cjtxs = cjtxs['coinjoins']
-    cj_time = [{'txid': cjtxid, 'broadcast_time': datetime.strptime(only_cjtxs[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")}
+    cj_time = [{'txid': cjtxid, 'broadcast_time': precomp_datetime.strptime(only_cjtxs[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")}
         for cjtxid in only_cjtxs.keys()]
     sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
 
@@ -1455,7 +1456,7 @@ def wasabi_analyze_coordinator_fees(mix_id: str, cjtxs: dict):
 def whirlpool_analyze_coordinator_fees(mix_id: str, data: dict):
     tx0s = data['premix']
     cjtxs = data['coinjoins']
-    tx0_time = [{'txid': cjtxid, 'broadcast_time': datetime.strptime(tx0s[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")}
+    tx0_time = [{'txid': cjtxid, 'broadcast_time': precomp_datetime.strptime(tx0s[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")}
         for cjtxid in tx0s.keys()]
     sorted_tx0_time = sorted(tx0_time, key=lambda x: x['broadcast_time'])
 
