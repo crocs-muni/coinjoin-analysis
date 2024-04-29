@@ -3134,105 +3134,107 @@ def analyze_wallet_usage_frequency(base_path: str, paths_to_process: list):
 
     NUM_COLUMNS = 4
     NUM_ROWS = 10
-    ax_index = 1
-    fig = plt.figure(figsize=(40, NUM_ROWS * 5))
-    for num_wallets in wallets_participation.keys():
-        ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index)  # Get next subplot
-        ax_index += 1
-        color_index = 0
-        for distrib in sorted(distributions):
-            utxo_value_counts = [record[0] for record in wallets_participation[num_wallets] if record[5] == distrib]
-            if len(utxo_value_counts) > 0:
-                category_counts = Counter(utxo_value_counts)
-                categories, counts_n = zip(*sorted(category_counts.items()))
-                counts = [count/sum(counts_n) for count in counts_n]
-                x = np.arange(1, len(categories) + 1)
-                ax.bar(x + color_index * BAR_WIDTH, counts, width=BAR_WIDTH, label=f'{distrib}', color=DISTRIB_COLORS[color_index], alpha=0.5)
-                ax.plot(x, counts, linestyle='-', color=DISTRIB_COLORS[color_index], alpha=0.5)
-                print(f'Average of inputs for {num_wallets}wallets/{distrib}: {np.average(utxo_value_counts)}')
 
-            color_index += 1
-        ax.set_title(f'Histogram of number of registered inputs for experiments with {num_wallets} wallets')
-        ax.set_xlabel('Number of inputs registered')
-        ax.set_ylabel('Frequency')
-        ax.set_xlim(left=0.5)
-        ax.legend()
+    for num_utxo in [1, 5, 30]:
+        ax_index = 1
+        fig = plt.figure(figsize=(40, NUM_ROWS * 5))
+        for num_wallets in wallets_participation.keys():
+            ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index)  # Get next subplot
+            ax_index += 1
+            color_index = 0
+            for distrib in sorted(distributions):
+                utxo_value_counts = [record[0] for record in wallets_participation[num_wallets] if record[5] == distrib and record[4] == num_utxo]
+                if len(utxo_value_counts) > 0:
+                    category_counts = Counter(utxo_value_counts)
+                    categories, counts_n = zip(*sorted(category_counts.items()))
+                    counts = [count/sum(counts_n) for count in counts_n]
+                    x = np.arange(1, len(categories) + 1)
+                    ax.bar(x + color_index * BAR_WIDTH, counts, width=BAR_WIDTH, label=f'{distrib}', color=DISTRIB_COLORS[color_index], alpha=0.5)
+                    ax.plot(x, counts, linestyle='-', color=DISTRIB_COLORS[color_index], alpha=0.5)
+                    print(f'Average of inputs for {num_wallets}wallets/{distrib}: {np.average(utxo_value_counts)}')
 
-        ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index)  # Get next subplot
-        ax_index += 1
-        color_index = 0
-        for distrib in distributions:
-            utxo_value_counts = [record[1] for record in wallets_participation[num_wallets] if record[5] == distrib]
-            if len(utxo_value_counts) > 0:
-                category_counts = Counter(utxo_value_counts)
-                categories, counts_n = zip(*sorted(category_counts.items()))
-                counts = [count/sum(counts_n) for count in counts_n]
-                x = np.arange(1, len(categories) + 1)
-                ax.bar(x + color_index * BAR_WIDTH, counts, width=BAR_WIDTH, label=f'{distrib}', color=DISTRIB_COLORS[color_index], alpha=0.5)
-                ax.plot(x, counts, linestyle='-', color=DISTRIB_COLORS[color_index], alpha=0.5)
-                print(f'Average of outputs for {num_wallets}wallets/{distrib}: {np.average(utxo_value_counts)}')
-
-            color_index += 1
-        ax.set_title(f'Histogram of number of registered outputs for experiments with {num_wallets} wallets')
-        ax.set_xlabel('Number of outputs registered')
-        ax.set_ylabel('Frequency')
-        ax.set_xlim(left=0.5)
-        ax.legend()
-
-        ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index)  # Get next subplot
-        ax_index += 1
-        color_index = 0
-        for distrib in distributions:
-            data = [record[2] for record in wallets_participation[num_wallets] if record[5] == distrib]
-            hist, bins = np.histogram(data, bins=20)
-            hist_normalized = hist / np.sum(hist)
-            ax.bar(bins[:-1], hist_normalized, width=np.diff(bins), edgecolor='k', label=f'{distrib}', color=DISTRIB_COLORS[color_index], alpha=0.2)
-            ax.set_title(f'Histogram of number of ratio of registered inputs to total coins available for experiments with {num_wallets} wallets')
-            ax.set_xlabel('Ratio of inputs registered to all coins')
+                color_index += 1
+            ax.set_title(f'Histogram of number of registered inputs for experiments with {num_wallets} wallets')
+            ax.set_xlabel('Number of inputs registered')
             ax.set_ylabel('Frequency')
-            ax.set_xlim(left=0)
-            ax.set_xlim(right=1.1)
+            ax.set_xlim(left=0.5)
             ax.legend()
 
-            color_index += 1
+            ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index)  # Get next subplot
+            ax_index += 1
+            color_index = 0
+            for distrib in distributions:
+                utxo_value_counts = [record[1] for record in wallets_participation[num_wallets] if record[5] == distrib and record[4] == num_utxo]
+                if len(utxo_value_counts) > 0:
+                    category_counts = Counter(utxo_value_counts)
+                    categories, counts_n = zip(*sorted(category_counts.items()))
+                    counts = [count/sum(counts_n) for count in counts_n]
+                    x = np.arange(1, len(categories) + 1)
+                    ax.bar(x + color_index * BAR_WIDTH, counts, width=BAR_WIDTH, label=f'{distrib}', color=DISTRIB_COLORS[color_index], alpha=0.5)
+                    ax.plot(x, counts, linestyle='-', color=DISTRIB_COLORS[color_index], alpha=0.5)
+                    print(f'Average of outputs for {num_wallets}wallets/{distrib}: {np.average(utxo_value_counts)}')
+
+                color_index += 1
+            ax.set_title(f'Histogram of number of registered outputs for experiments with {num_wallets} wallets')
+            ax.set_xlabel('Number of outputs registered')
+            ax.set_ylabel('Frequency')
+            ax.set_xlim(left=0.5)
+            ax.legend()
+
+            ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index)  # Get next subplot
+            ax_index += 1
+            color_index = 0
+            for distrib in distributions:
+                data = [record[2] for record in wallets_participation[num_wallets] if record[5] == distrib and record[4] == num_utxo]
+                hist, bins = np.histogram(data, bins=20)
+                hist_normalized = hist / np.sum(hist)
+                ax.bar(bins[:-1], hist_normalized, width=np.diff(bins), edgecolor='k', label=f'{distrib}', color=DISTRIB_COLORS[color_index], alpha=0.2)
+                ax.set_title(f'Histogram of number of ratio of registered inputs to total coins available for experiments with {num_wallets} wallets')
+                ax.set_xlabel('Ratio of inputs registered to all coins')
+                ax.set_ylabel('Frequency')
+                ax.set_xlim(left=0)
+                ax.set_xlim(right=1.1)
+                ax.legend()
+
+                color_index += 1
 
 
-        ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index)  # Get next subplot
-        ax_index += 1
+            ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index)  # Get next subplot
+            ax_index += 1
 
-        color_index = 0
-        for distrib in distributions:
-            x_y_utxo = [(record[3], record[0]) for record in wallets_participation[num_wallets] if record[5] == distrib]
-            utxo_value_counts = Counter(x_y_utxo)
-            if len(utxo_value_counts) > 0:
-                coin = utxo_value_counts.most_common()[int(len(utxo_value_counts) / 2)]
-                ax.scatter([coin[0][0]], [coin[0][1]], label=f'{distrib}', color=DISTRIB_COLORS[color_index],
-                               s=10*coin[1], alpha=0.2)
+            color_index = 0
+            for distrib in distributions:
+                x_y_utxo = [(record[3], record[0]) for record in wallets_participation[num_wallets] if record[5] == distrib and record[4] == num_utxo]
+                utxo_value_counts = Counter(x_y_utxo)
+                if len(utxo_value_counts) > 0:
+                    coin = utxo_value_counts.most_common()[int(len(utxo_value_counts) / 2)]
+                    ax.scatter([coin[0][0]], [coin[0][1]], label=f'{distrib}', color=DISTRIB_COLORS[color_index],
+                                   s=10*coin[1], alpha=0.2)
 
-                for coin in list(utxo_value_counts.keys()):
-                    ax.scatter([coin[0] + color_index * 10], [coin[1]], color=DISTRIB_COLORS[color_index],
-                               s=10*coin[1], alpha=0.2)
-            else:
-                print(f'No values found for (len(utxo_value_counts)) {distrib} distribution with {num_wallets}')
-            color_index += 1
+                    for coin in list(utxo_value_counts.keys()):
+                        ax.scatter([coin[0] + color_index * 10], [coin[1]], color=DISTRIB_COLORS[color_index],
+                                   s=10*coin[1], alpha=0.2)
+                else:
+                    print(f'No values found for (len(utxo_value_counts)) {distrib} distribution with {num_wallets}')
+                color_index += 1
 
-        ax.set_title(f'Scatter plot of total available to total registered inputs with {num_wallets} wallets')
-        ax.set_xlabel('Total available coins')
-        ax.set_ylabel('Total registered inputs')
-        ax.legend()
-        ax.set_xlim(left=0)
+            ax.set_title(f'Scatter plot of total available to total registered inputs with {num_wallets} wallets')
+            ax.set_xlabel('Total available coins')
+            ax.set_ylabel('Total registered inputs')
+            ax.legend()
+            ax.set_xlim(left=0)
 
-    print(f'Wallets registered inputs behavior, total {len(experiment_paths)} experiments analyzed,\n'
-              f'{list(wallets_participation.keys())} number of participating wallets\n'
-              f'{sum([len(wallets_participation[wallet_num]) for wallet_num in wallets_participation.keys()])} total cases examined')
+        print(f'Wallets registered inputs behavior, total {len(experiment_paths)} experiments analyzed,\n'
+                  f'{list(wallets_participation.keys())} number of participating wallets\n'
+                  f'{sum([len(wallets_participation[wallet_num]) for wallet_num in wallets_participation.keys()])} total cases examined')
 
 
-    # Finalize graph
-    plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
-    save_file = os.path.join(base_path, f'coinjoin_tx_info_stats.json')
-    plt.savefig(f'{save_file}.png', dpi=300)
-    plt.savefig(f'{save_file}.pdf', dpi=300)
-    plt.close()
+        # Finalize graph
+        plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
+        save_file = os.path.join(base_path, f'coinjoin_tx_info_stats.json')
+        plt.savefig(f'{save_file}_{num_utxo}utxo.png', dpi=300)
+        plt.savefig(f'{save_file}_{num_utxo}utxo.pdf', dpi=300)
+        plt.close()
 
 
 class AnalysisType(Enum):
