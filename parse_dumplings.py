@@ -1524,7 +1524,7 @@ def wasabi2_analyse_remixes(mix_id: str, target_path: Path, tx_file: str):
     burntime_histogram(mix_id, data)
 
 
-def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_values: bool = True, normalize_values: bool = True):
+def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_values: bool = True, normalize_values: bool = True, restrict_to_out_size: int = None):
     files = os.listdir(target_path) if os.path.exists(target_path) else print(
         f'Path {target_path} does not exist')
 
@@ -1555,6 +1555,15 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
         if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
             with open(tx_json_file, "r") as file:
                 data = json.load(file)
+
+            # If required, filter only coinjoins with specific size (whirlpool pools)
+            if restrict_to_out_size is not None:
+                before_len = len(data['coinjoins'])
+                data['coinjoins'] = {cjtx: item for cjtx, item in data['coinjoins'].items() if item['outputs']['0']['value'] == restrict_to_out_size}
+                print(f'Length after / before filtering {len(data['coinjoins'])} / {before_len} ({restrict_to_out_size/100000000})')
+                if len(data['coinjoins']) == 0:
+                    print(f'No coinjoins of specified value {restrict_to_out_size/100000000} found in given interval, skipping')
+                    continue
 
             ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
             ax_index += 1
@@ -1703,15 +1712,30 @@ if __name__ == "__main__":
     # exit(1)
 
     if PLOT_REMIXES:
-        wasabi2_plot_remixes('wasabi2',
-                             os.path.join(target_path, 'wasabi2'),
-                             'coinjoin_tx_info.json', True, False)
-        wasabi2_plot_remixes('wasabi2',
-                             os.path.join(target_path, 'wasabi2'),
-                             'coinjoin_tx_info.json', False, True)
-        # wasabi2_plot_remixes('wasabi2_burn',
-        #                      os.path.join(target_path, 'wasabi2_burn', '2024-02-01 00-00-00--2024-03-01 00-00-00_unknown-static-100-1utxo/'),
-        #                      'coinjoin_tx_info.json')
+        # wasabi_plot_remixes('wasabi2_burn_test',
+        #                      os.path.join(target_path, 'wasabi2_burn_test'),
+        #                      'coinjoin_tx_info.json', False, True)
+        #wasabi_plot_remixes('whirlpool_burn_test', os.path.join(target_path, 'whirlpool_burn_test'), 'coinjoin_tx_info.json', True, False)
+        # wasabi_plot_remixes('whirlpool_burn_test_5M', os.path.join(target_path, 'whirlpool_burn_test'), 'coinjoin_tx_info.json',
+        #                     False, False, 5000000)
+
+        wasabi_plot_remixes('whirlpool_5M', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
+                            True, False, 5000000)
+        wasabi_plot_remixes('whirlpool_100k', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
+                            True, False, 100000)
+        wasabi_plot_remixes('whirlpool_1M', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
+                            True, False, 1000000)
+        wasabi_plot_remixes('whirlpool_50M', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
+                            True, False, 50000000)
+        #wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, False)
+        #wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', False, True)
+        exit(42)
+
+        wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False)
+        wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True)
+
+        wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True)
+        wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, False)
         exit(1)
 
     # SAVE_BASE_FILES_JSON = True
