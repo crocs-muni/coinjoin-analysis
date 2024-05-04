@@ -1547,6 +1547,7 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
     stay_liquidity = [0]  # Absolute cummulative liquidity staying in the mix
     mining_fee_rate = []  # Mining fee rate
     coord_fee_rate = []  # Coordinator fee payments
+    num_wallets = []
     initial_cj_index = 0
     time_liquidity = {}  # If MIX_LEAVE is detected, out liquidity is put into dictionary for future display
     for dir_name in files:
@@ -1597,6 +1598,15 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
             mining_fee_rate_interval = als.plot_mining_fee_rates(f'{mix_id} {dir_name}', data, mining_fee_rates, ax3)
             mining_fee_rate.extend(mining_fee_rate_interval)
 
+            PLOT_NUM_WALLETS = True
+            if PLOT_NUM_WALLETS:
+                ax3 = ax.twinx()
+                ax3.spines['right'].set_position(('outward', -28))  # Adjust position of the third axis
+            else:
+                ax3 = None
+            num_wallets_interval = als.plot_num_wallets(f'{mix_id} {dir_name}', data, ax3)
+            num_wallets.extend(num_wallets_interval)
+
             initial_cj_index = initial_cj_index + len(data['coinjoins'])
             ax.set_title(f'Type of inputs for given cjtx ({'values' if analyze_values else 'number'})\n{mix_id} {dir_name}')
             logging.info(f'{target_base_path} inputs analyzed')
@@ -1624,8 +1634,21 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
     ax2.set_ylabel('btc in mix', color='royalblue')
     ax2.tick_params(axis='y', colors='royalblue')
 
+    # TODO: Compute wallets estimation based on inputs per time interval, not directly conjoins
+    AVG_WINDOWS = 10
+    num_wallets_avg = als.compute_averages(num_wallets, AVG_WINDOWS)
+    AVG_WINDOWS_100 = 100
+    num_wallets_avg100 = als.compute_averages(num_wallets, AVG_WINDOWS_100)
+    ax3 = ax.twinx()
+    ax3.spines['right'].set_position(('outward', -28))  # Adjust position of the third axis
+    ax3.plot(num_wallets_avg, color='green', alpha=0.4, label=f'Estimated # wallets ({AVG_WINDOWS} avg)')
+    ax3.plot(num_wallets_avg100, color='green', alpha=0.8, label=f'Estimated # wallets ({AVG_WINDOWS_100} avg)')
+    ax3.set_ylabel('Estimated number of active wallets', color='green')
+    ax3.tick_params(axis='y', colors='green')
+
     ax.legend(loc='center left')
     ax2.legend()
+    ax3.legend()
 
     # Finalize graph
     plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)

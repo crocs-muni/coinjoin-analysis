@@ -267,6 +267,29 @@ def plot_mining_fee_rates(mix_id: str, data: dict, mining_fees: dict, ax):
     return fee_rates
 
 
+def plot_num_wallets(mix_id: str, data: dict, ax):
+    coinjoins = data['coinjoins']
+    cj_time = [{'txid': cjtxid,
+                'broadcast_time': precomp_datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for
+               cjtxid in coinjoins.keys()]
+    sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
+
+    # For each coinjoin find the closest fee rate record and plot it
+    AVG_NUM_INPUTS = 1.765  # value taken from simulations for all distributions
+    num_wallets = [len(coinjoins[cj['txid']]['inputs']) / AVG_NUM_INPUTS for cj in sorted_cj_time]
+
+    # Alternative plot:
+
+    if ax:
+        AVG_WINDOWS = 10
+        num_wallets_avg = compute_averages(num_wallets, AVG_WINDOWS)
+        ax.plot(num_wallets_avg, color='green', alpha=0.2, linewidth=1, linestyle='-')
+        ax.tick_params(axis='y', colors='green', labelsize=6)
+        ax.set_ylabel('Estimated number of active wallets', color='green', fontsize='6')
+
+    return num_wallets
+
+
 def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins={}, ww1_postmix_spend={}):
     """
     Requires performance speedup, will not finish (after 8 hours) for Whirlpool with very large number of coins
@@ -362,3 +385,17 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
     SM.print(f'  {sum(total_mix_staying) / SATS_IN_BTC} btc, total value staying in mix')
 
     logging.debug('analyze_input_out_liquidity() finished')
+
+
+def compute_averages(lst, window_size):
+    averages = []
+    window_sum = sum(lst[:window_size])  # Initialize the sum of the first window
+    averages.append(window_sum / window_size)  # Compute and store the average of the first window
+
+    # Slide the window and compute averages
+    for i in range(1, len(lst) - window_size - 1):
+        # Add the next element to the window sum and subtract the first element of the previous window
+        window_sum += lst[i + window_size - 1] - lst[i - 1]
+        averages.append(window_sum / window_size)  # Compute and store the average of the current window
+
+    return averages
