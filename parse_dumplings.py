@@ -1,5 +1,6 @@
 import copy
 import os
+import pickle
 from datetime import datetime, timedelta
 from enum import Enum
 from collections import defaultdict, Counter
@@ -18,6 +19,7 @@ import mpl_toolkits.axisartist as AA
 
 from matplotlib import pyplot as plt
 from matplotlib.ticker import MaxNLocator, ScalarFormatter, NullFormatter
+
 
 # Configure the logging module
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -101,8 +103,6 @@ def set_key_value_assert(data, key, value, hard_assert):
 
     else:
         data[key] = value
-
-
 
 
 def get_input_name_string(txid, index):
@@ -1720,15 +1720,68 @@ def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: Path):
             file.write(json.dumps(dict(sorted(ww2_data.items())), indent=4))
 
 
+def analyze_mixes_flows(target_path):
+    whirlpool_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiPostMixTxs.txt'))
+    wasabi1_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
+    wasabi2_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'Wasabi2PostMixTxs.txt'))
+
+    wasabi1_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiCoinJoins.txt'))
+    wasabi2_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'Wasabi2CoinJoins.txt'))
+
+    whirlpool_premix = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiTx0s.txt'))
+
+    def load_premix_tx_dict(target_path, file_name, full_tx_dict):
+        """
+        Optimized computation or loading of precomputed list of premix transaction ids extracted from all inputs
+        :param target_path: folder path for loading/saving
+        :param file_name: target file name
+        :param full_tx_dict: dictionary with all transactions and inputs from which premix txs are extracted
+        :return: dictionary with unique premix txs
+        """
+        json_file = os.path.join(target_path, file_name)
+        if os.path.exists(json_file):
+            with open(json_file, "rb") as file:
+                return pickle.load(file)
+        else:
+            txs = list({full_tx_dict[txid]['inputs'][index]['spending_tx'] for txid in full_tx_dict.keys() for
+                                   index in full_tx_dict[txid]['inputs'].keys()})
+            tx_dict = {als.extract_txid_from_inout_string(item)[0]: [] for item in txs}
+            with open(json_file, "wb") as file:
+                pickle.dump(tx_dict, file)
+            return tx_dict
+
+    wasabi1_premix_dict = load_premix_tx_dict(target_path, 'wasabi1_premix_dict.json', wasabi1_cj)
+    wasabi2_premix_dict = load_premix_tx_dict(target_path, 'wasabi2_premix_dict.json', wasabi2_cj)
+
+    # Analyze flows
+    analyze_extramix_flows('Whirlpool -> Wasabi1', target_path, whirlpool_postmix, wasabi1_premix_dict)
+    analyze_extramix_flows('Whirlpool -> Wasabi2', target_path, whirlpool_postmix, wasabi2_premix_dict)
+    analyze_extramix_flows('Wasabi1 -> Whirlpool', target_path, wasabi1_postmix, whirlpool_premix)
+    analyze_extramix_flows('Wasabi1 -> Wasabi2', target_path, wasabi1_postmix, wasabi2_premix_dict)
+    analyze_extramix_flows('Wasabi2 -> Whirlpool', target_path, wasabi2_postmix, whirlpool_premix)
+    analyze_extramix_flows('Wasabi2 -> Wasabi1', target_path, wasabi2_postmix, wasabi1_premix_dict)
+    # analyze_extramix_flows('Wasabi1 -> Wasabi1', target_path, wasabi1_postmix, wasabi1_premix_dict)
+    # analyze_extramix_flows('Wasabi2 -> Wasabi2', target_path, wasabi2_postmix, wasabi2_premix_dict)
+    # analyze_extramix_flows('Whirlpool -> Whirlpool', target_path, whirlpool_postmix, whirlpool_premix)
+
+
+def analyze_extramix_flows(experiment_id: str, target_path: Path, mix1_postmix: dict, mix2_postmix: dict):
+    # (non-strict, 1-hop case): Mix1 coinjoin output (mix1_coinjoin_file) -> Mix2 wallet (mix1_postmix_file, mix2_premix_file) -> Mix2 coinjoin input (mix2_coinjoin_file)
+    mix1_mix2_txs = list(set(list(mix1_postmix.keys())).intersection(list(mix2_postmix.keys())))
+    logging.info(f'{experiment_id} (non-strict, 1-hop case): {len(mix1_mix2_txs)}')
+
+    # Todo: Iterate over transactions, take minimum from (outflow, inflow)
+
+
 if __name__ == "__main__":
     FULL_TX_SET = False
     ANALYSIS_ADDRESS_REUSE = False
     ANALYSIS_PROCESS_ALL_COINJOINS = False
     ANALYSIS_PROCESS_ALL_COINJOINS_DEBUG = False
-    ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
+    ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = True
     ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS_DEBUG = False
     ANALYSIS_INPUTS_DISTRIBUTION = False  # OK
-    ANALYSIS_BURN_TIME = True
+    ANALYSIS_BURN_TIME = False
     PLOT_REMIXES = True
 
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240215\\'
