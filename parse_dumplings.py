@@ -126,77 +126,85 @@ def get_synthetic_address(create_txid, vout_index):
 def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date: str = None):
     cj_stats = {}
     logging.debug(f'Processing file {target_file}')
-    with open(target_file, "r") as file:
-        for line in file.readlines():
-            parts = line.split(VerboseTransactionInfoLineSeparator)
-            record = {}
+    json_file = target_file + '.json'
+    if os.path.exists(json_file):
+        with open(json_file, "rb") as file:
+            cj_stats = pickle.load(file)
+    else:
+        with open(target_file, "r") as file:
+            for line in file.readlines():
+                parts = line.split(VerboseTransactionInfoLineSeparator)
+                record = {}
 
-            # Be careful, broadcast time and blocktime can be significantly different
-            block_time = None if parts[3] is None else datetime.fromtimestamp(int(parts[3]))
-            record['broadcast_time'] = block_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
-            if start_date and stop_date:
-                if record['broadcast_time'] < start_date or record['broadcast_time'] > stop_date:
-                    # Skip this record as it is outside of observed period
-                    continue
+                # Be careful, broadcast time and blocktime can be significantly different
+                block_time = None if parts[3] is None else datetime.fromtimestamp(int(parts[3]))
+                record['broadcast_time'] = block_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+                if start_date and stop_date:
+                    if record['broadcast_time'] < start_date or record['broadcast_time'] > stop_date:
+                        # Skip this record as it is outside of observed period
+                        continue
 
-            tx_id = None if parts[0] is None else parts[0]
-            record['txid'] = tx_id
-            record['is_cjtx'] = True
-            block_hash = None if parts[1] is None else parts[1]
-            record['block_hash'] = block_hash
-            block_index = None if parts[2] is None else int(parts[2])
-            record['block_index'] = block_index
+                tx_id = None if parts[0] is None else parts[0]
+                record['txid'] = tx_id
+                record['is_cjtx'] = True
+                block_hash = None if parts[1] is None else parts[1]
+                record['block_hash'] = block_hash
+                block_index = None if parts[2] is None else int(parts[2])
+                record['block_index'] = block_index
 
-            inputs = [input.strip('{') for input in parts[4].split(VerboseInOutInfoInLineSeparator)] if parts[4] else None
-            record['inputs'] = {}
-            index = 0
-            for input in inputs:
-                # Split to segments using - and + separators
-                segments_pipe = input.split("-")
-                segments = [segment.split("+") for segment in segments_pipe]
-                segments = [item for sublist in segments for item in sublist]
+                inputs = [input.strip('{') for input in parts[4].split(VerboseInOutInfoInLineSeparator)] if parts[4] else None
+                record['inputs'] = {}
+                index = 0
+                for input in inputs:
+                    # Split to segments using - and + separators
+                    segments_pipe = input.split("-")
+                    segments = [segment.split("+") for segment in segments_pipe]
+                    segments = [item for sublist in segments for item in sublist]
 
-                this_input = {}
-                this_input['spending_tx'] = get_output_name_string(segments[0], segments[1])
-                this_input['value'] = int(segments[2])
-                this_input['wallet_name'] = 'real_unknown'
-                #this_input['script'] = segments[3]
-                #this_input['script_type'] = segments[4]
-                # TODO: generate proper address from script, now replaced by synthetic
-                this_input['address'] = get_synthetic_address(segments[0], segments[1])
+                    this_input = {}
+                    this_input['spending_tx'] = get_output_name_string(segments[0], segments[1])
+                    this_input['value'] = int(segments[2])
+                    this_input['wallet_name'] = 'real_unknown'
+                    #this_input['script'] = segments[3]
+                    #this_input['script_type'] = segments[4]
+                    # TODO: generate proper address from script, now replaced by synthetic
+                    this_input['address'] = get_synthetic_address(segments[0], segments[1])
 
-                record['inputs'][f'{index}'] = this_input
-                index += 1
+                    record['inputs'][f'{index}'] = this_input
+                    index += 1
 
-            outputs = [output.strip('{') for output in parts[5].split(VerboseInOutInfoInLineSeparator)] if parts[5] else None
-            record['outputs'] = {}
-            index = 0
-            for output in outputs:
-                segments = output.split('+')
-                this_output = {}
-                this_output['value'] = int(segments[0])
-                this_output['wallet_name'] = 'real_unknown'
-                this_output['script'] = segments[1]
-                this_output['script_type'] = segments[2]
-                this_output['address'] = get_synthetic_address(tx_id, index)  # TODO: Compute proper address from script
+                outputs = [output.strip('{') for output in parts[5].split(VerboseInOutInfoInLineSeparator)] if parts[5] else None
+                record['outputs'] = {}
+                index = 0
+                for output in outputs:
+                    segments = output.split('+')
+                    this_output = {}
+                    this_output['value'] = int(segments[0])
+                    this_output['wallet_name'] = 'real_unknown'
+                    this_output['script'] = segments[1]
+                    this_output['script_type'] = segments[2]
+                    this_output['address'] = get_synthetic_address(tx_id, index)  # TODO: Compute proper address from script
 
-                record['outputs'][f'{index}'] = this_output
-                index += 1
+                    record['outputs'][f'{index}'] = this_output
+                    index += 1
 
-            # Add this record as coinjoin
-            cj_stats[tx_id] = record
+                # Add this record as coinjoin
+                cj_stats[tx_id] = record
 
-    # backward reference to spending transaction output is already set ('spending_tx'),
-    # now set also forward link ('spend_by_tx')
-    for txid in cj_stats.keys():
-        for index in cj_stats[txid]['inputs'].keys():
-            input = cj_stats[txid]['inputs'][index]
+        # backward reference to spending transaction output is already set ('spending_tx'),
+        # now set also forward link ('spend_by_tx')
+        for txid in cj_stats.keys():
+            for index in cj_stats[txid]['inputs'].keys():
+                input = cj_stats[txid]['inputs'][index]
 
-            if 'spending_tx' in input.keys():
-                tx, vout = als.extract_txid_from_inout_string(input['spending_tx'])
-                # Try to find transaction and set its record
-                if tx in cj_stats.keys() and vout in cj_stats[tx]['outputs'].keys():
-                    cj_stats[tx]['outputs'][vout]['spend_by_tx'] = get_input_name_string(txid, index)
+                if 'spending_tx' in input.keys():
+                    tx, vout = als.extract_txid_from_inout_string(input['spending_tx'])
+                    # Try to find transaction and set its record
+                    if tx in cj_stats.keys() and vout in cj_stats[tx]['outputs'].keys():
+                        cj_stats[tx]['outputs'][vout]['spend_by_tx'] = get_input_name_string(txid, index)
+
+        with open(json_file, "wb") as file:
+            pickle.dump(cj_stats, file)
 
     return cj_stats
 
