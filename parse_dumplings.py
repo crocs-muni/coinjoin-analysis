@@ -105,14 +105,6 @@ def set_key_value_assert(data, key, value, hard_assert):
         data[key] = value
 
 
-def get_input_name_string(txid, index):
-    return f'vin_{txid}_{index}'
-
-
-def get_output_name_string(txid, index):
-    return f'vout_{txid}_{index}'
-
-
 def get_synthetic_address(create_txid, vout_index):
     """
     Synthetic unique address from creating transaction and its vout index
