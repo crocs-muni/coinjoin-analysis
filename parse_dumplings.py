@@ -1716,17 +1716,195 @@ def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: Path):
                             total_ww1_inputs += 1
 
         print(f'Total WW1 inputs with friends-do-not-pay rule: {total_ww1_inputs}')
-        with open(os.path.join(path, 'coinjoin_tx_info.json.fixed'), "w") as file:
-            file.write(json.dumps(dict(sorted(ww2_data.items())), indent=4))
+
+        with open(os.path.join(path, f'{mix_id}_coinjoin_tx_info.json.fixed'), "wb") as file:
+            file.write(orjson.dumps(ww2_data))
+        #
+        # with open(os.path.join(path, f'{mix_id}_coinjoin_tx_info.json'), "w") as file:
+        #     file.write(json.dumps(dict(sorted(ww2_data.items())), indent=4))
+
+
+def extract_flows_blocksci(flows: dict):
+    start_year = 2019
+    end_year = 2024
+
+    flow_types = sorted(set([item['flow_direction'] for item in flows]))
+    flows_in_year = {flow_type: {} for flow_type in flow_types}
+    for flow_type in flow_types:
+        for year in range(start_year, end_year + 1):
+            flows_in_year[flow_type][year] = {}
+            for month in range(1, 12 + 1):
+                flows_in_year[flow_type][year][month] = {}
+
+    for flow_type in flow_types:
+        for year in range(start_year, end_year + 1):
+            for month in range(1, 12 + 1):
+                flows_in_year[flow_type][year][month] = sum(
+                    [item['sats_moved'] for item in flows if item['flow_direction'] == flow_type and
+                     precomp_datetime.strptime(item['broadcast_time'], "%Y-%m-%dT%H:%M:%S").year == year and
+                     precomp_datetime.strptime(item['broadcast_time'], '%Y-%m-%dT%H:%M:%S').month == month
+                     ])
+
+    return flows_in_year
+
+
+def extract_flows_dumplings(flows: dict):
+    start_year = 2019
+    end_year = 2024
+
+    flow_in_year = {}
+    for flow_type in flows.keys():
+        flow_in_year[flow_type] = {}
+        for year in range(start_year, end_year + 1):
+            flow_in_year[flow_type][year] = {}
+            for month in range(1, 12 + 1):
+                flow_in_year[flow_type][year][month] = sum(
+                    [flows[flow_type][txid]['value'] for txid in flows[flow_type].keys()
+                     if precomp_datetime.strptime(flows[flow_type][txid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f").year == year and
+                     precomp_datetime.strptime(flows[flow_type][txid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f").month == month
+                     ])
+
+    return flow_in_year
+
+
+def plot_flows_steamgraph(flow_in_year: dict):
+    start_year = 2019
+    end_year = 2024
+
+    flow_types = sorted([flow_type for flow_type in flow_in_year.keys()])
+
+    COLORS = ['gray', 'green', 'olive', 'black', 'red', 'orange']
+    fig, ax = plt.subplots(figsize=(10, 5))
+    # end_year in x_axis must be + 1 to correct for 0 index in flow_data
+    x_axis = np.linspace(start_year, end_year + 1, num=(end_year - start_year + 1) * 12)
+
+    flow_data_1 = []
+    flow_types_process_1 = ['Wasabi -> Wasabi2']
+    for flow_type in flow_types_process_1:
+        case_data = [round(flow_in_year[flow_type][year][month] / SATS_IN_BTC, 2) for year in flow_in_year[flow_type].keys()
+                     for month in range(1, 13)]
+        flow_data_1.append(case_data)
+    ax.stackplot(x_axis, flow_data_1, labels=list(flow_types_process_1), colors=COLORS, baseline="sym", alpha=0.4)
+
+    flow_types_process_2 = [item for item in flow_types if item != 'Wasabi -> Wasabi2']
+    flow_data_2 = []
+    for flow_type in flow_types_process_2:
+        case_data = [round(flow_in_year[flow_type][year][month] / SATS_IN_BTC, 2) for year in flow_in_year[flow_type].keys() for month in range(1, 13)]
+        flow_data_2.append(case_data)
+        assert len(case_data) == (end_year - start_year + 1) * 12
+    ax.stackplot(x_axis, flow_data_2, labels=list(flow_types_process_2), colors=COLORS[1:], baseline="sym", alpha=0.7)
+
+    ax.legend(loc="lower left")
+    #ax.set_yscale('log')  # If enabled, it does not plot correctly, possibly bug in mathplotlib
+    plt.show()
+
+    def gaussian_smooth(x, y, grid, sd):
+        weights = np.transpose([stats.norm.pdf(grid, m, sd) for m in x])
+        weights = weights / weights.sum(0)
+        return (weights * y).sum(1)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    grid = np.linspace(start_year, end_year + 1, num=1000)
+    y_smoothed = [gaussian_smooth(x_axis, y_, grid, 0.05) for y_ in flow_data_1]
+    ax.stackplot(grid, y_smoothed, labels=list(flow_types_process_1), colors=COLORS, baseline="sym", alpha=0.3)
+    y_smoothed = [gaussian_smooth(x_axis, y_, grid, 0.05) for y_ in flow_data_2]
+    ax.stackplot(grid, y_smoothed, labels=list(flow_types_process_2), colors=COLORS[1:], baseline="sym", alpha=0.7)
+    ax.legend(loc="lower left")
+    plt.show()
+
+
+def plot_flows_dumplings(flows: dict):
+    num_flow_types = len(flows.keys())
+    start_year = 2018
+    end_year = 2024
+    # num_months = (end_year - start_year)*12
+    x = np.arange(start_year, end_year, 12)  # (N,) array-like
+    np.random.seed(42)
+    y = [np.random.randint(0, 5, size=end_year - start_year) for _ in range(num_flow_types)]
+
+    flow_in_year = {}
+    for flow_type in flows.keys():
+        flow_in_year[flow_type] = {}
+        for year in range(start_year, end_year + 1):
+            flow_in_year[flow_type][year] = {}
+            for month in range(1, 12 + 1):
+                flow_in_year[flow_type][year][month] = sum(
+                    [flows[flow_type][txid]['value'] for txid in flows[flow_type].keys()
+                     if precomp_datetime.strptime(flows[flow_type][txid]['broadcast_time'],
+                                                  "%Y-%m-%d %H:%M:%S.%f").year == year and
+                     precomp_datetime.strptime(flows[flow_type][txid]['broadcast_time'],
+                                               "%Y-%m-%d %H:%M:%S.%f").month == month
+                     ])
+    def gaussian_smooth(x, y, grid, sd):
+        weights = np.transpose([stats.norm.pdf(grid, m, sd) for m in x])
+        weights = weights / weights.sum(0)
+        return (weights * y).sum(1)
+
+    flow_data = []
+    for flow_type in flows.keys():
+        case_data = [flow_in_year[flow_type][year][month] for year in flow_in_year[flow_type].keys() for month in range(1, 13)]
+        flow_data.append(case_data)
+        assert len(case_data) == (end_year - start_year + 1) * 12
+    #COLORS = sns.color_palette("twilight_shifted", n_colors=len(flow_data))
+    COLORS = sns.color_palette("RdYlGn", n_colors=len(flow_data))
+    COLORS = ['red', 'orange', 'green', 'olive', 'gray', 'black']
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    # end_year in x_axis must be + 1 to correct for 0 index in flow_data
+    x_axis = np.linspace(start_year, end_year + 1, num=(end_year - start_year + 1) * 12)
+    ax.stackplot(x_axis, flow_data, labels=list(flows.keys()), colors=COLORS, baseline="sym", alpha=1)
+    ax.legend(loc="lower left")
+    #ax.set_yscale('log')  # If enabled, it does not plot correctly, possibly bug in mathplotlib
+    plt.show()
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    grid = np.linspace(start_year - 1, end_year + 1, num=500)
+    y_smoothed = [gaussian_smooth(x, y_, grid, 0.1) for y_ in flow_data]
+    ax.stackplot(grid, y_smoothed, labels=list(flows.keys()), colors=COLORS, baseline="sym", alpha=0.7)
+
+    ax.legend()
+    plt.show()
+
+
+def plot_steamgraph_example():
+    x = np.arange(1990, 2020)  # (N,) array-like
+    y = [np.random.randint(0, 5, size=30) for _ in range(5)]  # (M, N) array-like
+
+    def gaussian_smooth(x, y, grid, sd):
+        weights = np.transpose([stats.norm.pdf(grid, m, sd) for m in x])
+        weights = weights / weights.sum(0)
+        return (weights * y).sum(1)
+
+    COLORS = ["#D0D1E6", "#A6BDDB", "#74A9CF", "#2B8CBE", "#045A8D"]
+    fig, ax = plt.subplots(figsize=(10, 7))
+    grid = np.linspace(1985, 2025, num=500)
+    y_smoothed = [gaussian_smooth(x, y_, grid, 1) for y_ in y]
+    ax.stackplot(grid, y_smoothed, colors=COLORS, baseline="sym")
+    plt.show()
 
 
 def analyze_mixes_flows(target_path):
+    flows_file = os.path.join(target_path, 'one_hop_flows.json')
+    with open(flows_file, "r") as file:
+        flows = json.load(file)
+
+    flows_in_time = extract_flows_blocksci(flows)
+    plot_flows_steamgraph(flows_in_time)
+
+    flows_file = os.path.join(target_path, 'mix_flows.json')
+    with open(flows_file, "r") as file:
+        flows = json.load(file)
+    flows_in_time = extract_flows_dumplings(flows)
+    plot_flows_steamgraph(flows_in_time)
+    exit(42)
+
     whirlpool_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiPostMixTxs.txt'))
     wasabi1_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
     wasabi2_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'Wasabi2PostMixTxs.txt'))
 
     wasabi1_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiCoinJoins.txt'))
     wasabi2_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'Wasabi2CoinJoins.txt'))
+    whirlpool_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiCoinJoins.txt'))
 
     whirlpool_premix = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiTx0s.txt'))
 
@@ -1753,24 +1931,63 @@ def analyze_mixes_flows(target_path):
     wasabi1_premix_dict = load_premix_tx_dict(target_path, 'wasabi1_premix_dict.json', wasabi1_cj)
     wasabi2_premix_dict = load_premix_tx_dict(target_path, 'wasabi2_premix_dict.json', wasabi2_cj)
 
+    # Precompute dictionary with full name (vout_txid_index and vin_txid_index) for quick queries if given 'spending_tx' and 'spend_by_tx' are included
+    # Precompute for quick queries 'spending_tx' existence
+    wasabi1_vout_txid_index = {als.get_output_name_string(txid, index) for txid in wasabi1_cj.keys() for index in wasabi1_cj[txid]['outputs'].keys()}
+    wasabi2_vout_txid_index = {als.get_output_name_string(txid, index) for txid in wasabi2_cj.keys() for index in wasabi2_cj[txid]['outputs'].keys()}
+    whirlpool_vout_txid_index = {als.get_output_name_string(txid, index) for txid in whirlpool_cj.keys() for index in whirlpool_cj[txid]['outputs'].keys()}
+    # Precompute for quick queries 'spend_by_tx' existence
+    wasabi1_vin_txid_index = {wasabi1_cj[txid]['inputs'][index]['spending_tx'] for txid in wasabi1_cj.keys() for index in wasabi1_cj[txid]['inputs'].keys()}
+    wasabi2_vin_txid_index = {wasabi2_cj[txid]['inputs'][index]['spending_tx'] for txid in wasabi2_cj.keys() for index in wasabi2_cj[txid]['inputs'].keys()}
+    whirlpool_vin_txid_index = {whirlpool_cj[txid]['inputs'][index]['spending_tx'] for txid in whirlpool_cj.keys() for index in whirlpool_cj[txid]['inputs'].keys()}
+
     # Analyze flows
-    analyze_extramix_flows('Whirlpool -> Wasabi1', target_path, whirlpool_postmix, wasabi1_premix_dict)
-    analyze_extramix_flows('Whirlpool -> Wasabi2', target_path, whirlpool_postmix, wasabi2_premix_dict)
-    analyze_extramix_flows('Wasabi1 -> Whirlpool', target_path, wasabi1_postmix, whirlpool_premix)
-    analyze_extramix_flows('Wasabi1 -> Wasabi2', target_path, wasabi1_postmix, wasabi2_premix_dict)
-    analyze_extramix_flows('Wasabi2 -> Whirlpool', target_path, wasabi2_postmix, whirlpool_premix)
-    analyze_extramix_flows('Wasabi2 -> Wasabi1', target_path, wasabi2_postmix, wasabi1_premix_dict)
+    flows = {}
+    flows['whirlpool_to_wasabi1'] = analyze_extramix_flows('Whirlpool -> Wasabi1', target_path, whirlpool_vout_txid_index, whirlpool_postmix, wasabi1_premix_dict, wasabi1_vin_txid_index)
+    flows['whirlpool_to_wasabi2'] = analyze_extramix_flows('Whirlpool -> Wasabi2', target_path, whirlpool_vout_txid_index, whirlpool_postmix, wasabi2_premix_dict, wasabi2_vin_txid_index)
+    flows['wasabi1_to_whirlpool'] = analyze_extramix_flows('Wasabi1 -> Whirlpool', target_path, wasabi1_vout_txid_index, wasabi1_postmix, whirlpool_premix, whirlpool_vin_txid_index)
+    flows['Wasabi -> Wasabi2'] = analyze_extramix_flows('Wasabi1 -> Wasabi2', target_path, wasabi1_vout_txid_index, wasabi1_postmix, wasabi2_premix_dict, wasabi2_vin_txid_index)
+    flows['wasabi2_to_whirlpool'] = analyze_extramix_flows('Wasabi2 -> Whirlpool', target_path, wasabi2_vout_txid_index, wasabi2_postmix, whirlpool_premix, whirlpool_vin_txid_index)
+    flows['wasabi2_to_wasabi1'] = analyze_extramix_flows('Wasabi2 -> Wasabi1', target_path, wasabi2_vout_txid_index, wasabi2_postmix, wasabi1_premix_dict, wasabi1_vin_txid_index)
     # analyze_extramix_flows('Wasabi1 -> Wasabi1', target_path, wasabi1_postmix, wasabi1_premix_dict)
     # analyze_extramix_flows('Wasabi2 -> Wasabi2', target_path, wasabi2_postmix, wasabi2_premix_dict)
     # analyze_extramix_flows('Whirlpool -> Whirlpool', target_path, whirlpool_postmix, whirlpool_premix)
 
+    flows_file = os.path.join(target_path, 'mix_flows.json')
+    with open(flows_file, "w") as file:
+        file.write(json.dumps(flows, indent=4))
 
-def analyze_extramix_flows(experiment_id: str, target_path: Path, mix1_postmix: dict, mix2_postmix: dict):
+
+def analyze_extramix_flows(experiment_id: str, target_path: Path, mix1_precomp_vout_txid_index: dict, mix1_postmix: dict, mix2_premix: dict, mix2_precomp_vin_txid_index: dict):
     # (non-strict, 1-hop case): Mix1 coinjoin output (mix1_coinjoin_file) -> Mix2 wallet (mix1_postmix_file, mix2_premix_file) -> Mix2 coinjoin input (mix2_coinjoin_file)
-    mix1_mix2_txs = list(set(list(mix1_postmix.keys())).intersection(list(mix2_postmix.keys())))
-    logging.info(f'{experiment_id} (non-strict, 1-hop case): {len(mix1_mix2_txs)}')
+    logging.info(f'{experiment_id} (non-strict, 1-hop case): #mix1 postmix txs = {len(mix1_postmix.keys())}, #mix2 premix txs {len(mix2_premix)}')
+    mix1_mix2_txs = list(set(list(mix1_postmix.keys())).intersection(list(mix2_premix.keys())))
+    logging.info(f'{experiment_id} (non-strict, 1-hop case): {len(mix1_mix2_txs)} txs')
 
-    # Todo: Iterate over transactions, take minimum from (outflow, inflow)
+    # Iterate over shared bridging transactions (mix1->shared_tx->mix2), take minimum from (outflow_first_mix, inflow_second_mix)
+    # Compute sum of values for all inputs taking only these inputs coming from mix1
+    flow_sizes = {}
+    for inter_txid in mix1_mix2_txs:
+        from_mix1 = sum([mix1_postmix[inter_txid]['inputs'][index]['value'] for index in mix1_postmix[inter_txid]['inputs'].keys()
+                            if mix1_postmix[inter_txid]['inputs'][index]['spending_tx'] in mix1_precomp_vout_txid_index])
+        to_mix2 = sum([mix1_postmix[inter_txid]['outputs'][index]['value'] for index in mix1_postmix[inter_txid]['outputs'].keys()
+                            if als.get_output_name_string(inter_txid, index) in mix2_precomp_vin_txid_index])
+        assert from_mix1 > 0 and to_mix2 > 0, f'Invalid sum of intermix inputs/outputs for {inter_txid}:  {from_mix1} vs {to_mix2}'
+        # Fill record
+        flow_sizes[inter_txid] = {'broadcast_time': mix1_postmix[inter_txid]['broadcast_time'],
+                                  'value': min(from_mix1, to_mix2)}
+
+        # Inflows are always bit smaller than inflows due to mining fees. Detect and print bridging txs with significant difference
+        MINING_FEE_LIMIT = 0.01  # 1%
+        if from_mix1 - to_mix2 > from_mix1 * MINING_FEE_LIMIT:
+            logging.debug(f'Mix2 inflow significantly SMALLER than mix1 outflow for {inter_txid}: {from_mix1} vs {to_mix2}')
+        if (to_mix2 - from_mix1) > to_mix2 * MINING_FEE_LIMIT:
+            logging.debug(f'Mix2 inflow significantly LARGER than mix1 outflow for {inter_txid}: {from_mix1} vs {to_mix2}')
+
+    sum_all_flows = sum([flow_sizes[txid]['value'] for txid in flow_sizes.keys()])
+    logging.info(f'{experiment_id} (non-strict, 1-hop case): {sum_all_flows} sats / {round(sum_all_flows / SATS_IN_BTC, 2)} btc')
+
+    return flow_sizes
 
 
 if __name__ == "__main__":

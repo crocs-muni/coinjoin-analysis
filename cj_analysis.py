@@ -399,3 +399,11 @@ def compute_averages(lst, window_size):
         averages.append(window_sum / window_size)  # Compute and store the average of the current window
 
     return averages
+
+
+def get_output_name_string(txid, index):
+    return f'vout_{txid}_{index}'
+
+
+def get_input_name_string(txid, index):
+    return f'vin_{txid}_{index}'
