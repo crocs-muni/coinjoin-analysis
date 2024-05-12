@@ -594,10 +594,65 @@ class CoinJoinPlots:
     ax_boltzmann_txcombinations = None
     ax_boltzmann_entropy_roundtime_wallets = None
 
-
     def __init__(self, plot):
         self.plot = plot
         self.clear()
+
+    def set_default_subfig_layout(self):
+        self.ax_coinjoins = self.axes[0]
+        self.ax_logs = self.axes[1]
+
+        self.ax_num_inoutputs = self.axes[3]
+        self.ax_available_utxos = self.axes[4]
+        self.ax_inputs_type_num_ratio = self.axes[8]
+        self.ax_inputs_type_value_ratio = self.axes[9]
+        self.ax_utxo_entropy_from_outputs_inoutsize = self.axes[13]
+        self.ax_utxo_denom_anonscore = self.axes[14]
+
+        self.ax_anonscore_distrib_wallets = self.axes[5]
+        self.ax_wallets_distrib = self.axes[6]
+        self.ax_utxo_provided = self.axes[7]
+
+        #self.ax_anonscore_from_outputs = self.axes[9]
+
+        self.ax_utxo_entropy_from_outputs = self.axes[10]
+
+        #self.ax_initial_final_utxos = self.axes[13]
+
+        # self.ax_mining_fees = ax11
+
+        # self.ax_boltzmann_entropy_inoutsize = self.axes[14]
+        # self.ax_boltzmann_entropy = self.axes[15]
+        # self.ax_boltzmann_entropy_roundtime = self.axes[16]
+        # self.ax_boltzmann_txcombinations = self.axes[17]
+        # self.ax_boltzmann_entropy_roundtime_wallets = self.axes[18]
+
+    def set_default_subfig_layout_old(self):
+        self.ax_coinjoins = self.axes[0]
+        self.ax_logs = self.axes[1]
+        self.ax_num_inoutputs = self.axes[2]
+        self.ax_inputs_type_num_ratio = self.axes[3]
+        self.ax_inputs_type_value_ratio = self.axes[4]
+        self.ax_available_utxos = self.axes[5]
+        self.ax_wallets_distrib = self.axes[6]
+
+        self.ax_utxo_provided = self.axes[7]
+
+        self.ax_anonscore_distrib_wallets = self.axes[8]
+        self.ax_anonscore_from_outputs = self.axes[9]
+
+        self.ax_utxo_entropy_from_outputs = self.axes[10]
+        self.ax_utxo_entropy_from_outputs_inoutsize = self.axes[11]
+        self.ax_utxo_denom_anonscore = self.axes[12]
+        self.ax_initial_final_utxos = self.axes[13]
+
+        # self.ax_mining_fees = ax11
+
+        self.ax_boltzmann_entropy_inoutsize = self.axes[14]
+        self.ax_boltzmann_entropy = self.axes[15]
+        self.ax_boltzmann_entropy_roundtime = self.axes[16]
+        self.ax_boltzmann_txcombinations = self.axes[17]
+        self.ax_boltzmann_entropy_roundtime_wallets = self.axes[18]
 
     def new_figure(self, subplots_rows=4, subplots_columns=5, set_default_layout=True):
         # Create four subplots with their own axes
@@ -608,31 +663,7 @@ class CoinJoinPlots:
 
         # Set default layout suitable for analysis of single experiment
         if set_default_layout:
-            self.ax_coinjoins = self.axes[0]
-            self.ax_logs = self.axes[1]
-            self.ax_num_inoutputs = self.axes[2]
-            self.ax_inputs_type_num_ratio = self.axes[3]
-            self.ax_inputs_type_value_ratio = self.axes[4]
-            self.ax_available_utxos = self.axes[5]
-            self.ax_wallets_distrib = self.axes[6]
-
-            self.ax_utxo_provided = self.axes[7]
-
-            self.ax_anonscore_distrib_wallets = self.axes[8]
-            self.ax_anonscore_from_outputs = self.axes[9]
-
-            self.ax_utxo_entropy_from_outputs = self.axes[10]
-            self.ax_utxo_entropy_from_outputs_inoutsize = self.axes[11]
-            self.ax_utxo_denom_anonscore = self.axes[12]
-            self.ax_initial_final_utxos = self.axes[13]
-
-            # self.ax_mining_fees = ax11
-
-            self.ax_boltzmann_entropy_inoutsize = self.axes[14]
-            self.ax_boltzmann_entropy = self.axes[15]
-            self.ax_boltzmann_entropy_roundtime = self.axes[16]
-            self.ax_boltzmann_txcombinations = self.axes[17]
-            self.ax_boltzmann_entropy_roundtime_wallets = self.axes[18]
+            self.set_default_subfig_layout()
 
     def savefig(self, save_file, experiment_name: str):
         self.plot.suptitle('{}'.format(experiment_name), fontsize=16)  # Adjust the fontsize and y position as needed
