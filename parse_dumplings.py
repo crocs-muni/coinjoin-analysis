@@ -993,12 +993,8 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
         interval_data['postmix'] = {}
         interval_data['rounds'] = {roundid: data['rounds'][roundid] for roundid in data['rounds'].keys()
                                    if last_stop_date_str < data['rounds'][roundid]['round_start_time'] < current_stop_date_str}
-        interval_data['wallets_coins'] = {wallet_name: [] for wallet_name in data['wallets_coins'].keys()}
-        for wallet_name in data['wallets_coins'].keys():
-            interval_data['wallets_coins'][wallet_name] = [coin for coin in data['wallets_coins'][wallet_name]
-                    if last_stop_date_str < coin['create_time'] < current_stop_date_str
-                    or 'destroy_time' in coin.keys() and last_stop_date_str < coin['destroy_time'] < current_stop_date_str]
-        interval_data['wallets_info'] = data['wallets_info']
+        interval_data['wallets_info'], interval_data['wallets_coins'] = extract_wallets_info(interval_data)
+
         if premix_filename:  # Only for Whirlpool
             interval_data['premix'] = {txid: data['premix'][txid] for txid in data['premix'].keys()
                                           if last_stop_date_str < data['premix'][txid]['broadcast_time'] < current_stop_date_str}
