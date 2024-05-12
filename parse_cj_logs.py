@@ -911,8 +911,10 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
                     else:
                         print('WARNING: missing log entry time slot {} for {}/{}, ignoring it'.format(log_hour, entry['type'], timestamp))
     if cjplt.ax_coinjoins:
-        cjplt.ax_coinjoins.plot([len(logs_in_hours[CJ_LOG_TYPES.UTXO_IN_PRISON.name][log_hour]) for log_hour in logs_in_hours[CJ_LOG_TYPES.UTXO_IN_PRISON.name].keys()],
+        ax2 = cjplt.ax_coinjoins.twinx()  # Use second axis to plot coins in prison log
+        ax2.plot([len(logs_in_hours[CJ_LOG_TYPES.UTXO_IN_PRISON.name][log_hour]) for log_hour in logs_in_hours[CJ_LOG_TYPES.UTXO_IN_PRISON.name].keys()],
                          label=f'(UTXOs in prison) {short_exp_name}', color='lightgray', linestyle='--')
+        ax2.legend()
 
     x_ticks = []
     for slot in cjtx_in_hours.keys():
