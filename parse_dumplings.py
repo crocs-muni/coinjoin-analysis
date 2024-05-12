@@ -1752,7 +1752,7 @@ def extract_flows_dumplings(flows: dict):
     return flow_in_year
 
 
-def plot_flows_steamgraph(flow_in_year: dict):
+def plot_flows_steamgraph(flow_in_year: dict, title: str):
     start_year = 2019
     end_year = 2024
 
@@ -1795,6 +1795,7 @@ def plot_flows_steamgraph(flow_in_year: dict):
     y_smoothed = [gaussian_smooth(x_axis, y_, grid, 0.05) for y_ in flow_data_2]
     ax.stackplot(grid, y_smoothed, labels=list(flow_types_process_2), colors=COLORS[1:], baseline="sym", alpha=0.7)
     ax.legend(loc="lower left")
+    ax.set_title(title)
     plt.show()
 
 
@@ -1869,78 +1870,79 @@ def plot_steamgraph_example():
 
 
 def analyze_mixes_flows(target_path):
+    # Visualization of results from BlockSci
     flows_file = os.path.join(target_path, 'one_hop_flows.json')
-    with open(flows_file, "r") as file:
-        flows = json.load(file)
+    if os.path.exists(flows_file):
+        flows = load_json_from_file(flows_file)
+        flows_in_time = extract_flows_blocksci(flows)
+        plot_flows_steamgraph(flows_in_time, 'BlockSci flows')
 
-    flows_in_time = extract_flows_blocksci(flows)
-    plot_flows_steamgraph(flows_in_time)
-
+    # Visualization of results from Dumplings
     flows_file = os.path.join(target_path, 'mix_flows.json')
-    with open(flows_file, "r") as file:
-        flows = json.load(file)
-    flows_in_time = extract_flows_dumplings(flows)
-    plot_flows_steamgraph(flows_in_time)
-    exit(42)
+    if os.path.exists(flows_file):
+        flows = load_json_from_file(flows_file)
+        flows_in_time = extract_flows_dumplings(flows)
+        plot_flows_steamgraph(flows_in_time, 'Dumplings flows')
 
-    whirlpool_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiPostMixTxs.txt'))
-    wasabi1_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
-    wasabi2_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'Wasabi2PostMixTxs.txt'))
+    else:
+        whirlpool_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiPostMixTxs.txt'))
+        wasabi1_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
+        wasabi2_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'Wasabi2PostMixTxs.txt'))
 
-    wasabi1_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiCoinJoins.txt'))
-    wasabi2_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'Wasabi2CoinJoins.txt'))
-    whirlpool_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiCoinJoins.txt'))
+        wasabi1_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiCoinJoins.txt'))
+        wasabi2_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'Wasabi2CoinJoins.txt'))
+        whirlpool_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiCoinJoins.txt'))
 
-    whirlpool_premix = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiTx0s.txt'))
+        whirlpool_premix = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiTx0s.txt'))
 
-    def load_premix_tx_dict(target_path, file_name, full_tx_dict):
-        """
-        Optimized computation or loading of precomputed list of premix transaction ids extracted from all inputs
-        :param target_path: folder path for loading/saving
-        :param file_name: target file name
-        :param full_tx_dict: dictionary with all transactions and inputs from which premix txs are extracted
-        :return: dictionary with unique premix txs
-        """
-        json_file = os.path.join(target_path, file_name)
-        if os.path.exists(json_file):
-            with open(json_file, "rb") as file:
-                return pickle.load(file)
-        else:
-            txs = list({full_tx_dict[txid]['inputs'][index]['spending_tx'] for txid in full_tx_dict.keys() for
-                                   index in full_tx_dict[txid]['inputs'].keys()})
-            tx_dict = {als.extract_txid_from_inout_string(item)[0]: [] for item in txs}
-            with open(json_file, "wb") as file:
-                pickle.dump(tx_dict, file)
-            return tx_dict
+        def load_premix_tx_dict(target_path, file_name, full_tx_dict):
+            """
+            Optimized computation or loading of precomputed list of premix transaction ids extracted from all inputs
+            :param target_path: folder path for loading/saving
+            :param file_name: target file name
+            :param full_tx_dict: dictionary with all transactions and inputs from which premix txs are extracted
+            :return: dictionary with unique premix txs
+            """
+            json_file = os.path.join(target_path, file_name)
+            if os.path.exists(json_file):
+                with open(json_file, "rb") as file:
+                    return pickle.load(file)
+            else:
+                txs = list({full_tx_dict[txid]['inputs'][index]['spending_tx'] for txid in full_tx_dict.keys() for
+                                       index in full_tx_dict[txid]['inputs'].keys()})
+                tx_dict = {als.extract_txid_from_inout_string(item)[0]: [] for item in txs}
+                with open(json_file, "wb") as file:
+                    pickle.dump(tx_dict, file)
+                return tx_dict
 
-    wasabi1_premix_dict = load_premix_tx_dict(target_path, 'wasabi1_premix_dict.json', wasabi1_cj)
-    wasabi2_premix_dict = load_premix_tx_dict(target_path, 'wasabi2_premix_dict.json', wasabi2_cj)
+        wasabi1_premix_dict = load_premix_tx_dict(target_path, 'wasabi1_premix_dict.json', wasabi1_cj)
+        wasabi2_premix_dict = load_premix_tx_dict(target_path, 'wasabi2_premix_dict.json', wasabi2_cj)
 
-    # Precompute dictionary with full name (vout_txid_index and vin_txid_index) for quick queries if given 'spending_tx' and 'spend_by_tx' are included
-    # Precompute for quick queries 'spending_tx' existence
-    wasabi1_vout_txid_index = {als.get_output_name_string(txid, index) for txid in wasabi1_cj.keys() for index in wasabi1_cj[txid]['outputs'].keys()}
-    wasabi2_vout_txid_index = {als.get_output_name_string(txid, index) for txid in wasabi2_cj.keys() for index in wasabi2_cj[txid]['outputs'].keys()}
-    whirlpool_vout_txid_index = {als.get_output_name_string(txid, index) for txid in whirlpool_cj.keys() for index in whirlpool_cj[txid]['outputs'].keys()}
-    # Precompute for quick queries 'spend_by_tx' existence
-    wasabi1_vin_txid_index = {wasabi1_cj[txid]['inputs'][index]['spending_tx'] for txid in wasabi1_cj.keys() for index in wasabi1_cj[txid]['inputs'].keys()}
-    wasabi2_vin_txid_index = {wasabi2_cj[txid]['inputs'][index]['spending_tx'] for txid in wasabi2_cj.keys() for index in wasabi2_cj[txid]['inputs'].keys()}
-    whirlpool_vin_txid_index = {whirlpool_cj[txid]['inputs'][index]['spending_tx'] for txid in whirlpool_cj.keys() for index in whirlpool_cj[txid]['inputs'].keys()}
+        # Precompute dictionary with full name (vout_txid_index and vin_txid_index) for quick queries if given 'spending_tx' and 'spend_by_tx' are included
+        # Precompute for quick queries 'spending_tx' existence
+        wasabi1_vout_txid_index = {als.get_output_name_string(txid, index) for txid in wasabi1_cj.keys() for index in wasabi1_cj[txid]['outputs'].keys()}
+        wasabi2_vout_txid_index = {als.get_output_name_string(txid, index) for txid in wasabi2_cj.keys() for index in wasabi2_cj[txid]['outputs'].keys()}
+        whirlpool_vout_txid_index = {als.get_output_name_string(txid, index) for txid in whirlpool_cj.keys() for index in whirlpool_cj[txid]['outputs'].keys()}
+        # Precompute for quick queries 'spend_by_tx' existence
+        wasabi1_vin_txid_index = {wasabi1_cj[txid]['inputs'][index]['spending_tx'] for txid in wasabi1_cj.keys() for index in wasabi1_cj[txid]['inputs'].keys()}
+        wasabi2_vin_txid_index = {wasabi2_cj[txid]['inputs'][index]['spending_tx'] for txid in wasabi2_cj.keys() for index in wasabi2_cj[txid]['inputs'].keys()}
+        whirlpool_vin_txid_index = {whirlpool_cj[txid]['inputs'][index]['spending_tx'] for txid in whirlpool_cj.keys() for index in whirlpool_cj[txid]['inputs'].keys()}
 
-    # Analyze flows
-    flows = {}
-    flows['whirlpool_to_wasabi1'] = analyze_extramix_flows('Whirlpool -> Wasabi1', target_path, whirlpool_vout_txid_index, whirlpool_postmix, wasabi1_premix_dict, wasabi1_vin_txid_index)
-    flows['whirlpool_to_wasabi2'] = analyze_extramix_flows('Whirlpool -> Wasabi2', target_path, whirlpool_vout_txid_index, whirlpool_postmix, wasabi2_premix_dict, wasabi2_vin_txid_index)
-    flows['wasabi1_to_whirlpool'] = analyze_extramix_flows('Wasabi1 -> Whirlpool', target_path, wasabi1_vout_txid_index, wasabi1_postmix, whirlpool_premix, whirlpool_vin_txid_index)
-    flows['Wasabi -> Wasabi2'] = analyze_extramix_flows('Wasabi1 -> Wasabi2', target_path, wasabi1_vout_txid_index, wasabi1_postmix, wasabi2_premix_dict, wasabi2_vin_txid_index)
-    flows['wasabi2_to_whirlpool'] = analyze_extramix_flows('Wasabi2 -> Whirlpool', target_path, wasabi2_vout_txid_index, wasabi2_postmix, whirlpool_premix, whirlpool_vin_txid_index)
-    flows['wasabi2_to_wasabi1'] = analyze_extramix_flows('Wasabi2 -> Wasabi1', target_path, wasabi2_vout_txid_index, wasabi2_postmix, wasabi1_premix_dict, wasabi1_vin_txid_index)
-    # analyze_extramix_flows('Wasabi1 -> Wasabi1', target_path, wasabi1_postmix, wasabi1_premix_dict)
-    # analyze_extramix_flows('Wasabi2 -> Wasabi2', target_path, wasabi2_postmix, wasabi2_premix_dict)
-    # analyze_extramix_flows('Whirlpool -> Whirlpool', target_path, whirlpool_postmix, whirlpool_premix)
+        # Analyze flows
+        flows = {}
+        flows['Whirlpool -> Wasabi1'] = analyze_extramix_flows('Whirlpool -> Wasabi1', target_path, whirlpool_vout_txid_index, whirlpool_postmix, wasabi1_premix_dict, wasabi1_vin_txid_index)
+        flows['Whirlpool -> Wasabi2'] = analyze_extramix_flows('Whirlpool -> Wasabi2', target_path, whirlpool_vout_txid_index, whirlpool_postmix, wasabi2_premix_dict, wasabi2_vin_txid_index)
+        flows['Wasabi1 -> Whirlpool'] = analyze_extramix_flows('Wasabi1 -> Whirlpool', target_path, wasabi1_vout_txid_index, wasabi1_postmix, whirlpool_premix, whirlpool_vin_txid_index)
+        flows['Wasabi -> Wasabi2'] = analyze_extramix_flows('Wasabi1 -> Wasabi2', target_path, wasabi1_vout_txid_index, wasabi1_postmix, wasabi2_premix_dict, wasabi2_vin_txid_index)
+        flows['Wasabi2 -> Whirlpool'] = analyze_extramix_flows('Wasabi2 -> Whirlpool', target_path, wasabi2_vout_txid_index, wasabi2_postmix, whirlpool_premix, whirlpool_vin_txid_index)
+        flows['Wasabi2 -> Wasabi1'] = analyze_extramix_flows('Wasabi2 -> Wasabi1', target_path, wasabi2_vout_txid_index, wasabi2_postmix, wasabi1_premix_dict, wasabi1_vin_txid_index)
+        # analyze_extramix_flows('Wasabi1 -> Wasabi1', target_path, wasabi1_postmix, wasabi1_premix_dict)
+        # analyze_extramix_flows('Wasabi2 -> Wasabi2', target_path, wasabi2_postmix, wasabi2_premix_dict)
+        # analyze_extramix_flows('Whirlpool -> Whirlpool', target_path, whirlpool_postmix, whirlpool_premix)
 
-    flows_file = os.path.join(target_path, 'mix_flows.json')
-    with open(flows_file, "w") as file:
-        file.write(json.dumps(flows, indent=4))
+        save_json_to_file_pretty(os.path.join(target_path, 'mix_flows.json'), flows)
+        flows_in_time = extract_flows_dumplings(flows)
+        plot_flows_steamgraph(flows_in_time, 'Dumplings flows')
 
 
 def analyze_extramix_flows(experiment_id: str, target_path: Path, mix1_precomp_vout_txid_index: dict, mix1_postmix: dict, mix2_premix: dict, mix2_precomp_vin_txid_index: dict):
