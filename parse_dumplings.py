@@ -90,6 +90,27 @@ class CoinJoinStats:
         self.cj_type = MIX_PROTOCOL.UNSET
 
 
+def load_json_from_file(file_path: str) -> dict:
+    with open(file_path, "rb") as file:
+        return orjson.loads(file.read())
+
+    # with open(file_path, "r") as file:
+    #     return json.load(file)
+
+
+def save_json_to_file(file_path: str, data: dict):
+    with open(file_path, "wb") as file:
+        file.write(orjson.dumps(data))
+
+    # with open(file_path, "w") as file:
+    #     file.write(json.dumps(dict(sorted(data.items())), indent=4))
+
+
+def save_json_to_file_pretty(file_path: str, data: dict):
+    with open(file_path, "w") as file:
+        file.write(json.dumps(dict(sorted(data.items())), indent=4))
+
+
 def set_key_value_assert(data, key, value, hard_assert):
     if key in data:
         if hard_assert:
@@ -876,13 +897,11 @@ def process_and_save_coinjoins(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
     data = process_coinjoins(target_path, mix_protocol, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
 
     if SAVE_BASE_FILES_JSON:
-        with open(os.path.join(target_save_path, f'coinjoin_tx_info.json'), "w") as file:
-            file.write(json.dumps(dict(sorted(data.items())), indent=4))
+        save_json_to_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'), data)
 
     # Filter only liquidity-relevant events to maintain smaller file
     events = filter_liquidity_events(data)
-    with open(os.path.join(target_save_path, f'{mix_id}_events.json'), "w") as file:
-        file.write(json.dumps(dict(sorted(events.items())), indent=4))
+    save_json_to_file_pretty(os.path.join(target_save_path, f'{mix_id}_events.json'), events)
 
     # Visualize coinjoins
     if len(data['coinjoins']) > 0:
@@ -934,22 +953,21 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
                                       postmix_filename: str, premix_filename: str=None, save_base_files=True, load_base_files=False):
     # Create directory structure with files split per month (around 1000 subsequent coinjoins)
     # Load all coinjoins first, then filter based on intervals
+    target_save_path = os.path.join(target_path, mix_id)
+    if not os.path.exists(target_save_path):
+        os.makedirs(target_save_path.replace('\\', '/'))
+
     if load_base_files:
         # Load base files from already stored json
-        logging.info(f'Loading {target_path}/coinjoin_tx_info.json ...')
+        logging.info(f'Loading {target_save_path}/coinjoin_tx_info.json ...')
 
-        with open(os.path.join(target_path, f'coinjoin_tx_info.json'), "r") as file:
-            data = json.load(file)
+        data = load_json_from_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'))
 
-        # with open(os.path.join(target_path, f'coinjoin_tx_info.json'), mode="r", encoding="utf8") as file:
-        #     mmapped_file = mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ)
-        #     data = json.loads(mmapped_file.read().decode('utf-8'))
-
-        logging.info(f'{target_path}/coinjoin_tx_info.json loaded')
+        logging.info(f'{target_save_path}/coinjoin_tx_info.json loaded with {len(data['coinjoins'])} conjoins')
     else:
         # Compute base files (time intensive)
         SAVE_BASE_FILES_JSON = False
-        data = process_and_save_coinjoins(mix_id, mix_protocol, target_path, mix_filename, postmix_filename, premix_filename, None, None)
+        data = process_and_save_coinjoins(mix_id, mix_protocol, target_path, mix_filename, postmix_filename, premix_filename, None, None, target_save_path)
         SAVE_BASE_FILES_JSON = save_base_files
 
     if premix_filename:
@@ -959,7 +977,7 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
         # WW1, WW2
         extract_inputs_distribution(mix_id, target_path, mix_filename, data['coinjoins'], True)
 
-    # Find first day of a month when first coinjoin ocured
+    # Find first day of a month when first coinjoin occured
     start_date_obj = precomp_datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S.%f")
     start_date = datetime(start_date_obj.year, start_date_obj.month, 1)
 
@@ -981,7 +999,7 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
         logging.info(f'Processing interval {last_stop_date_str} - {current_stop_date_str}')
 
         # Create folder structure compatible with ww2 coinjoin simulation for further processing
-        interval_path = os.path.join(target_path, mix_id, f'{last_stop_date_str.replace(':', '-')}--{current_stop_date_str.replace(':', '-')}_unknown-static-100-1utxo')
+        interval_path = os.path.join(target_save_path, f'{last_stop_date_str.replace(':', '-')}--{current_stop_date_str.replace(':', '-')}_unknown-static-100-1utxo')
         if not os.path.exists(interval_path):
             os.makedirs(interval_path.replace('\\', '/'))
             os.makedirs(os.path.join(interval_path, 'data').replace('\\', '/'))
@@ -999,12 +1017,10 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
             interval_data['premix'] = {txid: data['premix'][txid] for txid in data['premix'].keys()
                                           if last_stop_date_str < data['premix'][txid]['broadcast_time'] < current_stop_date_str}
 
-        with open(os.path.join(interval_path, f'coinjoin_tx_info.json'), "w") as file:
-            file.write(json.dumps(dict(sorted(interval_data.items())), indent=4))
+        save_json_to_file(os.path.join(interval_path, f'coinjoin_tx_info.json'), interval_data)
         # Filter only liquidity-relevant events to maintain smaller file
         events = filter_liquidity_events(interval_data)
-        with open(os.path.join(interval_path, f'{mix_id}_events.json'), "w") as file:
-            file.write(json.dumps(dict(sorted(events.items())), indent=4))
+        save_json_to_file_pretty(os.path.join(interval_path, f'{mix_id}_events.json'), events)
 
         # extract liquidity for given interval
         if premix_filename:
@@ -1089,12 +1105,9 @@ def find_address_reuse(mix_id: str, txs: dict, target_path: Path = None, ignore_
 
     if target_path and save_outputs:
         target_save_path = target_path
-        with open(os.path.join(target_save_path, f'{mix_id}_reused_addresses.json'), "w") as file:
-            file.write(json.dumps(dict(reused_addresses.items()), indent=4))
-        with open(os.path.join(target_save_path, f'{mix_id}_reused_addresses_single.json'), "w") as file:
-            file.write(json.dumps(dict(single_reuse.items()), indent=4))
-        with open(os.path.join(target_save_path, f'{mix_id}_reused_addresses_multiple.json'), "w") as file:
-            file.write(json.dumps(dict(multiple_reuse.items()), indent=4))
+        save_json_to_file_pretty(os.path.join(target_save_path, f'{mix_id}_reused_addresses.json'), reused_addresses)
+        save_json_to_file_pretty(os.path.join(target_save_path, f'{mix_id}_reused_addresses_single.json'), single_reuse)
+        save_json_to_file_pretty(os.path.join(target_save_path, f'{mix_id}_reused_addresses_multiple.json'), multiple_reuse)
 
     # TODO: Plot characteristics of address reuse (time between reuse, ocurence in real time...)
 
@@ -1105,8 +1118,7 @@ def extract_coinjoin_interval(mix_id: str, target_path: Path, txs: dict, start_d
     logging.info(f'  Interval extracted for {start_date} to {stop_date}, total {len(inputs.keys())} coinjoins found')
     interval_data = {'coinjoins': inputs, 'start_date': start_date, 'stop_date': stop_date}
     if save_outputs:
-        with open(os.path.join(target_path, f'{mix_id}_conjoins_interval_{start_date[:start_date.find(' ') - 1]}-{stop_date[:stop_date.find(' ') - 1]}.json'), "w") as file:
-            file.write(json.dumps(dict(sorted(interval_data.items())), indent=4))
+        save_json_to_file(os.path.join(target_path, f'{mix_id}_conjoins_interval_{start_date[:start_date.find(' ') - 1]}-{stop_date[:stop_date.find(' ') - 1]}.json'), interval_data)
 
     return interval_data
 
@@ -1176,8 +1188,7 @@ def extract_inputs_distribution(mix_id: str, target_path: Path, tx_filename: str
     inputs_info = {'mix_id': mix_id, 'path': tx_filename, 'distrib': inputs_distrib}
     logging.info(f'  Distribution extracted, total {len(inputs_info['distrib'])} different input values found')
     if save_outputs:
-        with open(os.path.join(target_path, f'{mix_id}_inputs_distribution.json'), "w") as file:
-            file.write(json.dumps(dict(sorted(inputs_info.items())), indent=4))
+        save_json_to_file_pretty(os.path.join(target_path, f'{mix_id}_inputs_distribution.json'), inputs_info)
 
     return inputs_info, inputs
 
@@ -1498,18 +1509,16 @@ def whirlpool_analyze_coordinator_fees(mix_id: str, data: dict):
     return cjtxs_coordinator_fees
 
 
-def whirlpool_analyse_remixes(mix_id: str, target_path: Path, tx_file: str):
-    with open(os.path.join(target_path, tx_file), "r") as file:
-        data = json.load(file)
+def whirlpool_analyse_remixes(mix_id: str, target_path: str):
+    data = load_json_from_file(os.path.join(target_path, mix_id, 'coinjoin_tx_info.json'))
     als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], data['premix'], MIX_PROTOCOL.WHIRLPOOL)
     whirlpool_analyze_fees(mix_id, data)
     inputs_value_burntime_heatmap(mix_id, data)
     burntime_histogram(mix_id, data)
 
 
-def wasabi2_analyse_remixes(mix_id: str, target_path: Path, tx_file: str):
-    with open(os.path.join(target_path, tx_file), "r") as file:
-        data = json.load(file)
+def wasabi2_analyse_remixes(mix_id: str, target_path: str):
+    data = load_json_from_file(os.path.join(target_path, mix_id, 'coinjoin_tx_info.json'))
     als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], [], MIX_PROTOCOL.WASABI2)
 
     wasabi2_analyze_fees(mix_id, data)
@@ -1522,16 +1531,15 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
         f'Path {target_path} does not exist')
 
     # Load fee rates
-    with open(os.path.join(target_path, 'fee_rates.json'), "r") as file:
-        mining_fee_rates = json.load(file)
+    mining_fee_rates = load_json_from_file(os.path.join(target_path, 'fee_rates.json'))
 
     # Compute number of required month subgraphs
     num_months = sum([1 for dir_name in files
                       if os.path.isdir(os.path.join(target_path, dir_name)) and
-                      os.path.exists(os.path.join(target_path, dir_name, tx_file))])
+                      os.path.exists(os.path.join(target_path, dir_name, f'{tx_file}'))])
 
-    NUM_ADDITIONAL_GRAPHS = 1
     NUM_COLUMNS = 3
+    NUM_ADDITIONAL_GRAPHS = 1 + NUM_COLUMNS
     NUM_ROWS = int((num_months + NUM_ADDITIONAL_GRAPHS) / NUM_COLUMNS + 1)
     fig = plt.figure(figsize=(40, NUM_ROWS * 5))
 
@@ -1545,10 +1553,9 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
     time_liquidity = {}  # If MIX_LEAVE is detected, out liquidity is put into dictionary for future display
     for dir_name in files:
         target_base_path = os.path.join(target_path, dir_name)
-        tx_json_file = os.path.join(target_base_path, tx_file)
+        tx_json_file = os.path.join(target_base_path, f'{tx_file}')
         if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
-            with open(tx_json_file, "r") as file:
-                data = json.load(file)
+            data = load_json_from_file(tx_json_file)
 
             # If required, filter only coinjoins with specific size (whirlpool pools)
             if restrict_to_out_size is not None:
@@ -1559,6 +1566,7 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
                     print(f'No coinjoins of specified value {restrict_to_out_size/100000000} found in given interval, skipping')
                     continue
 
+            print(f'add_subplot({NUM_ROWS}, {NUM_COLUMNS}, {ax_index}) ')
             ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
             ax_index += 1
 
@@ -1651,9 +1659,8 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
     plt.close()
 
 
-def wasabi1_analyse_remixes(mix_id: str, target_path: Path, tx_file: str):
-    with open(os.path.join(target_path, tx_file), "r") as file:
-        data = json.load(file)
+def wasabi1_analyse_remixes(mix_id: str, target_path: str):
+    data = load_json_from_file(os.path.join(target_path, mix_id, 'coinjoin_tx_info.json'))
     als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], [], MIX_PROTOCOL.WASABI1)
 
     wasabi1_analyze_fees(mix_id, data)
@@ -1669,21 +1676,20 @@ def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: Path):
 
     target_path = os.path.join(target_path, mix_id)  # Go into target ww2 folder
 
-
     paths_to_process = [target_path]  # Always process 'coinjoin_tx_info.json' with all transactions
-    #paths_to_process = []  # Do not process large .json with all txs
+    # paths_to_process = []  # Do not process large .json with all txs
     # Add subpaths for months if present
     files = os.listdir(target_path)
     for file_name in files:
         target_base_path = os.path.join(target_path, file_name)
-        tx_json_file = os.path.join(target_base_path, 'coinjoin_tx_info.json')
+        tx_json_file = os.path.join(target_base_path, f'coinjoin_tx_info.json')
         if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
             paths_to_process.append(target_base_path)
 
     # Now fix all prepared paths
     for path in paths_to_process:
-        with open(os.path.join(path, 'coinjoin_tx_info.json'), "r") as file:
-            ww2_data = json.load(file)
+        logging.info(f'Processing {path}...')
+        ww2_data = load_json_from_file(os.path.join(path, f'coinjoin_tx_info.json'))
 
         # For all values with mix_event_type equal to MIX_ENTER check if they are not from WW1
         # with friends-do-not-pay rule
@@ -1702,11 +1708,7 @@ def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: Path):
 
         print(f'Total WW1 inputs with friends-do-not-pay rule: {total_ww1_inputs}')
 
-        with open(os.path.join(path, f'{mix_id}_coinjoin_tx_info.json.fixed'), "wb") as file:
-            file.write(orjson.dumps(ww2_data))
-        #
-        # with open(os.path.join(path, f'{mix_id}_coinjoin_tx_info.json'), "w") as file:
-        #     file.write(json.dumps(dict(sorted(ww2_data.items())), indent=4))
+        save_json_to_file(os.path.join(path, f'coinjoin_tx_info.json'), ww2_data)
 
 
 def extract_flows_blocksci(flows: dict):
