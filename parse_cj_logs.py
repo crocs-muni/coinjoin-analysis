@@ -2991,7 +2991,7 @@ def analyze_multiple_experiments(results: dict, base_path: str):
 
 def visualize_aggregated_graphs(experiment_paths_sorted, graphs, base_path: str, collate_same_num_wallets: bool):
     for graph_type in graphs:
-        counted_wallets = Counter([num for path, num in experiment_paths_sorted])
+        counted_wallets = Counter([num_wallets for path, num_wallets, num_utxo, distribution in experiment_paths_sorted])
         num_wallets, max_num_wallets = counted_wallets.most_common(1)[0]
         cjplots = CoinJoinPlots(plt)
         if 3 <= max_num_wallets <= 5:
@@ -3008,7 +3008,7 @@ def visualize_aggregated_graphs(experiment_paths_sorted, graphs, base_path: str,
         # for all other unused as well. But plotting, not analysis, is the most time-consuming operation.)
         axis_index = -1
         last_num_wallets = -1
-        for experiment_path, num_wallets in experiment_paths_sorted:
+        for experiment_path, num_wallets, *rest in experiment_paths_sorted:
             print(f'INPUT PATH: {experiment_path}')
             data_file = os.path.join(experiment_path, "coinjoin_tx_info.json")
             # Load parsed coinjoin transactions again
