@@ -1635,17 +1635,19 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
     ax2.set_ylabel('btc in mix', color='royalblue')
     ax2.tick_params(axis='y', colors='royalblue')
 
-    # TODO: Compute wallets estimation based on inputs per time interval, not directly conjoins
-    AVG_WINDOWS = 10
-    num_wallets_avg = als.compute_averages(num_wallets, AVG_WINDOWS)
-    AVG_WINDOWS_100 = 100
-    num_wallets_avg100 = als.compute_averages(num_wallets, AVG_WINDOWS_100)
-    ax3 = ax.twinx()
-    ax3.spines['right'].set_position(('outward', -28))  # Adjust position of the third axis
-    ax3.plot(num_wallets_avg, color='green', alpha=0.4, label=f'Estimated # wallets ({AVG_WINDOWS} avg)')
-    ax3.plot(num_wallets_avg100, color='green', alpha=0.8, label=f'Estimated # wallets ({AVG_WINDOWS_100} avg)')
-    ax3.set_ylabel('Estimated number of active wallets', color='green')
-    ax3.tick_params(axis='y', colors='green')
+    PLOT_ESTIMATED_WALLETS = False
+    if PLOT_ESTIMATED_WALLETS:
+        # TODO: Compute wallets estimation based on inputs per time interval, not directly conjoins
+        AVG_WINDOWS = 10
+        num_wallets_avg = als.compute_averages(num_wallets, AVG_WINDOWS)
+        AVG_WINDOWS_100 = 100
+        num_wallets_avg100 = als.compute_averages(num_wallets, AVG_WINDOWS_100)
+        ax3 = ax.twinx()
+        ax3.spines['right'].set_position(('outward', -28))  # Adjust position of the third axis
+        ax3.plot(num_wallets_avg, color='green', alpha=0.4, label=f'Estimated # wallets ({AVG_WINDOWS} avg)')
+        ax3.plot(num_wallets_avg100, color='green', alpha=0.8, label=f'Estimated # wallets ({AVG_WINDOWS_100} avg)')
+        ax3.set_ylabel('Estimated number of active wallets', color='green')
+        ax3.tick_params(axis='y', colors='green')
 
     ax.legend(loc='center left')
     ax2.legend()
