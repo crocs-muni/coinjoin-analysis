@@ -1,7 +1,7 @@
 import requests
 import time
 import json
-import global_constants
+import Helpers.global_constants as global_constants
 
 
 def send_post(data,

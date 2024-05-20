@@ -1,5 +1,5 @@
-import global_constants
-import regtest_control
+import Helpers.global_constants as global_constants
+import Helpers.regtest_control as regtest_control
 import subprocess
 import time
 import signal
@@ -22,10 +22,20 @@ class Wasabi_Processes_Handler():
 
     def clean_subprocesses(self):
         if self.process_client is not None:
-            self.process_client.send_signal(signal.CTRL_C_EVENT)
+            try:
+                self.process_client.send_signal(signal.CTRL_C_EVENT)
+                time.sleep(5)
+            except KeyboardInterrupt:
+                print("Interupt received, client stopped.")
+                pass
 
         if self.process_backend is not None:
-            self.process_backend.send_signal(signal.CTRL_C_EVENT)
+            try:
+                self.process_backend.send_signal(signal.CTRL_C_EVENT)
+                time.sleep(5)
+            except KeyboardInterrupt:
+                print("Interupt received, backend stopped.")
+                pass
 
 
     def run_backend(self):

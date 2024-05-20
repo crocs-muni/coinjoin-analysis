@@ -10,12 +10,12 @@ class GlobalConstants():
 
     network = "RegTest" # one of RegRest, TestNet
 
-    backend_folder_path = ""
-    client_folder_path = "" 
+    backend_folder_path = "..\\WalletWasabi-v2.0.4\\WalletWasabi.Backend"
+    client_folder_path = "..\\WalletWasabi-v2.0.4\\WalletWasabi.Daemon"
     distributor_wallet_name = "DistributorWallet"
     version2 = True
 
-    wasabi_wallet_data = ""
+    wasabi_wallet_data = "C:\\Users\david\AppData\Roaming\WalletWasabi"
 
     # time needed in registration phase of round to start scenarion in it
     starting_round_time_required = 60
@@ -29,9 +29,6 @@ class GlobalConstants():
     rpc_pswd = ""
 
     def __init__(self):
-        # works only on windows, need to be expanded for other OS to get application data folder
-        # self.path_to_app_data = os.getenv('APPDATA')
-
         self.path_to_client_data = os.path.join(self.wasabi_wallet_data, "Client")
         self.path_to_wallets = os.path.join(self.path_to_client_data, "Wallets", self.network)
         self.path_to_backend = os.path.join(self.wasabi_wallet_data, "Backend")

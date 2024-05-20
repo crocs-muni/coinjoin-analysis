@@ -1,8 +1,8 @@
-import regtest_control
-import rpc_commands
+import Helpers.regtest_control as regtest_control
+import Helpers.rpc_commands as rpc_commands
 import sys
-import processes_control
-import global_constants
+import Helpers.processes_control as processes_control
+import Helpers.global_constants as global_constants
 
 
 if __name__ == "__main__":

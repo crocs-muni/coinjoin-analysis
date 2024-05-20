@@ -1,6 +1,6 @@
-import rpc_commands
-import processes_control
-import global_constants
+import Helpers.rpc_commands as rpc_commands
+import Helpers.processes_control as processes_control
+import Helpers.global_constants as global_constants
 import os
 from typing import List
 import time
@@ -59,7 +59,7 @@ def list_wallet_coins(wallet: str):
     coins = rpc_commands.list_all_coins(wallet, False)
     coins = coins["result"]
 
-    return parse_wallet_coins(coins)
+    return parse_wallet_coins(wallet, coins)
 
 
 def get_coins_for_specified_wallets(wallets: List[str], processes_handler: processes_control.Wasabi_Processes_Handler = None):
@@ -141,6 +141,20 @@ def deserialize_to_list(path = "serialized_annonymity.json") -> List[CoinWithAno
         read_list = f.read()
     
     decoded_coin_list = jsonpickle.decode(read_list)
+    print(type(decoded_coin_list[0]))
+    if len(decoded_coin_list) > 0 and isinstance(decoded_coin_list[0], dict):
+        decoded_coin_list = list(map(
+            lambda coin_dict: CoinWithAnonymity(
+                coin_dict["address"],
+                coin_dict["txid"],
+                coin_dict["index"],
+                coin_dict["wallet"],
+                coin_dict["annon_score"],
+                coin_dict["amount"],
+                coin_dict["spent_in_tx"]        
+                                            ),
+            decoded_coin_list
+        ))
 
     return decoded_coin_list
 

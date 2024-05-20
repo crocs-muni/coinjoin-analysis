@@ -1,10 +1,10 @@
 from typing import List, Dict
 import logging
-import utils
+import Helpers.utils as utils
 import re
-import rpc_commands
-import global_constants
-import regtest_control
+import Helpers.rpc_commands as rpc_commands
+import Helpers.global_constants as global_constants
+import Helpers.regtest_control as regtest_control
 import os
 
 
@@ -138,16 +138,17 @@ class ComplexPassiveScenarioManager(SimplePassiveScenarioManager):
     def progress_round_ended(self, rounds_ended):
         super().progress_round_ended(rounds_ended)
 
-        # TODO fight with the round counter
         round_active_wallets = self.activity_changes_by_round.get(rounds_ended, None)
         if round_active_wallets is None:
             return
         
         for wallet_to_start in round_active_wallets.starting_wallets:
             self.wallet_manager.start_coinjoin(wallet_to_start)
+            utils.log_and_print("Started wallet " + wallet_to_start)
 
         for wallet_to_stop in round_active_wallets.stopping_wallets:
             self.wallet_manager.stop_coinjoin(wallet_to_stop)
+            utils.log_and_print("Stop wallet " + wallet_to_stop)
 
     def progress_round_started(self, round_started):
         super().progress_round_started(round_started)
@@ -230,7 +231,6 @@ def parse_unspent_wallet_coins(trehsold = 5000, wallet: str = global_constants.G
     else:
         coins = rpc_commands.list_unspent(verbose=False)["result"]
     for coin in filter(lambda x: x['confirmed'] and x['amount'] > trehsold, coins):
-        #print(coin["amount"])
         parsed_coins.append(Coin(coin["txid"], coin["index"], coin["amount"]))
     return parsed_coins
 
@@ -253,11 +253,6 @@ def check_wallet_funds(wallet, needed_coins, amount):
 
 def distribute_coins(distributor_coins, requested_funds, verbose = True):
     # building payments field of rpc request from requested funds
-    payments = ",\n"
-    payments = payments.join("{{\"sendto\":\"{0}\", \"amount\":{1}, \"label\":\"redistribution\"}}".format(request[0], request[1]) for request in requested_funds)
-    #print(payments)
-    payments = "[\n" + payments + "],"
-
     payments = ""
     for request in requested_funds:
         if len(payments) != 0:
@@ -277,11 +272,6 @@ def distribute_coins(distributor_coins, requested_funds, verbose = True):
         needed_distributor_coins += 1
     
     # creating used coins 
-    coins = ",\n"
-    coins = coins.join("{{\"transactionid\":\"{0}\", \"index\":{1}}}".format(ordered_distributor_coins[index].txid, 
-                                                                         ordered_distributor_coins[index].index) 
-                                                                         for index in range(needed_distributor_coins))
-
     coins = ""
     for index in range(needed_distributor_coins):
         if index != 0:
@@ -292,14 +282,6 @@ def distribute_coins(distributor_coins, requested_funds, verbose = True):
 
     coins = "[" + coins + "],"
 
-    send_content_visible ='''
-    {"jsonrpc":"2.0","id":"1","method":"send", "params": 
-    { "payments":''' + payments + ''' 
-    "coins":''' + coins + '''
-    "feeTarget":2, "password": "pswd" }}
-    '''
-
-    # "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"selectwallet\", \"params\" : [\"" + wallet_name + "\", \"pswd\"]}"
     # previous version for some reason didnt work with processes started as subprocesses
     send_content = "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"send\", \"params\": { \"payments\":" + payments + " \"coins\":" + coins + "\"feeTarget\":2, \"password\": \"pswd\" } }"
 
@@ -317,10 +299,6 @@ def distribute_coins(distributor_coins, requested_funds, verbose = True):
 
 
 def prepare_wallets(needed_coins):
-
-    #needed_amount = sum(map(lambda requested: requested[1], needed_coins))
-    #check_distributor(needed_amount)
-
     if global_constants.GLOBAL_CONSTANTS.version2:
         rpc_commands.confirmed_load(global_constants.GLOBAL_CONSTANTS.distributor_wallet_name)
     else:
@@ -332,7 +310,6 @@ def prepare_wallets(needed_coins):
     if global_constants.GLOBAL_CONSTANTS.network == "RegTest":
         regtest_control.mine_block_regtest()
     else:
-        # TODO, need to wait until next block is mined
         pass
 
 
@@ -372,11 +349,6 @@ def prepare_wallets_values(wallets, values, default_values = [100000, 50000] ):
 
     if len(needed_coins) > 0:
         prepare_wallets(needed_coins)
-
-
-# def log_and_print(msg : str):
-#     logging.info(f"{datetime.now().__str__()} {msg}")
-#     print(msg)
 
 
 def load_from_scenario(value, default, scenario):
@@ -505,8 +477,6 @@ def parse_wallets_in_rounds(rounds_parameters, wallets):
 
         index = round["index"]
 
-        if index > max_allowed_index:
-            raise RuntimeError(f"Index {index} is larger than number of participants. Max allowed index: {max_allowed_index}.")
         if index in rounds:
             raise RuntimeError(f"Noticed duplicate index: {index} when loading wallets activity")
         
@@ -520,7 +490,7 @@ def parse_wallets_in_rounds(rounds_parameters, wallets):
             raise RuntimeError(f"There are indices that are greater then the number of wallet in selection of stopping wallets for round {index}")
 
         if len(starting_wallets.intersection(stoping_wallets)) > 0:
-            raise RuntimeError(f"There is mismatch in activatng and stoping coinjoin. Some wallets are supposed to be \
+            raise RuntimeError(f"There is mismatch in activating and stoping coinjoin. Some wallets are supposed to be \
                                stopped and also started in round {index}")
 
 
@@ -529,7 +499,7 @@ def parse_wallets_in_rounds(rounds_parameters, wallets):
     activity_changes = {}
 
     # presumption that in the first round, all wallets are active
-    active_wallets = set([x for x in range(max_allowed_index)])
+    active_wallets = set([x for x in range(len(wallets))])
     stoped_wallets = set()
 
     # transform indices to names. Can not be done in previous for loop as the indices of round can be not sorted
@@ -548,11 +518,11 @@ def parse_wallets_in_rounds(rounds_parameters, wallets):
 
         # update active wallets for current round
         active_wallets = active_wallets.difference(to_stop_indices)
-        active_wallets.union(to_start_indices)
+        active_wallets = active_wallets.union(to_start_indices)
 
         # update stopped wallets for current round
         stoped_wallets = stoped_wallets.difference(to_start_indices)
-        stoped_wallets.union(to_stop_indices)
+        stoped_wallets = stoped_wallets.union(to_stop_indices)
 
         if len(active_wallets.intersection(stoped_wallets)) > 0:
             raise RuntimeError("Error during parsing the wallets activity changes in rounds")
@@ -612,7 +582,6 @@ def prepare_simple_passive_scenario(scenario):
                                                 base_settings.default_backend_config,
                                                 base_settings.default_wallets_config,
                                                 used_wallets)
-    scenario_manager.set_wallet_configs()
     
     return scenario_manager
 
@@ -654,7 +623,6 @@ def prepare_complex_passive_scenario(scenario):
                                                     used_wallets,
                                                     compound_configs,
                                                     activity_changes)
-    scenario_manager.set_wallet_configs()
     
     return scenario_manager
 
@@ -702,6 +670,5 @@ def prepare_simple_active_scenario(scenario):
                                                     compound_configs,
                                                     activity_changes,
                                                     rounds_configs)
-    scenario_manager.set_wallet_configs()
     
     return scenario_manager
