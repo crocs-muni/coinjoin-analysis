@@ -1718,21 +1718,45 @@ def extract_flows_blocksci(flows: dict):
     end_year = 2024
 
     flow_types = sorted(set([item['flow_direction'] for item in flows]))
-    flows_in_year = {flow_type: {} for flow_type in flow_types}
-    for flow_type in flow_types:
-        for year in range(start_year, end_year + 1):
-            flows_in_year[flow_type][year] = {}
-            for month in range(1, 12 + 1):
-                flows_in_year[flow_type][year][month] = {}
+    flows_in_year = {'broadcast_time_mix1': {}, 'broadcast_time_mix2': {}, 'broadcast_time_bridge': {}}
+    for time_type in flows_in_year.keys():
+        flows_in_year[time_type] = {flow_type: {} for flow_type in flow_types}
+        for flow_type in flow_types:
+            for year in range(start_year, end_year + 1):
+                flows_in_year[time_type][flow_type][year] = {}
+                for month in range(1, 12 + 1):
+                    flows_in_year[time_type][flow_type][year][month] = {}
 
     for flow_type in flow_types:
         for year in range(start_year, end_year + 1):
             for month in range(1, 12 + 1):
-                flows_in_year[flow_type][year][month] = sum(
+                # Aggregated by time when bridging transaction was send
+                flows_in_year['broadcast_time_bridge'][flow_type][year][month] = sum(
                     [item['sats_moved'] for item in flows if item['flow_direction'] == flow_type and
                      precomp_datetime.strptime(item['broadcast_time'], "%Y-%m-%dT%H:%M:%S").year == year and
                      precomp_datetime.strptime(item['broadcast_time'], '%Y-%m-%dT%H:%M:%S').month == month
                      ])
+                # Aggregated by time when tx from mix2 was executed
+                flows_in_year['broadcast_time_mix2'][flow_type][year][month] = sum(
+                    [item['sats_moved'] for item in flows if item['flow_direction'] == flow_type and
+                     precomp_datetime.strptime(item['out_cjs'][list(item['out_cjs'].keys())[0]]['broadcast_time'], "%Y-%m-%dT%H:%M:%S").year == year and
+                     precomp_datetime.strptime(item['out_cjs'][list(item['out_cjs'].keys())[0]]['broadcast_time'], '%Y-%m-%dT%H:%M:%S').month == month
+                     ])
+                # # Aggregated by time when tx from mix2 was executed
+                # flows_in_year['broadcast_time_mix2'][flow_type][year][month] = sum(
+                #     [item['out_cjs'][txid]['value'] for item in flows for txid in item['out_cjs'].keys()
+                #      if item['flow_direction'] == flow_type and
+                #      precomp_datetime.strptime(item['out_cjs'][txid]['broadcast_time'], "%Y-%m-%dT%H:%M:%S").year == year and
+                #      precomp_datetime.strptime(item['out_cjs'][txid]['broadcast_time'], '%Y-%m-%dT%H:%M:%S').month == month
+                #      ])
+                # # Aggregated by time when tx from mix1 was executed
+                # Do not use, as not all outflows from mix1 are necessarily going to mix2
+                # flows_in_year['broadcast_time_mix1'][flow_type][year][month] = sum(
+                #     [item['in_cjs'][txid]['value'] for item in flows for txid in item['in_cjs'].keys()
+                #      if item['flow_direction'] == flow_type and
+                #      precomp_datetime.strptime(item['in_cjs'][txid]['broadcast_time'], "%Y-%m-%dT%H:%M:%S").year == year and
+                #      precomp_datetime.strptime(item['in_cjs'][txid]['broadcast_time'], '%Y-%m-%dT%H:%M:%S').month == month
+                #      ])
 
     return flows_in_year
 
@@ -1767,40 +1791,53 @@ def plot_flows_steamgraph(flow_in_year: dict, title: str):
     # end_year in x_axis must be + 1 to correct for 0 index in flow_data
     x_axis = np.linspace(start_year, end_year + 1, num=(end_year - start_year + 1) * 12)
 
-    flow_data_1 = []
-    flow_types_process_1 = ['Wasabi -> Wasabi2']
-    for flow_type in flow_types_process_1:
-        case_data = [round(flow_in_year[flow_type][year][month] / SATS_IN_BTC, 2) for year in flow_in_year[flow_type].keys()
-                     for month in range(1, 13)]
-        flow_data_1.append(case_data)
-    ax.stackplot(x_axis, flow_data_1, labels=list(flow_types_process_1), colors=COLORS, baseline="sym", alpha=0.4)
+    DRAW_WW1_WW2_FLOW = False
+    if DRAW_WW1_WW2_FLOW:
+        flow_data_1 = []
+        flow_types_process_1 = ['Wasabi -> Wasabi2']
+        for flow_type in flow_types_process_1:
+            case_data = [round(flow_in_year[flow_type][year][month] / SATS_IN_BTC, 2) for year in flow_in_year[flow_type].keys()
+                         for month in range(1, 13)]
+            flow_data_1.append(case_data)
+        ax.stackplot(x_axis, flow_data_1, labels=list(flow_types_process_1), colors=COLORS, baseline="sym", alpha=0.4)
 
-    flow_types_process_2 = [item for item in flow_types if item != 'Wasabi -> Wasabi2']
+    if DRAW_WW1_WW2_FLOW:
+        flow_types_process_2 = [item for item in flow_types if item != 'Wasabi -> Wasabi2']
+    else:
+        flow_types_process_2 = [item for item in flow_types]
     flow_data_2 = []
+    flow_data_labels_2 = []
     for flow_type in flow_types_process_2:
         case_data = [round(flow_in_year[flow_type][year][month] / SATS_IN_BTC, 2) for year in flow_in_year[flow_type].keys() for month in range(1, 13)]
         flow_data_2.append(case_data)
+        flow_data_labels_2.append(f'{flow_type} ({sum(case_data)} btc)')
         assert len(case_data) == (end_year - start_year + 1) * 12
-    ax.stackplot(x_axis, flow_data_2, labels=list(flow_types_process_2), colors=COLORS[1:], baseline="sym", alpha=0.7)
+    if DRAW_WW1_WW2_FLOW:
+        ax.stackplot(x_axis, flow_data_2, labels=flow_data_labels_2, colors=COLORS[1:], baseline="sym", alpha=0.7)
+    else:
+        ax.stackplot(x_axis, flow_data_2, labels=flow_data_labels_2, colors=COLORS, baseline="sym", alpha=0.7)
 
     ax.legend(loc="lower left")
+    ax.set_title(title)
     #ax.set_yscale('log')  # If enabled, it does not plot correctly, possibly bug in mathplotlib
     plt.show()
 
-    def gaussian_smooth(x, y, grid, sd):
-        weights = np.transpose([stats.norm.pdf(grid, m, sd) for m in x])
-        weights = weights / weights.sum(0)
-        return (weights * y).sum(1)
+    PLOT_SMOOTH = False
+    if PLOT_SMOOTH:
+        def gaussian_smooth(x, y, grid, sd):
+            weights = np.transpose([stats.norm.pdf(grid, m, sd) for m in x])
+            weights = weights / weights.sum(0)
+            return (weights * y).sum(1)
 
-    fig, ax = plt.subplots(figsize=(10, 5))
-    grid = np.linspace(start_year, end_year + 1, num=1000)
-    y_smoothed = [gaussian_smooth(x_axis, y_, grid, 0.05) for y_ in flow_data_1]
-    ax.stackplot(grid, y_smoothed, labels=list(flow_types_process_1), colors=COLORS, baseline="sym", alpha=0.3)
-    y_smoothed = [gaussian_smooth(x_axis, y_, grid, 0.05) for y_ in flow_data_2]
-    ax.stackplot(grid, y_smoothed, labels=list(flow_types_process_2), colors=COLORS[1:], baseline="sym", alpha=0.7)
-    ax.legend(loc="lower left")
-    ax.set_title(title)
-    plt.show()
+        fig, ax = plt.subplots(figsize=(10, 5))
+        grid = np.linspace(start_year, end_year + 1, num=1000)
+        y_smoothed = [gaussian_smooth(x_axis, y_, grid, 0.05) for y_ in flow_data_1]
+        ax.stackplot(grid, y_smoothed, labels=list(flow_types_process_1), colors=COLORS, baseline="sym", alpha=0.3)
+        y_smoothed = [gaussian_smooth(x_axis, y_, grid, 0.05) for y_ in flow_data_2]
+        ax.stackplot(grid, y_smoothed, labels=list(flow_types_process_2), colors=COLORS[1:], baseline="sym", alpha=0.7)
+        ax.legend(loc="lower left")
+        ax.set_title(title)
+        plt.show()
 
 
 def plot_flows_dumplings(flows: dict):
@@ -1874,20 +1911,34 @@ def plot_steamgraph_example():
 
 
 def analyze_mixes_flows(target_path):
+    flows_file = os.path.join(target_path, 'one_hop_flows_misclassifications.json')
+    if os.path.exists(flows_file):
+        flows = load_json_from_file(flows_file)
+        print(f'Total misclassifications: {len(flows.keys())}')
+
     # Visualization of results from BlockSci
     flows_file = os.path.join(target_path, 'one_hop_flows.json')
     if os.path.exists(flows_file):
         flows = load_json_from_file(flows_file)
         flows_in_time = extract_flows_blocksci(flows)
-        plot_flows_steamgraph(flows_in_time, 'BlockSci flows')
+        #plot_flows_steamgraph(flows_in_time['broadcast_time_mix1'], 'BlockSci flows (1 hop), mix1')
+        plot_flows_steamgraph(flows_in_time['broadcast_time_bridge'], 'BlockSci flows (1 hop), bridge tx time')
+        plot_flows_steamgraph(flows_in_time['broadcast_time_mix2'], 'BlockSci flows (1 hop), mix2 tx time')
+
+    TWO_HOPS = False
+    if TWO_HOPS:
+        flows_file = os.path.join(target_path, 'two_hops_flows.json')
+        if os.path.exists(flows_file):
+            flows = load_json_from_file(flows_file)
+            flows_in_time = extract_flows_blocksci(flows)
+            plot_flows_steamgraph(flows_in_time, 'BlockSci flows (2 hops)')
 
     # Visualization of results from Dumplings
     flows_file = os.path.join(target_path, 'mix_flows.json')
     if os.path.exists(flows_file):
         flows = load_json_from_file(flows_file)
         flows_in_time = extract_flows_dumplings(flows)
-        plot_flows_steamgraph(flows_in_time, 'Dumplings flows')
-
+        plot_flows_steamgraph(flows_in_time, 'Dumplings flows (1 hop)')
     else:
         whirlpool_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiPostMixTxs.txt'))
         wasabi1_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
@@ -1986,31 +2037,41 @@ if __name__ == "__main__":
     ANALYSIS_ADDRESS_REUSE = False
     ANALYSIS_PROCESS_ALL_COINJOINS = False
     ANALYSIS_PROCESS_ALL_COINJOINS_DEBUG = False
-    ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = True
+    ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
     ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS_DEBUG = False
     ANALYSIS_INPUTS_DISTRIBUTION = False  # OK
     ANALYSIS_BURN_TIME = False
-    PLOT_REMIXES = True
+    PLOT_REMIXES = False
+    PLOT_INTERMIX_FLOWS = True
 
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240215\\'
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240417\\'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240509\\'
+
     target_path = os.path.join(target_base_path, 'Scanner')
     SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
 
-    # SAVE_BASE_FILES_JSON = True
-    # process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-18 01:38:07.000', '2024-04-18 01:38:07.000',
-    #                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
-    # fix_ww2_for_fdnp_ww1('wasabi2', target_path)
-    # exit(1)
+    if PLOT_INTERMIX_FLOWS:
+        analyze_mixes_flows(target_path)
+        exit(42)
 
     if PLOT_REMIXES:
         # wasabi_plot_remixes('wasabi2_burn_test',
         #                      os.path.join(target_path, 'wasabi2_burn_test'),
         #                      'coinjoin_tx_info.json', False, True)
-        #wasabi_plot_remixes('whirlpool_burn_test', os.path.join(target_path, 'whirlpool_burn_test'), 'coinjoin_tx_info.json', True, False)
-        # wasabi_plot_remixes('whirlpool_burn_test_5M', os.path.join(target_path, 'whirlpool_burn_test'), 'coinjoin_tx_info.json',
-        #                     False, False, 5000000)
+        # exit(42)
 
+        wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, False)
+        wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', False, True)
+
+        # wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False)
+        # wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True)
+        #
+        # wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True)
+        # wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, False)
+
+
+        # Plotting remixes separately for different Whirlpool pools
         wasabi_plot_remixes('whirlpool_5M', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
                             True, False, 5000000)
         wasabi_plot_remixes('whirlpool_100k', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
@@ -2019,30 +2080,17 @@ if __name__ == "__main__":
                             True, False, 1000000)
         wasabi_plot_remixes('whirlpool_50M', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
                             True, False, 50000000)
-        #wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, False)
-        #wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', False, True)
-        exit(42)
 
-        wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False)
-        wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True)
+        #exit(42)
 
-        wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True)
-        wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, False)
-        exit(1)
-
-    # SAVE_BASE_FILES_JSON = True
-    # process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-18 01:38:07.000', '2024-02-15 01:38:07.000',
-    #                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, True)
-
-    #exit(1)
+        # Less beneficial visualizations
+        # wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, False)
+        # wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, True)
 
     if ANALYSIS_BURN_TIME:
-        DEBUG_FILE = False
-        file_name = 'coinjoin_tx_info.json.test' if DEBUG_FILE else 'coinjoin_tx_info.json.full'
-
-        whirlpool_analyse_remixes('Whirlpool', os.path.join(target_path, 'whirlpool_burn'), file_name)
-        wasabi1_analyse_remixes('Wasabi1', os.path.join(target_path, 'wasabi1_burn'), file_name)
-        wasabi2_analyse_remixes('Wasabi2', os.path.join(target_path, 'wasabi2_burn'), file_name)
+        wasabi2_analyse_remixes('Wasabi2', target_path)
+        wasabi1_analyse_remixes('Wasabi1', target_path)
+        whirlpool_analyse_remixes('Whirlpool', target_path)
 
     # Extract distribution of mix fresh input sizes
     if ANALYSIS_INPUTS_DISTRIBUTION:
@@ -2061,14 +2109,16 @@ if __name__ == "__main__":
     #
     #
     if ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS:
-        process_and_save_intervals_filter('whirlpool', MIX_PROTOCOL.WHIRLPOOL, target_path, '2019-04-17 01:38:07.000', '2024-02-15 01:38:07.000',
-                                   'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt', SAVE_BASE_FILES_JSON)
+        process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-18 01:38:07.000', '2024-05-10 01:38:07.000',
+                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
+        fix_ww2_for_fdnp_ww1('wasabi2', target_path)  # WW2 requires detection of WW1 inflows as friends
+        #
+        # process_and_save_intervals_filter('wasabi1', MIX_PROTOCOL.WASABI1, target_path, '2018-07-19 01:38:07.000', '2024-05-10 01:38:07.000',
+        #                            'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
+        # process_and_save_intervals_filter('whirlpool', MIX_PROTOCOL.WHIRLPOOL, target_path, '2019-04-17 01:38:07.000', '2024-05-10 01:38:07.000',
+        #                            'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt',
+        #                                   SAVE_BASE_FILES_JSON, False)
 
-        process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-18 01:38:07.000', '2024-02-15 01:38:07.000',
-                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON)
-
-        process_and_save_intervals_filter('wasabi1', MIX_PROTOCOL.WASABI1, target_path, '2018-07-19 01:38:07.000', '2024-02-15 01:38:07.000',
-                                   'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', None, SAVE_BASE_FILES_JSON)
 
     if ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS_DEBUG:
         process_and_save_intervals_filter('wasabi2_feb24', target_path, '2024-02-11 01:38:07.000', '2024-02-11 23:38:07.000',
