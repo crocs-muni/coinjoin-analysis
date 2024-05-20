@@ -15,7 +15,7 @@ class GlobalConstants():
     distributor_wallet_name = "DistributorWallet"
     version2 = True
 
-    wasabi_wallet_data = "C:\\Users\david\AppData\Roaming\WalletWasabi"
+    wasabi_wallet_data = ""
 
     # time needed in registration phase of round to start scenarion in it
     starting_round_time_required = 60
