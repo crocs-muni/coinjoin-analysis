@@ -5,14 +5,14 @@ import json
 from typing import List
 import logging
 from datetime import datetime, timedelta
-import rpc_commands
-import regtest_control
+import Helpers.rpc_commands as rpc_commands
+import Helpers.regtest_control as regtest_control
 import sys
 from dateutil import tz
-import global_constants
-import processes_control
-import utils
-import rounds_control
+import Helpers.global_constants as global_constants
+import Helpers.processes_control as processes_control
+import Helpers.utils as utils
+import Helpers.rounds_control as rounds_control
 
 
 def translate_json_name(name: str):
@@ -29,7 +29,7 @@ class JsonParamsNaming():
         self.round_states = translate_json_name("roundStates")
         self.state_id = translate_json_name("stateId")
         self.phase = translate_json_name("phase")
-        self.input_registration = translate_json_name("inputRegistration")
+        self.input_registration = "InputRegistration"
         self.input_registration_start = translate_json_name("inputRegistrationStart")
         self.input_registration_remaining = translate_json_name("inputRegistrationRemaining")
         self.is_blame_round = translate_json_name("isBlameRound")
@@ -125,47 +125,6 @@ class RoundChecker():
             utils.log_and_print("Configuration for backend was not loaded yet. Waiting for other {} seconds".format(global_constants.GLOBAL_CONSTANTS.config_refresh_time - from_setting_backend.seconds))
             time.sleep(global_constants.GLOBAL_CONSTANTS.config_refresh_time - from_setting_backend.seconds)
             from_setting_backend = datetime.now(tz=tz.tzlocal()) - self.scenario_manager.initial_backend_settings_timestamp
-
-        # should not be needed as the config is loaded before backend is started
-        # # how to ensure, that current round is not round with previous settings?
-        # while True:
-        #     current_rounds = self.get_current_rounds()
-        #     current_rounds = list(filter(lambda x: x[backend_names.phase] == backend_names.input_registration, current_rounds))
-        #     # if there are no rounds running, no problem here
-        #     if len(current_rounds) == 0:
-        #         break
-
-        #     first_round_id = current_rounds[0][backend_names.round_id]
-
-        #     # get status for rounds
-        #     round_states = self.get_status_from_wasabi_api(first_round_id)
-        #     # log_and_print("At scenario initiation, there are these rounds: ")
-
-        #     all_rounds_ok = True
-
-        #     # check if all rounds started after loading the initial configuration + refresh time
-        #     for round in current_rounds:
-
-        #         correct_round_state = list(filter(lambda x: x[backend_names.id] == round[backend_names.round_id], round_states))[0]
-        #         round_started = correct_round_state[backend_names.input_registration_start]
-
-        #         # internet says this should work since python 3.7 but it does not
-        #         # real_time_start = datetime.fromisoformat(round_started)
-        #         real_time_start = parse_time_from_backend_response(round_started)
-
-        #         if real_time_start < time_to_compare_rounds:
-        #             log_and_print("At the start of scenario, at least round {} runs with \
-        #                           old configuration for additional {}".format(round[backend_names.round_id], 
-        #                                                                       round[backend_names.input_registration_remaining]))
-        #             waiting_time = parse_time_to_seconds(round[backend_names.input_registration_remaining])
-        #             log_and_print(f"Waiting for {waiting_time} seconds")
-        #             all_rounds_ok = False
-        #             time.sleep(waiting_time)
-        #             break
-                
-        #     if all_rounds_ok:
-        #         break
-                
 
         # ensuring, that there is enaught time in at least one round to register inputs
         registerable_round_long_enaught = False
@@ -344,7 +303,10 @@ if __name__ == "__main__":
 
         subprocesses_handler.run_client()
         for wallet in scenario_manager.used_wallets:
-            rpc_commands.confirmed_load(wallet)
+            if global_constants.GLOBAL_CONSTANTS.version2:
+                rpc_commands.confirmed_load(wallet)
+            else:
+                rpc_commands.confirmed_select(wallet)
 
     except Exception as e:
         subprocesses_handler.clean_subprocesses()
@@ -357,7 +319,6 @@ if __name__ == "__main__":
     # creates coinjoin manager with wallets
     coinjoin_manager = rounds_control.CoinJoinWalletManager(scenario_manager.used_wallets)
 
-    # TODO unclean, needs slight rework 
     scenario_manager.wallet_manager = coinjoin_manager
 
     round_checker = RoundChecker(scenario_manager, coinjoin_manager)

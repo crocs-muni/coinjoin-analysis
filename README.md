@@ -7,12 +7,11 @@
 
 ## How to run scenario
 1. Fill file scenario.json with desired options and their values.
-1. If you have not done it already, run init_regtest.py
 1. Run your btc core.
-1. Check if the constants are correctly set in files global_constants.py, scenario.py (here only version2 is important), regtest_control.py
+1. Check if the constants are correctly set in files Helpers/global_constants.py and Helpers/regtest_control.py
+1. If you have not done it already, run init_regtest.py
 1. Run scenario.py script. It should be in the same folder as other .py files and also scenario.json file.
 1. Wait until scenario is finished
-1. Run parse_cj_logs.py 
 
 
 ## Simple Passive scenario
@@ -27,13 +26,16 @@ Allowed options in scenario.json:
 - backendConfig - json, configuration for backend. Allowed options and allowed type of values can be seen in **parameters.json**
 
 ## Complex Passive scenario
+- type must be changed to "ComplexPassive"
+
 Adds more options for walletsInfo:
 - walletConfig - same possibilities as walletsConfig, apply only to specified wallet. Set before scenario is started.
 
 Adds option of stopping and starting coinjoin in different rounds:
-- TBT, needs polish
+- roundsConfigs - array of objects each containing *index* (identifier for round) and possibly *startWallets* (array of indices of wallets to start mixing in the ruond) or *stopWallets* (array of indices of wallets to stop mixing in the round)
 
-## Simple ACtive scenario
+## Simple Active scenario
+- type must be changed to "SimpleActive"
+
 Allows changes of backend configuration:
-- roundsConfigs - array of objects, each containing *index* (identifier for round) and *backendConfig* (configuration to be changed)
-- need to check if all configurations can be changed during runtime or only those changing round parameters
+- each object in the roundsConfig array can now have parameter *backendConfig* (configuration to be changed)
