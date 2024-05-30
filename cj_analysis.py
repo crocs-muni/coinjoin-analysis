@@ -1,6 +1,6 @@
 import logging
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 
 SATS_IN_BTC = 100000000
@@ -12,6 +12,11 @@ class PRECOMP_STRPTIME():
     def strptime(self, datestr: str, datestr_format: str) -> datetime:
         if datestr not in self.precomp_strptime:
             self.precomp_strptime[datestr] = datetime.strptime(datestr, datestr_format)
+        return self.precomp_strptime[datestr]
+
+    def fromisoformat(self, datestr: str) -> datetime:
+        if datestr not in self.precomp_strptime:
+            self.precomp_strptime[datestr] = datetime.fromisoformat(datestr)
         return self.precomp_strptime[datestr]
 
 
@@ -230,16 +235,26 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudit
         curr_stay_liquidity = curr_stay_liquidity + mix_stay[index]
         stay_liquidity.append(curr_stay_liquidity)
 
+    # Remixed liquidity levels
+    remix_liquidity = []
+    curr_remix_liquidity = initial_liquidity[2]  # Take last remix liquidity from previous interval
+    for index in range(0, len(mix_stay)):
+        curr_remix_liquidity = curr_remix_liquidity + mix_enter[index] - mix_leave[index] - stay_liquidity[index]  # prev state + new input liquidity - output liqudity -
+        remix_liquidity.append(curr_remix_liquidity)
+
     # Plot in btc
     liquidity_btc = [item / SATS_IN_BTC for item in cjtx_cummulative_liquidity]
     stay_liquidity_btc = [item / SATS_IN_BTC for item in stay_liquidity]
+    remix_liquidity_btc = [item / SATS_IN_BTC for item in remix_liquidity]
+
     #x_ticks = range(initial_cj_index, initial_cj_index + len(liquidity_btc))
     ax.plot(liquidity_btc, color='royalblue', alpha=0.6)
     #ax.plot(stay_liquidity_btc, color='royalblue', alpha=0.6, linestyle='--')
+    #ax.plot(remix_liquidity_btc, color='royalblue', alpha=0.6, linestyle='--')
     ax.set_ylabel('btc in mix', color='royalblue')
     ax.tick_params(axis='y', colors='royalblue')
 
-    return cjtx_cummulative_liquidity, stay_liquidity
+    return cjtx_cummulative_liquidity, stay_liquidity, remix_liquidity
 
 
 def plot_mining_fee_rates(mix_id: str, data: dict, mining_fees: dict, ax):
@@ -407,3 +422,130 @@ def get_output_name_string(txid, index):
 
 def get_input_name_string(txid, index):
     return f'vin_{txid}_{index}'
+
+
+def extract_interval(data: dict, start_date: str, end_date: str):
+    interval_data = {}
+    interval_data['coinjoins'] = {txid: data['coinjoins'][txid] for txid in data['coinjoins'].keys()
+                                  if start_date < data['coinjoins'][txid][
+                                      'broadcast_time'] < end_date}
+    interval_data['postmix'] = {}
+    interval_data['rounds'] = {roundid: data['rounds'][roundid] for roundid in data['rounds'].keys()
+                               if
+                               start_date < data['rounds'][roundid]['round_start_time'] < end_date}
+    interval_data['wallets_info'], interval_data['wallets_coins'] = extract_wallets_info(interval_data)
+
+    if 'premix' in data.keys():  # Only for Whirlpool
+        interval_data['premix'] = {txid: data['premix'][txid] for txid in data['premix'].keys()
+                                   if start_date < data['premix'][txid]['broadcast_time'] < end_date}
+
+    return interval_data
+
+
+def extract_wallets_info(data):
+    wallets_info = {}
+    wallets_coins_info = {}
+    txs_data = data['coinjoins']
+
+    if len(txs_data) == 0:
+        return wallets_info, wallets_coins_info
+
+    # Compute artificial min and max times
+    min_cj_time = min([txs_data[cjtxid]['broadcast_time'] for cjtxid in txs_data.keys()])  # Time of the earliest coinjoin
+    max_cj_time = max([txs_data[cjtxid]['broadcast_time'] for cjtxid in txs_data.keys()])  # Time of the latest coinjoin
+    # Use it as the earliest creation of coin
+    datetime_obj = precomp_datetime.strptime(min_cj_time, "%Y-%m-%d %H:%M:%S.%f")
+    datetime_obj = datetime_obj - timedelta(minutes=60)
+    artificial_min_cj_time = datetime_obj.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    datetime_obj = precomp_datetime.strptime(max_cj_time, "%Y-%m-%d %H:%M:%S.%f")
+    datetime_obj = datetime_obj + timedelta(minutes=60)
+    artificial_max_cj_time = datetime_obj.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
+    # 1. Extract all information from outputs and create also corresponding coins
+    for cjtxid in txs_data.keys():
+        for index in txs_data[cjtxid]['outputs'].keys():
+            target_addr = txs_data[cjtxid]['outputs'][index]['address']
+            wallet_name = txs_data[cjtxid]['outputs'][index]['wallet_name']
+            if wallet_name not in wallets_info.keys():
+                wallets_info[wallet_name] = {}
+                wallets_coins_info[wallet_name] = []
+            wallets_info[wallet_name][target_addr] = {'address': target_addr}
+
+            # Create new coin with information derived from output and transaction info
+            coin = {'txid': cjtxid, 'index': index, 'amount': txs_data[cjtxid]['outputs'][index]['value'],
+                    'anonymityScore': -1, 'address': target_addr, 'create_time': txs_data[cjtxid]['broadcast_time'],
+                    'wallet_name': wallet_name, 'is_from_cjtx': False, 'is_spent_by_cjtx': False}
+            #coin.update({'confirmed': True, 'confirmations': 1, 'keyPath': '', 'block_hash': txs_data[cjtxid]['block_hash']})
+            coin['is_from_cjtx'] = txs_data[cjtxid].get('is_cjtx', False)
+            if 'spend_by_tx' in txs_data[cjtxid]['outputs'][index].keys():
+                spent_tx, spend_index = extract_txid_from_inout_string(txs_data[cjtxid]['outputs'][index]['spend_by_tx'])
+                coin['spentBy'] = spent_tx
+                coin['is_spent_by_cjtx'] = False if spent_tx not in txs_data.keys() else txs_data[spent_tx].get('is_cjtx', False)
+                if spent_tx in txs_data.keys():
+                    coin['destroy_time'] = txs_data[spent_tx]['broadcast_time']
+            wallets_coins_info[wallet_name].append(coin)
+
+    num_outputs = sum([len(txs_data[cjtxid]['outputs']) for cjtxid in txs_data.keys()])
+    num_coins = sum([len(wallets_coins_info[wallet_name]) for wallet_name in wallets_coins_info.keys()])
+    assert num_outputs == num_coins, f'Mismatch in number of identified coins {num_outputs} vs {num_coins}'
+
+    # 2. Extract all information from inputs and update corresponding coins (destroy_time)
+    all_coins = []
+    for wallet_name in wallets_coins_info.keys():
+        all_coins.extend(wallets_coins_info[wallet_name])
+    coins = {coin['address']: coin for coin in all_coins}
+
+    for cjtxid in txs_data.keys():
+        for index in txs_data[cjtxid]['inputs'].keys():
+            target_addr = txs_data[cjtxid]['inputs'][index]['address']
+            wallet_name = txs_data[cjtxid]['inputs'][index]['wallet_name']
+            if wallet_name not in wallets_info.keys():
+                wallets_info[wallet_name] = {}
+            wallets_info[wallet_name][target_addr] = {'address': target_addr}
+
+            # Update coin destroy time for this specific input (if coin already exists)
+            if target_addr not in coins.keys():
+                # Coin record was not found in any of the previous outputs of all analyzed transactions,
+                # Create new coin with information derived from output and transaction info
+                # Coin creation time set to artificial_min_cj_time . TODO: change to real value from blockchain
+                txid, vout = extract_txid_from_inout_string(txs_data[cjtxid]['inputs'][index]['spending_tx'])
+                coin = {'txid': txid, 'index': vout, 'amount': txs_data[cjtxid]['inputs'][index]['value'],
+                        'anonymityScore': -1, 'address': target_addr, 'create_time': artificial_min_cj_time,
+                        'wallet_name': wallet_name, 'is_from_cjtx': False, 'is_spent_by_cjtx': False}
+                # coin.update({'confirmed': True, 'confirmations': 1, 'keyPath': '', 'block_hash': txs_data[cjtxid]['block_hash']})
+                coin['is_from_cjtx'] = False if txid not in txs_data.keys() else txs_data[txid].get('is_cjtx', False)
+
+                coin['destroy_time'] = txs_data[cjtxid]['broadcast_time']
+                coin['spentBy'] = cjtxid
+                coin['is_spent_by_cjtx'] = False if cjtxid not in txs_data.keys() else txs_data[cjtxid].get('is_cjtx', False)
+                coins[target_addr] = coin
+            else:
+                assert coins[target_addr]['amount'] == txs_data[cjtxid]['inputs'][index]['value'], f'Inconsistent value found for {target_addr}'
+                # We have found the coin, update destroy_time
+                coins[target_addr]['destroy_time'] = txs_data[cjtxid]['broadcast_time']
+                if 'spentBy' not in coins[target_addr].keys():
+                    coins[target_addr]['spentBy'] = cjtxid
+                    coin['is_spent_by_cjtx'] = False if cjtxid not in txs_data.keys() else txs_data[cjtxid].get('is_cjtx', False)
+                else:
+                    assert coins[target_addr]['spentBy'] == cjtxid, f'Inconsistent spentBy mapping for {coins[target_addr]['address']}'
+
+    wallets_coins_info_updated = {}
+    for address in coins.keys():
+        coin = coins[address]
+        if coin['wallet_name'] not in wallets_coins_info_updated.keys():
+            wallets_coins_info_updated[coin['wallet_name']] = []
+        wallets_coins_info_updated[coin['wallet_name']].append(coin)
+
+    return wallets_info, wallets_coins_info_updated
+
+
+def merge_dicts(source: dict, dest: dict):
+    for key, value in source.items():
+        if isinstance(value, dict):
+            # get node or create one
+            node = dest.setdefault(key, {})
+            merge_dicts(value, node)
+        else:
+            dest[key] = value
+
+    return dest

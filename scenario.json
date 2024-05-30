@@ -2,25 +2,49 @@
     "type": "SimplePassive",
     "freshWallets": true,
     "startingFunds": [1000000, 500000],
-    "rounds": 3,
+    "rounds": 100000,
     "walletsCounts": 10,
 
     "walletsInfo": [
         {
             "walletIndex": 0,
-            "walletFunds": [200000, 50000]
+            "walletFunds": [10000000, 10000000,  10000000,  10000000,  10000000]
         },
         {
             "walletIndex": 1,
-            "walletFunds": [3000000]
+            "walletFunds": [10000000, 10000000,  10000000,  10000000,  10000000]
+        },
+        {
+            "walletIndex": 2,
+            "walletFunds": [10000000, 10000000,  10000000,  10000000,  10000000]
+        },
+        {
+            "walletIndex": 3,
+            "walletFunds": [10000000, 10000000,  10000000,  10000000,  10000000]
+        },
+        {
+            "walletIndex": 4,
+            "walletFunds": [10000000, 10000000,  10000000,  10000000,  10000000]
         },
         {
             "walletIndex": 5,
-            "walletFunds": [3000000, 15000]
+            "walletFunds": [10000000, 10000000,  10000000,  10000000,  10000000]
+        },
+        {
+            "walletIndex": 6,
+            "walletFunds": [10000000, 10000000,  10000000,  10000000,  10000000]
+        },
+        {
+            "walletIndex": 7,
+            "walletFunds": [10000000, 10000000,  10000000,  10000000,  10000000]
         },
         {
             "walletIndex": 8,
-            "walletFunds": [3000000, 600000]
+            "walletFunds": [10000000, 10000000,  10000000,  10000000,  10000000]
+        },
+        {
+            "walletIndex": 9,
+            "walletFunds": [10000000, 10000000,  10000000,  10000000,  10000000]
         }
     ],
 
@@ -28,32 +52,32 @@
         "PreferPsbtWorkflow": false,
         "AutoCoinJoin": false,
         "PlebStopThreshold": "0.01",
-        "AnonScoreTarget": 5,
+        "AnonScoreTarget": 1000,
         "FeeRateMedianTimeFrameHours": 0,
         "RedCoinIsolation": false,
         "ExcludedCoinsFromCoinJoin": []
     },
 
     "backendConfig": {
-        "DoSSeverity": "0.10",
+        "DoSSeverity": "0.0",
         "DoSMinTimeForFailedToVerify": "31d 0h 0m 0s",
-        "DoSMinTimeForCheating": "1d 0h 0m 0s",
-        "DoSPenaltyFactorForDisruptingConfirmation": 0.2,
-        "DoSPenaltyFactorForDisruptingSigning": 1.0,
-        "DoSPenaltyFactorForDisruptingByDoubleSpending": 3.0,
-        "DoSMinTimeInPrison": "0d 0h 20m 0s",
+        "DoSMinTimeForCheating": "0d 0h 0m 10s",
+        "DoSPenaltyFactorForDisruptingConfirmation": 0.0,
+        "DoSPenaltyFactorForDisruptingSigning": 0.0,
+        "DoSPenaltyFactorForDisruptingByDoubleSpending": 0.0,
+        "DoSMinTimeInPrison": "10000d 0h 0m 0s",
         "MinRegistrableAmount": "0.00005",
         "MaxRegistrableAmount": "43000.00",
         "AllowNotedInputRegistration": true,
         "StandardInputRegistrationTimeout": "0d 0h 1m 40s",
         "BlameInputRegistrationTimeout": "0d 0h 3m 0s",
         "ConnectionConfirmationTimeout": "0d 0h 0m 30s",
-        "OutputRegistrationTimeout": "0d 0h 0m 30s",
-        "TransactionSigningTimeout": "0d 0h 0m 30s",
+        "OutputRegistrationTimeout": "0d 0h 1m 00s",
+        "TransactionSigningTimeout": "0d 0h 1m 00s",
         "FailFastOutputRegistrationTimeout": "0d 0h 3m 0s",
         "FailFastTransactionSigningTimeout": "0d 0h 0m 30s",
         "RoundExpiryTimeout": "0d 0h 5m 0s",
-        "MaxInputCountByRound": 8,
+        "MaxInputCountByRound": 6,
         "MinInputCountByRoundMultiplier": 0.5,
         "CoordinationFeeRate": {
           "Rate": 0.003,

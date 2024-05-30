@@ -945,7 +945,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
         ax2 = cjplt.ax_coinjoins.twinx()  # Use second axis to plot coins in prison log
         ax2.plot([len(logs_in_hours[CJ_LOG_TYPES.UTXO_IN_PRISON.name][log_hour]) for log_hour in logs_in_hours[CJ_LOG_TYPES.UTXO_IN_PRISON.name].keys()],
                          label=f'(UTXOs in prison) {short_exp_name}', color='lightgray', linestyle='--')
-        ax2.legend()
+        ax2.legend(loc='lower right')
 
     x_ticks = []
     for slot in cjtx_in_hours.keys():
@@ -3322,8 +3322,8 @@ if __name__ == "__main__":
 
     # Analysis type
     #cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL
-    #cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
-    cfg = AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL
+    cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
+    #cfg = AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL
     #cfg = AnalysisType.COMPUTE_COINJOIN_TXINFO_REMOTE
 
     print('Analysis configuration: {}'.format(cfg.name))
@@ -3572,8 +3572,8 @@ if __name__ == "__main__":
     # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2'),
     #                      os.path.join(super_base_path, 'grid_uniform_test3')]
 
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'unproccesed')]
+    super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    target_base_paths = [os.path.join(super_base_path, 'unproccesed')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'long_runs')]
@@ -3617,9 +3617,21 @@ if __name__ == "__main__":
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'wasabi2_test')]
 
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'wallet_analysis_test', 'grid_pareto-static-30utxo')]
 
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'grid_lognorm-static-5utxo_only250w')]
+    #
     ##Generate aggregated visualizations
     # generate_aggregated_visualization(target_base_paths)
+    # exit(42)
+
+
+    # extract_wallets_inouts(os.path.join(super_base_path, '!wallet_num_model'), target_base_paths)
+    # exit(42)
+    #
+    # analyze_wallet_usage_frequency(super_base_path, target_base_paths)
     # exit(42)
 
     NUM_THREADS = 1  # if -1, then every experiment has own thread
@@ -3631,6 +3643,9 @@ if __name__ == "__main__":
         results = process_multiple_experiments(base_path, SAVE_BASE_FIGS, NUM_THREADS)
         analyze_multiple_experiments(results, base_path)
         all_results.update(results)
+
+    # Analyze usage frequency of all wallets
+    analyze_wallet_usage_frequency(super_base_path, target_base_paths)
 
     # Analyze all batches together
     analyze_multiple_experiments(all_results, super_base_path)
@@ -3645,3 +3660,4 @@ if __name__ == "__main__":
     # TODO: Important: think what it means that we have always most of the inputs in remixed, not fresh
     # TODO: Analyze if number of fresh/remixed inputs changes over the time
     # TODO: Add computation of time required to finish given analysis => summary for easy identification of analyses to skip
+    # TODO: Sort distributions as x, xsum, lognormal (coinjoin_tx_info_stats.json.pdf)
