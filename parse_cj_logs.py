@@ -29,6 +29,7 @@ import bitcoinlib.transactions
 from bitcoinlib.transactions import Transaction
 import cj_analysis as als
 from cj_analysis import MIX_PROTOCOL
+from cj_analysis import CJ_LOG_TYPES
 
 
 BTC_CLI_PATH = 'C:\\bitcoin-25.0\\bin\\bitcoin-cli'
@@ -46,27 +47,6 @@ SATS_IN_BTC = 100000000
 PRE_2_0_4_VERSION = False
 MAX_NUM_DISPLAY_UTXO = 1000
 GLOBAL_IMG_SUFFIX = '.3'
-
-class CJ_LOG_TYPES(Enum):
-    ROUND_STARTED = 'ROUND_STARTED'
-    BLAME_ROUND_STARTED = 'BLAME_ROUND_STARTED'
-    COINJOIN_BROADCASTED = 'COINJOIN_BROADCASTED'
-    INPUT_BANNED = 'INPUT_BANNED'
-    NOT_ENOUGH_FUNDS = 'NOT_ENOUGH_FUNDS'
-    NOT_ENOUGH_PARTICIPANTS = 'NOT_ENOUGH_PARTICIPANTS'
-    WRONG_PHASE = 'WRONG_PHASE'
-    MISSING_PHASE_BY_TIME = 'MISSING_PHASE_BY_TIME'
-    SIGNING_PHASE_TIMEOUT = 'SIGNING_PHASE_TIMEOUT'
-    ALICE_REMOVED = 'ALICE_REMOVED'
-    FILLED_SOME_ADDITIONAL_INPUTS = 'FILLED_SOME_ADDITIONAL_INPUTS'
-    UTXO_IN_PRISON = 'UTXO_IN_PRISON'
-
-
-class CJ_ALICE_TYPES(Enum):
-    ALICE_REGISTERED = 'ALICE_REGISTERED'
-    ALICE_CONNECTION_CONFIRMED = 'ALICE_CONNECTION_CONFIRMED'
-    ALICE_READY_TO_SIGN = 'ALICE_READY_TO_SIGN'
-    ALICE_POSTED_SIGNATURE = 'ALICE_POSTED_SIGNATURE'
 
 
 # colors used for different wallet clusters. Avoid following colors : 'red' (used for cjtx)
@@ -139,62 +119,6 @@ def read_lines_for_round(filename, round_id):
 
     return lines_with_round
 
-
-def find_round_ids(filename, regex_pattern, group_names):
-    """
-    Extracts all round_ids which from provided file which match regexec pattern and its specified part given by group_name.
-    Function is more generic as any group_name from regex_pattern can be specified, not only round_id
-    :param filename: name of file with logs
-    :param regex_pattern: regex pattern which is matched to every line
-    :param group_name: name of item specified in regex pattern, which is extracted
-    :return: list of dictionaries for all specified group_names
-    """
-    hits = {}
-
-    try:
-        with open(filename, 'r') as file:
-            for line in file:
-                for match in re.finditer(regex_pattern, line):
-                    hit_group = {}
-                    for group_name in group_names:  # extract all provided group names
-                        if group_name in match.groupdict():
-                            hit_group[group_name] = match.group(group_name).strip()
-                    # insert into dictionary with key equal to value of first hit group
-                    key_name = match.group(group_names[0]).strip()
-                    if key_name not in hits.keys():
-                        hits[key_name] = []
-                    hits[key_name].append(hit_group)
-
-    except FileNotFoundError:
-        print(f"File '{filename}' not found.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-    return hits
-
-
-def find_round_cjtx_mapping(filename, regex_pattern, round_id, cjtx):
-    """
-    Extracts mapping between round id and its coinjoin tx id.
-    :param filename: name of file with logs
-    :param regex_pattern: regex pattern to match log line where mapping is found
-    :param round_id: name in regex for round id item
-    :param cjtx: name in regex for coinjointx id item
-    :return: dictionary of mapping between round_id and coinjoin tx id
-    """
-    mapping = {}
-    try:
-        with open(filename, 'r') as file:
-            for line in file:
-                for match in re.finditer(regex_pattern, line):
-                    if round_id in match.groupdict() and cjtx in match.groupdict():
-                        mapping[match.group(round_id).strip()] = match.group(cjtx).strip()
-    except FileNotFoundError:
-        print(f"File '{filename}' not found.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-    return mapping
 
 
 def print_round_logs(filename, round_id):
@@ -1900,74 +1824,19 @@ def build_address_wallet_mapping(cjtx_stats):
     return address_wallet_mapping
 
 
-def parse_client_coinjoin_logs(cjtx_stats, base_directory):
-    # Client logs parsing
-    # 2023-10-23 16:23:30.303 [40] INFO	AliceClient.RegisterInputAsync (121)	Round (5455291d82b748469b5eb2e63d3859370c1f3823d4b8ca5cea7322f93b98af05), Alice (6eb340fe-d153-ac10-0246-252e8a866fbc): Registered 95cdc75886465b7e0a95b7f7e41a92c0ff92a8d2d075d426b92f0ca1b8424d2c-4.
-    # 2023-10-23 16:23:38.053 [41] INFO	AliceClient.CreateRegisterAndConfirmInputAsync (77)	Round (5455291d82b748469b5eb2e63d3859370c1f3823d4b8ca5cea7322f93b98af05), Alice (6eb340fe-d153-ac10-0246-252e8a866fbc): Connection was confirmed.
-    # 2023-10-23 16:24:05.939 [27] INFO	AliceClient.ReadyToSignAsync (223)	Round (5455291d82b748469b5eb2e63d3859370c1f3823d4b8ca5cea7322f93b98af05), Alice (6eb340fe-d153-ac10-0246-252e8a866fbc): Ready to sign.
-    # 2023-10-23 16:24:46.110 [41] INFO	AliceClient.SignTransactionAsync (217)	Round (5455291d82b748469b5eb2e63d3859370c1f3823d4b8ca5cea7322f93b98af05), Alice (6eb340fe-d153-ac10-0246-252e8a866fbc): Posted a signature.
-    client_input_file = os.path.join(base_directory, 'Logs.txt')
-
-    print('Parsing coinjoin-relevant data from client logs {}...'.format(client_input_file), end='')
-
-    # class CJ_ALICE_TYPES(Enum):
-    #     ALICE_REGISTERED = 'ALICE_REGISTERED'
-    #     ALICE_CONNECTION_CONFIRMED = 'ALICE_CONNECTION_CONFIRMED'
-    #     ALICE_READY_TO_SIGN = 'ALICE_READY_TO_SIGN'
-    #     ALICE_POSTED_SIGNATURE = 'ALICE_POSTED_SIGNATURE'
-
-
-    alice_events_log = {}
-    regex_pattern = r"(?P<timestamp>.*) \[.+(AliceClient.RegisterInputAsync.*) \(.*Round \((?P<round_id>.*)\), Alice \((?P<alice_id>.*)\): Registered (?P<tx_id>.*)-(?P<tx_out_index>[0-9]+)\.?"
-    alice_events = find_round_ids(client_input_file, regex_pattern, ['round_id', 'timestamp', 'alice_id', 'tx_id', 'tx_out_index'])
-    for round_id in alice_events.keys():
-        for alice_event in alice_events[round_id]:
-            alice_id = alice_event['alice_id']
-            if alice_id not in alice_events_log.keys():
-                alice_events_log[alice_id] = {}
-
-            alice_events_log[alice_id][CJ_ALICE_TYPES.ALICE_REGISTERED.name] = alice_event
-
-    regex_pattern = r"(?P<timestamp>.*) \[.+(AliceClient.CreateRegisterAndConfirmInputAsync.*) \(.*Round \((?P<round_id>.*)\), Alice \((?P<alice_id>.*)\): Connection was confirmed\.?"
-    alice_events = find_round_ids(client_input_file, regex_pattern, ['round_id', 'timestamp', 'alice_id'])
-    for round_id in alice_events.keys():
-        for alice_event in alice_events[round_id]:
-            alice_id = alice_event['alice_id']
-            alice_events_log[alice_id][CJ_ALICE_TYPES.ALICE_CONNECTION_CONFIRMED.name] = alice_event
-
-    regex_pattern = r"(?P<timestamp>.*) \[.+(AliceClient.ReadyToSignAsync.*) \(.*Round \((?P<round_id>.*)\), Alice \((?P<alice_id>.*)\): Ready to sign\.?"
-    alice_events = find_round_ids(client_input_file, regex_pattern, ['round_id', 'timestamp', 'alice_id'])
-    for round_id in alice_events.keys():
-        for alice_event in alice_events[round_id]:
-            alice_id = alice_event['alice_id']
-            alice_events_log[alice_id][CJ_ALICE_TYPES.ALICE_READY_TO_SIGN.name] = alice_event
-
-    regex_pattern = r"(?P<timestamp>.*) \[.+(AliceClient.SignTransactionAsync.*) \(.*Round \((?P<round_id>.*)\), Alice \((?P<alice_id>.*)\): Posted a signature\.?"
-    alice_events = find_round_ids(client_input_file, regex_pattern, ['round_id', 'timestamp', 'alice_id'])
-    for round_id in alice_events.keys():
-        for alice_event in alice_events[round_id]:
-            alice_id = alice_event['alice_id']
-            alice_events_log[alice_id][CJ_ALICE_TYPES.ALICE_POSTED_SIGNATURE.name] = alice_event
-
-    # Find and pair alice event logs to the right input
-    #for cjtx_id in cjtx_stats['coinjoins'].keys():
-
-    print('finished')
-
-
 def parse_backend_coinjoin_logs(coord_input_file, raw_tx_db: dict = {}):
     print('Parsing coinjoin-relevant data from coordinator logs {}...'.format(coord_input_file), end='')
     if PRE_2_0_4_VERSION:
         regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with params: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
     else:
         regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with parameters: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
-    start_round_ids = find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp'])
+    start_round_ids = als.find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp'])
     # 2023-09-05 08:56:50.892 [38] INFO	Arena.CreateBlameRoundAsync (417)	Blame Round (c05a3b73cebffc79956e1e3abf3d9020b3e02e05f01eb7fb0d01dbcd26d64be7): Blame round created from round '05a9dfe6244d2f4004d2927798ecd42d557bbaefe61de58f67a0265f5710a2da'.
     regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Blame Round \((?P<round_id>.*)\): Blame round created from round '(?P<orig_round_id>.*)'?"
-    start_blame_rounds_id = find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp'])
+    start_blame_rounds_id = als.find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp'])
     # 2023-10-07 11:04:56.723 [43] INFO	Arena.StepTransactionSigningPhaseAsync (374)	Round (dee277ed8fd5d1af24bf09126818b3cec362f52f9fc4323474c2ec5075454d1a): Successfully broadcast the coinjoin: 345386611e7a4543524a3c7fa27f14d511fbb70b1b8786d777b19fb265e95558.
     regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Successfully broadcast the coinjoin: (?P<cj_tx_id>[0-9a-f]*)\.?"
-    success_coinjoin_round_ids = find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp', 'cj_tx_id'])
+    success_coinjoin_round_ids = als.find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp', 'cj_tx_id'])
     # round_cjtx_mapping = find_round_cjtx_mapping(coord_input_file, regex_pattern, 'round_id', 'cj_tx_id')
     round_cjtx_mapping = {round_id: success_coinjoin_round_ids[round_id][0]['cj_tx_id'] for round_id in     # take only the first record found
                           success_coinjoin_round_ids.keys()}
@@ -2023,21 +1892,6 @@ def parse_backend_coinjoin_logs(coord_input_file, raw_tx_db: dict = {}):
     return cjtx_stats
 
 
-def insert_type(items, type_info):
-    for round_id, value in items.items():
-        for index in value:
-            index.update({'type': type_info.name})
-
-
-def insert_by_round_id(rounds_logs, events):
-    for round_id, value in events.items():
-        if round_id not in rounds_logs:
-            rounds_logs[round_id] = {}
-        if 'logs' not in rounds_logs[round_id]:
-            rounds_logs[round_id]['logs'] = []
-        rounds_logs[round_id]['logs'].extend(value)
-
-
 def parse_coinjoin_errors(cjtx_stats, coord_input_file):
     print('Parsing coinjoin-relevant error data from coordinator logs {}...'.format(coord_input_file), end='')
 
@@ -2047,9 +1901,9 @@ def parse_coinjoin_errors(cjtx_stats, coord_input_file):
     #
     # Round id to coinjoin txid mapping
     regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Successfully broadcast the coinjoin: (?P<cj_tx_id>[0-9a-f]*)\.?"
-    success_coinjoin_round_ids = find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp', 'cj_tx_id'])
-    insert_type(success_coinjoin_round_ids, CJ_LOG_TYPES.COINJOIN_BROADCASTED)
-    insert_by_round_id(rounds_logs, success_coinjoin_round_ids)
+    success_coinjoin_round_ids = als.find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp', 'cj_tx_id'])
+    als.insert_type(success_coinjoin_round_ids, CJ_LOG_TYPES.COINJOIN_BROADCASTED)
+    als.insert_by_round_id(rounds_logs, success_coinjoin_round_ids)
     # If round resulted in successful coinjoin tx, add explicit entry
     for round_id in rounds_logs.keys():
         if round_id in success_coinjoin_round_ids.keys():
@@ -2062,65 +1916,65 @@ def parse_coinjoin_errors(cjtx_stats, coord_input_file):
         regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with params: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
     else:
         regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with parameters: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
-    start_round_ids = find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp'])
-    insert_type(start_round_ids, CJ_LOG_TYPES.ROUND_STARTED)
-    insert_by_round_id(rounds_logs, start_round_ids)
+    start_round_ids = als.find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp'])
+    als.insert_type(start_round_ids, CJ_LOG_TYPES.ROUND_STARTED)
+    als.insert_by_round_id(rounds_logs, start_round_ids)
     for round_id in rounds_logs.keys():
         if round_id in start_round_ids.keys():
             rounds_logs[round_id]['round_start_timestamp'] = start_round_ids[round_id][0]['timestamp']
 
     # Start of a blame round
     regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Blame Round \((?P<round_id>.*)\): Blame round created from round '(?P<orig_round_id>.*)'?"
-    start_blame_rounds_id = find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp'])
-    insert_type(start_blame_rounds_id, CJ_LOG_TYPES.BLAME_ROUND_STARTED)
-    insert_by_round_id(rounds_logs, start_blame_rounds_id)
+    start_blame_rounds_id = als.find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp'])
+    als.insert_type(start_blame_rounds_id, CJ_LOG_TYPES.BLAME_ROUND_STARTED)
+    als.insert_by_round_id(rounds_logs, start_blame_rounds_id)
     for round_id in rounds_logs.keys():
         if round_id in start_blame_rounds_id.keys():
             rounds_logs[round_id]['round_start_timestamp'] = start_blame_rounds_id[round_id][0]['timestamp']
 
     # MISSING_PHASE_BY_TIME 2023-09-02 10:17:45.038 [48] INFO	LateResponseLoggerFilter.OnException (18)	Request 'ConfirmConnection' missing the phase 'InputRegistration,ConnectionConfirmation' ('00:00:00' timeout) by '738764.08:16:45.0188191'. Round id '85bcc20df3cecd986072e5041e0260c635b1d404dc942da0affb127c28159904'.
     regex_pattern = r"(?P<timestamp>.*) \[.+LateResponseLoggerFilter.OnException.*Request '(?P<request_name>.*)' missing the phase '(?P<phase_missed>.*)' \('(?P<timeout_value>.*)' timeout\) by '(?P<timeout_missed>.*)'. Round id '(?P<round_id>.*)'.?"
-    missing_phase_by_time = find_round_ids(coord_input_file, regex_pattern,
+    missing_phase_by_time = als.find_round_ids(coord_input_file, regex_pattern,
                                            ['round_id', 'timestamp', 'request_name', 'phase_missed', 'timeout_value',
                                             'timeout_missed'])
-    insert_type(missing_phase_by_time, CJ_LOG_TYPES.MISSING_PHASE_BY_TIME)
-    insert_by_round_id(rounds_logs, missing_phase_by_time)
+    als.insert_type(missing_phase_by_time, CJ_LOG_TYPES.MISSING_PHASE_BY_TIME)
+    als.insert_by_round_id(rounds_logs, missing_phase_by_time)
 
     # FILLED_SOME_ADDITIONAL_INPUTS 2023-09-02 21:57:33.400 [66] WARNING	Arena.TryAddBlameScriptAsync (584)	Round (91a14faef01faaad7aa05ab20e06ee29b11ffcd9a25c5db290c5c63ecdc93a90): Filled up the outputs to build a reasonable transaction because some alice failed to provide its output. Added amount: '12.39780793'.
     regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\.TryAddBlameScriptAsync.*) \(.*Round \((?P<round_id>.*)\): Filled up the outputs to build a reasonable transaction because some alice failed to provide its output. Added amount: '(?P<amount_added>[0-9\.]+).?'.?"
-    filled_additional_inputs = find_round_ids(coord_input_file, regex_pattern,
+    filled_additional_inputs = als.find_round_ids(coord_input_file, regex_pattern,
                                               ['round_id', 'timestamp', 'amount_added'])
-    insert_type(filled_additional_inputs, CJ_LOG_TYPES.FILLED_SOME_ADDITIONAL_INPUTS)
-    insert_by_round_id(rounds_logs, filled_additional_inputs)
+    als.insert_type(filled_additional_inputs, CJ_LOG_TYPES.FILLED_SOME_ADDITIONAL_INPUTS)
+    als.insert_by_round_id(rounds_logs, filled_additional_inputs)
 
     # ALICE_REMOVED 2023-09-02 10:31:13.433 [41] INFO	Arena.FailTransactionSigningPhaseAsync (393)	Round (bfc40253b8e3d918d901fdd0326a7ade327e6139b3dbf19c263889c5bb51f2aa): Removed 1 alices, because they didn't sign. Remainig: 6
     regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Removed (?P<num_alices_removed>[0-9]+) alices, because they didn't sign. Remaini[n]*g: (?P<num_alices_remaining>[0-9]+).?"
-    alices_removed = find_round_ids(coord_input_file, regex_pattern,
+    alices_removed = als.find_round_ids(coord_input_file, regex_pattern,
                                     ['round_id', 'timestamp', 'num_alices_removed', 'num_alices_remaining'])
-    insert_type(alices_removed, CJ_LOG_TYPES.ALICE_REMOVED)
-    insert_by_round_id(rounds_logs, alices_removed)
+    als.insert_type(alices_removed, CJ_LOG_TYPES.ALICE_REMOVED)
+    als.insert_by_round_id(rounds_logs, alices_removed)
     all_alices_removed = {key: value for key, value in alices_removed.items() if
                           alices_removed[key][0]['num_alices_remaining'] == '0'}
 
     # SIGNING_PHASE_TIMOUT 2023-09-02 10:31:13.421 [41] WARNING	Arena.StepTransactionSigningPhaseAsync (341)	Round (bfc40253b8e3d918d901fdd0326a7ade327e6139b3dbf19c263889c5bb51f2aa): Signing phase failed with timed out after 60 seconds.
     regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Signing phase failed with timed out after (?P<timeout_length>[0-9]+) seconds.?"
-    signing_phase_timeout = find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp', 'timeout_length'])
-    insert_type(signing_phase_timeout, CJ_LOG_TYPES.SIGNING_PHASE_TIMEOUT)
-    insert_by_round_id(rounds_logs, signing_phase_timeout)
+    signing_phase_timeout = als.find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp', 'timeout_length'])
+    als.insert_type(signing_phase_timeout, CJ_LOG_TYPES.SIGNING_PHASE_TIMEOUT)
+    als.insert_by_round_id(rounds_logs, signing_phase_timeout)
 
     # WRONG_PHASE 2023-09-02 10:09:06.983 [59] WARNING	IdempotencyRequestCache.GetCachedResponseAsync (79)	WalletWasabi.WabiSabi.Backend.Models.WrongPhaseException: Round (1244dd436283015f2b6ac8d5b258421a6092d651c9316f1a2f9579257bef932e): Wrong phase (ConnectionConfirmation).
     regex_pattern = r"(?P<timestamp>.*) .* WARNING.*WalletWasabi\.WabiSabi\.Backend\.Models\.WrongPhaseException: Round \((?P<round_id>.*)\): Wrong phase \((?P<phase_info>[a-zA-Z0-9]+)\).?"
-    wrong_phase = find_round_ids(coord_input_file, regex_pattern,
+    wrong_phase = als.find_round_ids(coord_input_file, regex_pattern,
                                  ['round_id', 'timestamp', 'num_participants', 'min_participants_required'])
-    insert_type(wrong_phase, CJ_LOG_TYPES.WRONG_PHASE)
-    insert_by_round_id(rounds_logs, wrong_phase)
+    als.insert_type(wrong_phase, CJ_LOG_TYPES.WRONG_PHASE)
+    als.insert_by_round_id(rounds_logs, wrong_phase)
 
     # NOT_ENOUGH_PARTICIPANTS 2023-09-02 09:50:18.482 [50] INFO	Arena.StepInputRegistrationPhaseAsync (159)	Round (ad2a5479a5e335436bbad21c3ccfce91ec155475c7014e86592f886b3edd0ed4): Not enough inputs (0) in InputRegistration phase. The minimum is (5). MaxSuggestedAmount was '43000.00000000' BTC.
     regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Not enough inputs \((?P<num_participants>[0-9]+)\) in InputRegistration phase\. The minimum is \((?P<min_participants_required>[0-9]+)\)\. MaxSuggestedAmount was '([0-9\.]+)' BTC?"
-    not_enough_participants = find_round_ids(coord_input_file, regex_pattern,
+    not_enough_participants = als.find_round_ids(coord_input_file, regex_pattern,
                                              ['round_id', 'timestamp', 'num_participants', 'min_participants_required'])
-    insert_type(not_enough_participants, CJ_LOG_TYPES.NOT_ENOUGH_PARTICIPANTS)
-    insert_by_round_id(rounds_logs, not_enough_participants)
+    als.insert_type(not_enough_participants, CJ_LOG_TYPES.NOT_ENOUGH_PARTICIPANTS)
+    als.insert_by_round_id(rounds_logs, not_enough_participants)
 
     #
     # Round-independent information
@@ -2130,14 +1984,14 @@ def parse_coinjoin_errors(cjtx_stats, coord_input_file):
 
     # INPUT BANNED 2023-09-02 21:01:59.661 [44] WARNING	IdempotencyRequestCache.GetCachedResponseAsync (79)	WalletWasabi.WabiSabi.Backend.Models.WabiSabiProtocolException: Input banned
     regex_pattern = r"(?P<timestamp>.*) .* WARNING.*WabiSabiProtocolException: Input banned.?"
-    input_banned = find_round_ids(coord_input_file, regex_pattern, ['timestamp'])
-    insert_type(input_banned, CJ_LOG_TYPES.INPUT_BANNED)
+    input_banned = als.find_round_ids(coord_input_file, regex_pattern, ['timestamp'])
+    als.insert_type(input_banned, CJ_LOG_TYPES.INPUT_BANNED)
     rounds_logs['no_round'].append(input_banned)
 
     # NOT_ENOUGH_FUNDS 2023-09-02 10:18:48.814 [47] WARNING	IdempotencyRequestCache.GetCachedResponseAsync (79)	WalletWasabi.WabiSabi.Backend.Models.WabiSabiProtocolException: Not enough funds
     regex_pattern = r"(?P<timestamp>.*) .* WARNING.*WabiSabiProtocolException: Not enough funds.?"
-    not_enough_funds = find_round_ids(coord_input_file, regex_pattern, ['timestamp'])
-    insert_type(not_enough_funds, CJ_LOG_TYPES.NOT_ENOUGH_FUNDS)
+    not_enough_funds = als.find_round_ids(coord_input_file, regex_pattern, ['timestamp'])
+    als.insert_type(not_enough_funds, CJ_LOG_TYPES.NOT_ENOUGH_FUNDS)
     rounds_logs['no_round'].append(not_enough_funds)
 
     if 'rounds' not in cjtx_stats.keys():

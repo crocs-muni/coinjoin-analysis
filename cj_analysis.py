@@ -1,9 +1,34 @@
 import logging
+import os
+
 import numpy as np
 from datetime import datetime, timedelta
 from enum import Enum
+import re
 
 SATS_IN_BTC = 100000000
+
+
+class CJ_LOG_TYPES(Enum):
+    ROUND_STARTED = 'ROUND_STARTED'
+    BLAME_ROUND_STARTED = 'BLAME_ROUND_STARTED'
+    COINJOIN_BROADCASTED = 'COINJOIN_BROADCASTED'
+    INPUT_BANNED = 'INPUT_BANNED'
+    NOT_ENOUGH_FUNDS = 'NOT_ENOUGH_FUNDS'
+    NOT_ENOUGH_PARTICIPANTS = 'NOT_ENOUGH_PARTICIPANTS'
+    WRONG_PHASE = 'WRONG_PHASE'
+    MISSING_PHASE_BY_TIME = 'MISSING_PHASE_BY_TIME'
+    SIGNING_PHASE_TIMEOUT = 'SIGNING_PHASE_TIMEOUT'
+    ALICE_REMOVED = 'ALICE_REMOVED'
+    FILLED_SOME_ADDITIONAL_INPUTS = 'FILLED_SOME_ADDITIONAL_INPUTS'
+    UTXO_IN_PRISON = 'UTXO_IN_PRISON'
+
+
+class CJ_ALICE_TYPES(Enum):
+    ALICE_REGISTERED = 'ALICE_REGISTERED'
+    ALICE_CONNECTION_CONFIRMED = 'ALICE_CONNECTION_CONFIRMED'
+    ALICE_READY_TO_SIGN = 'ALICE_READY_TO_SIGN'
+    ALICE_POSTED_SIGNATURE = 'ALICE_POSTED_SIGNATURE'
 
 
 class PRECOMP_STRPTIME():
@@ -21,6 +46,23 @@ class PRECOMP_STRPTIME():
 
 
 precomp_datetime = PRECOMP_STRPTIME()
+
+
+def detect_no_inout_remix_txs(coinjoins):
+    no_remix = {'inputs': [], 'outputs': []}
+    for cjtx in coinjoins.keys():
+        if sum([1 for index in coinjoins[cjtx]['inputs'].keys()
+                if coinjoins[cjtx]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name]) == 0:
+            logging.warning(f'No input remix detected for {cjtx}')
+            no_remix['inputs'].append(cjtx)
+        if sum([1 for index in coinjoins[cjtx]['outputs'].keys()
+             if coinjoins[cjtx]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name]) == 0:
+            logging.warning(f'No output remix detected for {cjtx}')
+            no_remix['outputs'].append(cjtx)
+
+    no_remix['both'] = set(no_remix['inputs']).intersection(set(no_remix['outputs']))
+    logging.warning(f'Txs with no input&output remix: {no_remix['both']}')
+    return no_remix
 
 
 class MIX_EVENT_TYPE(Enum):
@@ -103,18 +145,7 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
     #sorted_cj_time = sorted_cj_time[0:500]
 
-    no_remix = {'inputs': [], 'outputs': []}
-    for cjtx in sorted_cj_time:
-        if sum([1 for index in coinjoins[cjtx['txid']]['inputs'].keys()
-                if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name]) == 0:
-            logging.warning(f'No input remix detected for {cjtx}')
-            no_remix['inputs'].append(cjtx['txid'])
-        if sum([1 for index in coinjoins[cjtx['txid']]['outputs'].keys()
-             if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name]) == 0:
-            logging.warning(f'No output remix detected for {cjtx}')
-            no_remix['outputs'].append(cjtx['txid'])
-
-    logging.warning(f'Txs with no input&output remix: {set(no_remix['inputs']).intersection(set(no_remix['outputs']))}')
+    #no_remix = detect_no_inout_remix_txs(coinjoins)
 
     input_types_nums = {}
     for event_type in MIX_EVENT_TYPE:
@@ -549,3 +580,158 @@ def merge_dicts(source: dict, dest: dict):
             dest[key] = value
 
     return dest
+
+
+def find_round_ids(filename, regex_pattern, group_names):
+    """
+    Extracts all round_ids which from provided file which match regexec pattern and its specified part given by group_name.
+    Function is more generic as any group_name from regex_pattern can be specified, not only round_id
+    :param filename: name of file with logs
+    :param regex_pattern: regex pattern which is matched to every line
+    :param group_name: name of item specified in regex pattern, which is extracted
+    :return: list of dictionaries for all specified group_names
+    """
+    hits = {}
+
+    try:
+        with open(filename, 'r') as file:
+            for line in file:
+                for match in re.finditer(regex_pattern, line):
+                    hit_group = {}
+                    for group_name in group_names:  # extract all provided group names
+                        if group_name in match.groupdict():
+                            hit_group[group_name] = match.group(group_name).strip()
+                    # insert into dictionary with key equal to value of first hit group
+                    key_name = match.group(group_names[0]).strip()
+                    if key_name not in hits.keys():
+                        hits[key_name] = []
+                    hits[key_name].append(hit_group)
+
+    except FileNotFoundError:
+        print(f"File '{filename}' not found.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+    return hits
+
+
+def find_round_cjtx_mapping(filename, regex_pattern, round_id, cjtx):
+    """
+    Extracts mapping between round id and its coinjoin tx id.
+    :param filename: name of file with logs
+    :param regex_pattern: regex pattern to match log line where mapping is found
+    :param round_id: name in regex for round id item
+    :param cjtx: name in regex for coinjointx id item
+    :return: dictionary of mapping between round_id and coinjoin tx id
+    """
+    mapping = {}
+    try:
+        with open(filename, 'r') as file:
+            for line in file:
+                for match in re.finditer(regex_pattern, line):
+                    if round_id in match.groupdict() and cjtx in match.groupdict():
+                        mapping[match.group(round_id).strip()] = match.group(cjtx).strip()
+    except FileNotFoundError:
+        print(f"File '{filename}' not found.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+    return mapping
+
+
+def insert_type(items, type_info):
+    for round_id, value in items.items():
+        for index in value:
+            index.update({'type': type_info.name})
+
+
+def insert_by_round_id(rounds_logs, events):
+    for round_id, value in events.items():
+        if round_id not in rounds_logs:
+            rounds_logs[round_id] = {}
+        if 'logs' not in rounds_logs[round_id]:
+            rounds_logs[round_id]['logs'] = []
+        rounds_logs[round_id]['logs'].extend(value)
+
+
+def parse_client_coinjoin_logs(base_directory):
+    # Client logs parsing
+
+    rounds_logs = {}
+
+    # TODO: client log parsing
+      # Wallet (XXX): CoinJoinClient finished. Coinjoin transaction was broadcast.  # 218
+
+      # CoinJoinClient finished. Coinjoin transaction was not broadcast.    # 289
+      # Aborted. Not enough participants.   # 143
+      # Aborted. Not enough participants signed the coinjoin transaction.   #22
+      # Aborted. Some Alices didn't confirm.        #47
+      # Aborted. Some Alices didn't sign. Go to blame round.    # 931
+      # Aborted. Load balancing registrations.      #77
+
+
+      # Failed to handle the HTTP request via Tor       #45
+
+      # ZKSNACKS IS NOW BLOCKING U.S. RESIDENTS AND CITIZENS    #5
+
+      # ): Successfully registered X inputs
+      # X out of Y Alices have signed the coinjoin tx.
+
+    # 2023-10-23 16:23:30.303 [40] INFO	AliceClient.RegisterInputAsync (121)	Round (5455291d82b748469b5eb2e63d3859370c1f3823d4b8ca5cea7322f93b98af05), Alice (6eb340fe-d153-ac10-0246-252e8a866fbc): Registered 95cdc75886465b7e0a95b7f7e41a92c0ff92a8d2d075d426b92f0ca1b8424d2c-4.
+    # 2023-10-23 16:23:38.053 [41] INFO	AliceClient.CreateRegisterAndConfirmInputAsync (77)	Round (5455291d82b748469b5eb2e63d3859370c1f3823d4b8ca5cea7322f93b98af05), Alice (6eb340fe-d153-ac10-0246-252e8a866fbc): Connection was confirmed.
+    # 2023-10-23 16:24:05.939 [27] INFO	AliceClient.ReadyToSignAsync (223)	Round (5455291d82b748469b5eb2e63d3859370c1f3823d4b8ca5cea7322f93b98af05), Alice (6eb340fe-d153-ac10-0246-252e8a866fbc): Ready to sign.
+    # 2023-10-23 16:24:46.110 [41] INFO	AliceClient.SignTransactionAsync (217)	Round (5455291d82b748469b5eb2e63d3859370c1f3823d4b8ca5cea7322f93b98af05), Alice (6eb340fe-d153-ac10-0246-252e8a866fbc): Posted a signature.
+    client_input_file = os.path.join(base_directory, 'Logs.txt')
+
+    print('Parsing coinjoin-relevant data from client logs {}...'.format(client_input_file), end='')
+
+    # 2024-05-14 22:44:23.438 [35] INFO	CoinJoinManager.HandleCoinJoinFinalizationAsync (507)	Wallet (Wallet_mix_research): CoinJoinClient finished. Coinjoin transaction was broadcast.
+    regex_pattern = r"(?P<timestamp>.*) INFO.+CoinJoinManager\.HandleCoinJoinFinalizationAsync.*Wallet \((?P<wallet_name>.*)\): CoinJoinClient finished. Coinjoin transaction was broadcast."
+    broadcast_coinjoin_txs = find_round_ids(client_input_file, regex_pattern, ['timestamp', 'wallet_name'])
+    insert_type(broadcast_coinjoin_txs, CJ_LOG_TYPES.COINJOIN_BROADCASTED)
+    rounds_logs['no_round'].append(broadcast_coinjoin_txs)
+
+    regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Not enough inputs \((?P<num_participants>[0-9]+)\) in InputRegistration phase\. The minimum is \((?P<min_participants_required>[0-9]+)\)\. MaxSuggestedAmount was '([0-9\.]+)' BTC?"
+    not_enough_participants = find_round_ids(client_input_file, regex_pattern,
+                                             ['round_id', 'timestamp', 'num_participants', 'min_participants_required'])
+    insert_type(not_enough_participants, CJ_LOG_TYPES.NOT_ENOUGH_PARTICIPANTS)
+    insert_by_round_id(rounds_logs, not_enough_participants)
+
+    alice_events_log = {}
+    regex_pattern = r"(?P<timestamp>.*) \[.+(AliceClient.RegisterInputAsync.*) \(.*Round \((?P<round_id>.*)\), Alice \((?P<alice_id>.*)\): Registered (?P<tx_id>.*)-(?P<tx_out_index>[0-9]+)\.?"
+    alice_events = find_round_ids(client_input_file, regex_pattern, ['round_id', 'timestamp', 'alice_id', 'tx_id', 'tx_out_index'])
+    for round_id in alice_events.keys():
+        for alice_event in alice_events[round_id]:
+            alice_id = alice_event['alice_id']
+            if alice_id not in alice_events_log.keys():
+                alice_events_log[alice_id] = {}
+
+            alice_events_log[alice_id][CJ_ALICE_TYPES.ALICE_REGISTERED.name] = alice_event
+
+    regex_pattern = r"(?P<timestamp>.*) \[.+(AliceClient.CreateRegisterAndConfirmInputAsync.*) \(.*Round \((?P<round_id>.*)\), Alice \((?P<alice_id>.*)\): Connection was confirmed\.?"
+    alice_events = find_round_ids(client_input_file, regex_pattern, ['round_id', 'timestamp', 'alice_id'])
+    for round_id in alice_events.keys():
+        for alice_event in alice_events[round_id]:
+            alice_id = alice_event['alice_id']
+            alice_events_log[alice_id][CJ_ALICE_TYPES.ALICE_CONNECTION_CONFIRMED.name] = alice_event
+
+    regex_pattern = r"(?P<timestamp>.*) \[.+(AliceClient.ReadyToSignAsync.*) \(.*Round \((?P<round_id>.*)\), Alice \((?P<alice_id>.*)\): Ready to sign\.?"
+    alice_events = find_round_ids(client_input_file, regex_pattern, ['round_id', 'timestamp', 'alice_id'])
+    for round_id in alice_events.keys():
+        for alice_event in alice_events[round_id]:
+            alice_id = alice_event['alice_id']
+            alice_events_log[alice_id][CJ_ALICE_TYPES.ALICE_READY_TO_SIGN.name] = alice_event
+
+    regex_pattern = r"(?P<timestamp>.*) \[.+(AliceClient.SignTransactionAsync.*) \(.*Round \((?P<round_id>.*)\), Alice \((?P<alice_id>.*)\): Posted a signature\.?"
+    alice_events = find_round_ids(client_input_file, regex_pattern, ['round_id', 'timestamp', 'alice_id'])
+    for round_id in alice_events.keys():
+        for alice_event in alice_events[round_id]:
+            alice_id = alice_event['alice_id']
+            alice_events_log[alice_id][CJ_ALICE_TYPES.ALICE_POSTED_SIGNATURE.name] = alice_event
+
+    # Find and pair alice event logs to the right input
+    #for cjtx_id in cjtx_stats['coinjoins'].keys():
+
+    print('finished')
+
+    return rounds_logs
