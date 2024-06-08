@@ -278,28 +278,36 @@ def parse_outpoint(hex_outpoint: str):
     return txid_hex, index
 
 
-if __name__ == "__main__":
+def analyse_prison_logs(target_path: str):
+    """
+    Reads all zip files from target_path, extract PrisonedCoins.json and time of capture.
+    Merge all information, extract prisoned coins info
+    :param target_path:
+    :return:
+    """
 
-    # # Load all prison coin files, merge and compute statistics
+
+
+# # Load all prison coin files, merge and compute statistics
     # hex_outpoint = "82A23500AD90C8C42F00F2DA0A4C265C0D0A91543C5D3A037F44436F14B8D9039A000000"
     # txid, index = parse_outpoint(hex_outpoint)
     # print(f"TXID: {txid}")
     # print(f"Index: {index}")
-#    exit(42)
 
-    # base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\mn1\\tmp\\'
-    # merged = merge_coins_files(base_path, 'mix2_coins.json', 'mix2_coins_20240528.json')
-    # dmp.save_json_to_file_pretty(os.path.join(base_path, 'mix2_coins_merged.json'), merged)
-    # merged = merge_coins_files(base_path, 'mix1_coins.json', 'mix1_coins_20240528.json')
-    # dmp.save_json_to_file_pretty(os.path.join(base_path, 'mix1_coins_merged.json'), merged)
     # exit(42)
 
     experiment_start_cut_date = '2024-05-14T19:02:49+00:00'
     experiment_target_anonscore = 25
     target_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\mn1\\as25\\'
+    all_cjs = {}
     all_stats = {}
 
-    #problematic_sessions = ['0.1btc | 12 cjs | 2024-05-26T07:47:11+00:00']
+    # round_logs = als.parse_client_coinjoin_logs(target_path)
+    # exit(42)
+
+    # prison_logs = analyse_prison_logs(target_path)
+    # exit(42)
+
     problematic_sessions = ['mix1 0.1btc | 12 cjs | txid: 34']
 
     def filter_sessions(data: dict, remove_sessions: list):
@@ -310,27 +318,35 @@ if __name__ == "__main__":
                     data['anon_percentage_status'].pop(session)
                     data['observed_remix_liquidity_ratio'].pop(session)
                     data['observed_remix_liquidity_ratio_cumul'].pop(session)
+                    data['skipped_cjtxs'].pop(session)
         return data
 
-    def analyze_mix(target_path, mix_name, experiment_target_anonscore, experiment_start_cut_date, problematic_sessions, all_stats):
+    def analyze_mix(target_path, mix_name, experiment_target_anonscore, experiment_start_cut_date, problematic_sessions, all_cjs, all_stats):
         cjs, wallet_stats = analyze_as25(target_path, mix_name, experiment_target_anonscore, experiment_start_cut_date)
         wallet_stats = filter_sessions(wallet_stats, problematic_sessions)
-        plot_cj_anonscores(wallet_stats['anon_percentage_status'],
-                           f'Wallet {mix_name}, progress towards fully anonymized liquidity (anonscore threshold);total sessions={len(wallet_stats['anon_percentage_status'])}',
-                           'privacy progress (%)')
-        plot_cj_anonscores(wallet_stats['observed_remix_liquidity_ratio_cumul'],
-                           f'Wallet {mix_name}, cumullative remix liquidity ratio;total sessions={len(wallet_stats['observed_remix_liquidity_ratio_cumul'])}',
-                           'cummulative remix ratio')
-        plot_cj_anonscores(wallet_stats['skipped_cjtxs'],
-                           f'Wallet {mix_name}, skipped cjtxs;total sessions={len(wallet_stats['skipped_cjtxs'])}',
-                           'num cjtxs skipped')
+        for to_remove in problematic_sessions:
+            for session in list(cjs['sessions'].keys()):
+                if session.find(to_remove) != -1:
+                    cjs['sessions'].pop(session)
+        PLOT_FOR_WALLETS = False
+        if PLOT_FOR_WALLETS:
+            plot_cj_anonscores(wallet_stats['anon_percentage_status'],
+                               f'Wallet {mix_name}, progress towards fully anonymized liquidity (anonscore threshold);total sessions={len(wallet_stats['anon_percentage_status'])}',
+                               'privacy progress (%)')
+            plot_cj_anonscores(wallet_stats['observed_remix_liquidity_ratio_cumul'],
+                               f'Wallet {mix_name}, cumullative remix liquidity ratio;total sessions={len(wallet_stats['observed_remix_liquidity_ratio_cumul'])}',
+                               'cummulative remix ratio')
+            plot_cj_anonscores(wallet_stats['skipped_cjtxs'],
+                               f'Wallet {mix_name}, skipped cjtxs;total sessions={len(wallet_stats['skipped_cjtxs'])}',
+                               'num cjtxs skipped')
+        als.merge_dicts(cjs, all_cjs)
         als.merge_dicts(wallet_stats, all_stats)
-        return all_stats
+        return cjs, all_stats
 
 
-    all_stats = analyze_mix(target_path, 'mix1', experiment_target_anonscore, experiment_start_cut_date, problematic_sessions, all_stats)
-    all_stats = analyze_mix(target_path, 'mix2', experiment_target_anonscore, experiment_start_cut_date, problematic_sessions, all_stats)
-    all_stats = analyze_mix(target_path, 'mix3', experiment_target_anonscore, experiment_start_cut_date, problematic_sessions, all_stats)
+    analyze_mix(target_path, 'mix1', experiment_target_anonscore, experiment_start_cut_date, problematic_sessions, all_cjs, all_stats)
+    analyze_mix(target_path, 'mix2', experiment_target_anonscore, experiment_start_cut_date, problematic_sessions, all_cjs, all_stats)
+    analyze_mix(target_path, 'mix3', experiment_target_anonscore, experiment_start_cut_date, problematic_sessions, all_cjs, all_stats)
     assert len(all_stats['anon_percentage_status']) == 23, f'Unexpected number of coinjoin sessions {len(all_stats['anon_percentage_status'])}'
 
     plot_cj_anonscores(all_stats['anon_percentage_status'], f'All wallets, progress towards fully anonymized liquidity (anonscore threshold); total sessions={len(all_stats['anon_percentage_status'])}',
@@ -341,29 +357,24 @@ if __name__ == "__main__":
                        f'All wallets, skipped cjtxs;total sessions={len(all_stats['skipped_cjtxs'])}',
                        'num cjtxs skipped')
 
+    sessions_lengths = [len(all_cjs['sessions'][session]['coinjoins']) for session in all_cjs['sessions'].keys()]
+    print(f'Sessions lengths: median={round(np.median(sessions_lengths), 2)}, average={round(np.average(sessions_lengths), 2)}, min={min(sessions_lengths)}, max={max(sessions_lengths)}')
+
     remix_ratios = [max(all_stats['observed_remix_liquidity_ratio_cumul'][session]) for session in all_stats['observed_remix_liquidity_ratio_cumul'].keys()]
-    print(f'Remix ratios: median={np.median(remix_ratios)}, average={np.average(remix_ratios)}')
-    print(remix_ratios)
+    print(f'Remix ratios: median={np.median(remix_ratios)}, average={np.average(remix_ratios)}, min={min(remix_ratios)}, max={max(remix_ratios)}')
+
     exit(42)
+
+
+    # base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\mn1\\tmp\\'
+    # merged = merge_coins_files(base_path, 'mix2_coins.json', 'mix2_coins_20240528.json')
+    # dmp.save_json_to_file_pretty(os.path.join(base_path, 'mix2_coins_merged.json'), merged)
+    # merged = merge_coins_files(base_path, 'mix1_coins.json', 'mix1_coins_20240528.json')
+    # dmp.save_json_to_file_pretty(os.path.join(base_path, 'mix1_coins_merged.json'), merged)
+    # exit(42)
 
     # TODO: Fraction of coins already above AS=25, yet remixed again
     # TODO: num inputs / outputs
     # TODO: Prison time distribution
-    # TODO: client log parsing
-      # Wallet (XXX): CoinJoinClient finished. Coinjoin transaction was broadcast.  # 218
 
-      # CoinJoinClient finished. Coinjoin transaction was not broadcast.    # 289
-      # Aborted. Not enough participants.   # 143
-      # Aborted. Not enough participants signed the coinjoin transaction.   #22
-      # Aborted. Some Alices didn't confirm.        #47
-      # Aborted. Some Alices didn't sign. Go to blame round.    # 931
-      # Aborted. Load balancing registrations.      #77
-
-
-      # Failed to handle the HTTP request via Tor       #45
-
-      # ZKSNACKS IS NOW BLOCKING U.S. RESIDENTS AND CITIZENS    #5
-
-      # ): Successfully registered X inputs
-      # X out of Y Alices have signed the coinjoin tx.
 
