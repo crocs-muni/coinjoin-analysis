@@ -1,7 +1,9 @@
 import copy
 import math
 import os
+from datetime import datetime
 
+import numpy as np
 from matplotlib import pyplot as plt
 
 import parse_dumplings as dmp
@@ -56,6 +58,10 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
     history_all = dmp.load_json_from_file(target_path)['result']
     target_path = os.path.join(target_base_path, f'{mix_name}_coins.json')
     coins = dmp.load_json_from_file(target_path)['result']
+    target_path = os.path.join(target_base_path, f'coinjoin_tx_info.json')
+    coinjoins = dmp.load_json_from_file(target_path)['coinjoins']
+    target_path = os.path.join(target_base_path, f'logww2.json')
+    coord_logs = dmp.load_json_from_file(target_path)
 
     # Filter all items from history older than experiment start date
     history = [tx for tx in history_all if tx['datetime'] >= experiment_start_cut_date]
@@ -206,11 +212,34 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
         print(f' |--> \"{cjsession_label_short}\"', end='')
         print()
 
+    # # Number of skipped coinjoins - precompute
+    cj_time = [{'txid':cjtxid, 'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
+    sorted_cj_times = sorted(cj_time,  key=lambda x: x['broadcast_time'])
+    coinjoins_index = {sorted_cj_times[i]['txid']: i for i in range(0, len(sorted_cj_times))}  # Precomputed mapping of txid to index for fast burntime computation
+    # coord_logs_sanitized = [{**item, 'mp_first_seen': item['mp_first_seen'] if item['mp_first_seen'] is not None else item['cj_last_seen']} for item in coord_logs]
+    # coord_logs_sorted = sorted(coord_logs_sanitized, key=lambda x: x['mp_first_seen'])
+    # coinjoins_index = {coord_logs_sorted[i]['id']: i for i in range(0, len(coord_logs_sorted))}
+    stats['skipped_cjtxs'] = {}
+    for session_label in cjtxs['sessions'].keys():
+        prev_cjtxid = None
+        skipped_cjtxs_list = []
+        for cjtxid in cjtxs['sessions'][session_label]['coinjoins'].keys():
+            if cjtxid not in coinjoins_index.keys():
+                print(f'{cjtxid} missing from coord_logs')
+                continue
+            skipped = 0 if prev_cjtxid is None else coinjoins_index[cjtxid] - coinjoins_index[prev_cjtxid] - 1
+            #assert skipped >= 0, f'Inconsistent skipped coinjoins of {skipped} for {cjtxid} - {prev_cjtxid}'
+            if skipped < 0:
+                print(f'Inconsistent skipped coinjoins of {skipped} for {cjtxid} - {prev_cjtxid}')
+            skipped_cjtxs_list.append(skipped)
+            prev_cjtxid = cjtxid
+        stats['skipped_cjtxs'][session_label] = skipped_cjtxs_list
+
     print(f'\n{mix_name}: Total experiments: {len(cjtxs['sessions'][session_label]['coinjoins'].keys())}, total txs={len(history)}, total coins: {len(coins)}')
 
     print("##################################################")
 
-    return stats
+    return cjtxs, stats
 
 
 def merge_coins_files(base_path: str, file1: str, file2: str):
@@ -284,7 +313,7 @@ if __name__ == "__main__":
         return data
 
     def analyze_mix(target_path, mix_name, experiment_target_anonscore, experiment_start_cut_date, problematic_sessions, all_stats):
-        wallet_stats = analyze_as25(target_path, mix_name, experiment_target_anonscore, experiment_start_cut_date)
+        cjs, wallet_stats = analyze_as25(target_path, mix_name, experiment_target_anonscore, experiment_start_cut_date)
         wallet_stats = filter_sessions(wallet_stats, problematic_sessions)
         plot_cj_anonscores(wallet_stats['anon_percentage_status'],
                            f'Wallet {mix_name}, progress towards fully anonymized liquidity (anonscore threshold);total sessions={len(wallet_stats['anon_percentage_status'])}',
@@ -292,6 +321,9 @@ if __name__ == "__main__":
         plot_cj_anonscores(wallet_stats['observed_remix_liquidity_ratio_cumul'],
                            f'Wallet {mix_name}, cumullative remix liquidity ratio;total sessions={len(wallet_stats['observed_remix_liquidity_ratio_cumul'])}',
                            'cummulative remix ratio')
+        plot_cj_anonscores(wallet_stats['skipped_cjtxs'],
+                           f'Wallet {mix_name}, skipped cjtxs;total sessions={len(wallet_stats['skipped_cjtxs'])}',
+                           'num cjtxs skipped')
         als.merge_dicts(wallet_stats, all_stats)
         return all_stats
 
@@ -305,7 +337,13 @@ if __name__ == "__main__":
                        'privacy progress (%)')
     plot_cj_anonscores(all_stats['observed_remix_liquidity_ratio_cumul'], f'All wallets, cumullative remix liquidity ratio; total sessions={len(all_stats['observed_remix_liquidity_ratio_cumul'])}',
                        'cummulative remix ratio')
+    plot_cj_anonscores(all_stats['skipped_cjtxs'],
+                       f'All wallets, skipped cjtxs;total sessions={len(all_stats['skipped_cjtxs'])}',
+                       'num cjtxs skipped')
 
+    remix_ratios = [max(all_stats['observed_remix_liquidity_ratio_cumul'][session]) for session in all_stats['observed_remix_liquidity_ratio_cumul'].keys()]
+    print(f'Remix ratios: median={np.median(remix_ratios)}, average={np.average(remix_ratios)}')
+    print(remix_ratios)
     exit(42)
 
     # TODO: Fraction of coins already above AS=25, yet remixed again
