@@ -234,20 +234,29 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudit
     cj_time = [{'txid': cjtxid, 'broadcast_time': precomp_datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
     sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
 
+    # New fresh liquidity
     mix_enter = [sum([coinjoins[cjtx['txid']]['inputs'][index]['value'] for index in coinjoins[cjtx['txid']]['inputs'].keys()
                                 if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name])
                            for cjtx in sorted_cj_time]
+    # Input liquidity from friends (one hop remix)
     mix_remixfriend = [sum([coinjoins[cjtx['txid']]['inputs'][index]['value'] for index in coinjoins[cjtx['txid']]['inputs'].keys()
                                 if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name])
                            for cjtx in sorted_cj_time]
+    # Input liquidity from ww1
     mix_remixfriend_ww1 = [sum([coinjoins[cjtx['txid']]['inputs'][index]['value'] for index in coinjoins[cjtx['txid']]['inputs'].keys()
                                 if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name])
                            for cjtx in sorted_cj_time]
+    # Output spent outside mix
     mix_leave = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
                                     if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_LEAVE.name])
                                for cjtx in sorted_cj_time]
+    # Output staying in mix
     mix_stay = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
                                     if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_STAY.name])
+                               for cjtx in sorted_cj_time]
+    # Output staying in mix MIX_EVENT_TYPE.MIX_REMIX
+    mix_remix = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
+                                    if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name])
                                for cjtx in sorted_cj_time]
 
 
@@ -257,6 +266,12 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudit
     # Change in liquidity as observed by each coinjoin (increase directly when mix_enter, decrease directly even when mix_leave happens later)
     for index in range(0, len(mix_enter)):
         curr_liquidity = curr_liquidity + mix_enter[index] + mix_remixfriend[index] + mix_remixfriend_ww1[index] - mix_leave[index]
+        liquidity_step = mix_enter[index] + mix_remixfriend[index] + mix_remixfriend_ww1[index] - mix_leave[index]
+        if mix_enter[index] > 100 * SATS_IN_BTC:
+            print(f'Fresh input jump    of {round(mix_enter[index] / SATS_IN_BTC, 1)} at {index}: {sorted_cj_time[index]}')
+        if liquidity_step > 100 * SATS_IN_BTC:
+            print(f'Pool liquidity jump of {round(liquidity_step / SATS_IN_BTC, 1)} at {index}: {sorted_cj_time[index]}')
+        curr_liquidity = curr_liquidity + liquidity_step
         cjtx_cummulative_liquidity.append(curr_liquidity)
 
     # Cummulative liquidity never remixed or leaving mix (MIX_STAY coins)
