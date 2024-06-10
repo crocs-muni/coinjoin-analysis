@@ -1462,6 +1462,10 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
     # Load fee rates
     mining_fee_rates = load_json_from_file(os.path.join(target_path, 'fee_rates.json'))
 
+    # Load false positives
+    fp_file = os.path.join(target_path, 'false_cjtxs.json')
+    false_cjtxs = load_json_from_file(fp_file)
+
     # Compute number of required month subgraphs
     num_months = sum([1 for dir_name in files
                       if os.path.isdir(os.path.join(target_path, dir_name)) and
@@ -1481,11 +1485,17 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
     num_wallets = []
     initial_cj_index = 0
     time_liquidity = {}  # If MIX_LEAVE is detected, out liquidity is put into dictionary for future display
+    no_remix_all = {'inputs': [], 'outputs': [], 'both': []}
     for dir_name in files:
         target_base_path = os.path.join(target_path, dir_name)
         tx_json_file = os.path.join(target_base_path, f'{tx_file}')
         if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
             data = load_json_from_file(tx_json_file)
+
+            # Filter false positives
+            for false_tx in false_cjtxs:
+                if false_tx in data['coinjoins'].keys():
+                    data['coinjoins'].pop(false_tx)
 
             # If required, filter only coinjoins with specific size (whirlpool pools)
             if restrict_to_out_size is not None:
@@ -1509,6 +1519,11 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
             print(new_day_indices)
             for pos in new_day_indices:
                 ax.axvline(x=pos, color='gray', linewidth=1, alpha=0.2)
+
+            # Detect transactions with no remixes on input/out or both
+            no_remix = als.detect_no_inout_remix_txs(data['coinjoins'])
+            for key in no_remix.keys():
+                no_remix_all[key].extend(no_remix[key])
 
             # Plot bars corresponding to different input types
             als.plot_inputs_type_ratio(f'{mix_id} {dir_name}', data, initial_cj_index, ax, analyze_values, normalize_values)
@@ -1593,6 +1608,9 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
     plt.savefig(f'{save_file}.png', dpi=300)
     plt.savefig(f'{save_file}.pdf', dpi=300)
     plt.close()
+
+    # save detected no transactions with no remixes (potentially false positives)
+    save_json_to_file_pretty(os.path.join(target_path, 'no_remix_txs.json'), no_remix_all)
 
 
 def wasabi1_analyse_remixes(mix_id: str, target_path: str):
