@@ -44,6 +44,20 @@ def plot_cj_anonscores(data: dict, title: str, y_label: str, show_txid: bool = F
     ax.set_ylabel(y_label)
     plt.show()
 
+    # Same data, but boxplot
+    max_index = max([len(data[cj_session]) for cj_session in data.keys()])
+    data_cj = [[] for index in range(0, max_index)]
+    for cj_session in data.keys():
+        for index in range(0, max_index):
+            if index < len(data[cj_session]):
+                data_cj[index].append(data[cj_session][index])
+    fig, ax_boxplot = plt.subplots(figsize=(10, 5))
+    ax_boxplot.boxplot(data_cj)
+    ax_boxplot.set_title(title)
+    ax_boxplot.set_xlabel('Number of coinjoins executed')
+    ax_boxplot.set_ylabel(y_label)
+    plt.show()
+
 
 def get_session_label(mix_name: str, session_size_inputs: int, segment: list, session_funding_tx: dict) -> str:
     # Two options for session label
