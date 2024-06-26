@@ -1563,7 +1563,7 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
             padding = 0.02 * (y_range[1] - y_range[0])
             ax.set_ylim(y_range[0] - padding, y_range[1] + padding)
 
-    # Add additional cummulative plots
+    # Add additional cummulative plots for all coinjoin in one
     ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
     ax_index += 1
 
@@ -2000,21 +2000,50 @@ if __name__ == "__main__":
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240215\\'
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240417\\'
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240509\\'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240605\\'
 
     target_path = os.path.join(target_base_path, 'Scanner')
     SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
 
-
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
-        process_and_save_single_interval('wasabi2_select', MIX_PROTOCOL.WASABI2, target_path, '2023-12-20 01:38:07.000',
-                                          '2024-01-31 23:38:07.000',
-                                          'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
-                                          True)
-        wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', False, True)
-        wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', True, False)
+        # wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json',
+        #                     True, False)
+        # exit(42)
+        wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json',
+                            True, False)
+        wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json',
+                            True, True)
+        wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True)
+        exit(42)
+
+        # process_and_save_single_interval('wasabi2_select', MIX_PROTOCOL.WASABI2, target_path, '2024-06-01 00:00:07.000',
+        #                                   '2024-06-07 23:38:07.000',
+        #                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+        #                                   True)
+        #exit(42)
+        wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', False, True)
+        wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', True, False)
+        wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', True, True)
 
         exit(42)
+
+    #
+    #
+    #
+    if ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS:
+        # process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-18 01:38:07.000', '2024-06-06 01:38:07.000',
+        #                            'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, True)
+        process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', '2024-06-06 01:38:07.000',
+                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, True)
+        fix_ww2_for_fdnp_ww1('wasabi2', target_path)  # WW2 requires detection of WW1 inflows as friends
+        #
+        # process_and_save_intervals_filter('wasabi1', MIX_PROTOCOL.WASABI1, target_path, '2018-07-19 01:38:07.000', '2024-05-10 01:38:07.000',
+        #                            'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
+        # process_and_save_intervals_filter('whirlpool', MIX_PROTOCOL.WHIRLPOOL, target_path, '2019-04-17 01:38:07.000', '2024-05-10 01:38:07.000',
+        #                            'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt',
+        #                                   SAVE_BASE_FILES_JSON, False)
+
 
     if PLOT_INTERMIX_FLOWS:
         analyze_mixes_flows(target_path)
@@ -2032,6 +2061,7 @@ if __name__ == "__main__":
 
         wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True)
         wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, False)
+        wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, True)
 
         PLOT_WHIRLPOOL = False
         if PLOT_WHIRLPOOL:
@@ -2071,21 +2101,6 @@ if __name__ == "__main__":
     #
     if ANALYSIS_ADDRESS_REUSE:
         analyze_address_reuse(target_path)
-
-    #
-    #
-    #
-    if ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS:
-        process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-18 01:38:07.000', '2024-05-10 01:38:07.000',
-                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
-        fix_ww2_for_fdnp_ww1('wasabi2', target_path)  # WW2 requires detection of WW1 inflows as friends
-        #
-        # process_and_save_intervals_filter('wasabi1', MIX_PROTOCOL.WASABI1, target_path, '2018-07-19 01:38:07.000', '2024-05-10 01:38:07.000',
-        #                            'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
-        # process_and_save_intervals_filter('whirlpool', MIX_PROTOCOL.WHIRLPOOL, target_path, '2019-04-17 01:38:07.000', '2024-05-10 01:38:07.000',
-        #                            'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt',
-        #                                   SAVE_BASE_FILES_JSON, False)
-
 
     if ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS_DEBUG:
         process_and_save_intervals_filter('wasabi2_feb24', target_path, '2024-02-11 01:38:07.000', '2024-02-11 23:38:07.000',
