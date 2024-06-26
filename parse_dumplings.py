@@ -1578,6 +1578,7 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
     stay_liquidity_btc = [item / SATS_IN_BTC for item in stay_liquidity]
     ax2.plot(changing_liquidity_btc, color='royalblue', alpha=0.6, label='Changing liquidity (cjtx centric)')
     ax2.plot(stay_liquidity_btc, color='royalblue', alpha=0.6, linestyle='--', label='Unmoved liquidity (MIX_STAY)')
+    ax2.plot([a - b for a, b in zip(changing_liquidity_btc, stay_liquidity_btc)], color='blue', alpha=0.6, linestyle=':', label='Changing - STAY')
     ax2.set_ylabel('btc in mix', color='royalblue')
     ax2.tick_params(axis='y', colors='royalblue')
 
