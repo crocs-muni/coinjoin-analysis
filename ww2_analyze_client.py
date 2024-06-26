@@ -33,6 +33,7 @@ def plot_cj_anonscores(data: dict, title: str, y_label: str, show_txid: bool = F
         if not values:
             return 0
         return sum(values) / len(values)
+
     max_index = max([len(data[cj_session]) for cj_session in data.keys()])
     avg_data = [compute_average_at_index(data, index) for index in range(0, max_index)]
     ax.plot(range(1, len(avg_data) + 1), avg_data, label='Average', linestyle='solid',
@@ -144,7 +145,7 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
 
             # If final merge transaction detected (some coinjoin txs already detected, use it)
             if len(session_cjtxs) > 0:
-                assert len(session_funding_tx['outputs'].keys()) == 1, f'Funding tx has unexpecetd numeber of outputs of {len(session_funding_tx['outputs'].keys())}'
+                assert len(session_funding_tx['outputs'].keys()) == 1, f'Funding tx has unexpected numeber of outputs of {len(session_funding_tx['outputs'].keys())}'
                 norm_tx = {'txid': session_funding_tx['tx'], 'label': session_funding_tx['label'], 'broadcast_time': session_funding_tx['datetime'], 'value': session_funding_tx['outputs']['0']['amount']}
                 session_label = get_session_label(mix_name, session_size_inputs, session_cjtxs, norm_tx)
                 cjtxs['sessions'][session_label] = {'coinjoins': session_cjtxs, 'funding_tx': norm_tx}
@@ -170,16 +171,14 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
             print(f'#', end='')
             assert len(cjtx['outputs']) != 0, f'No coins assigned to {cjtx['txid']}'
 
-            # # Get statistics about number of inputs and outputs
-            # num_inputs_list.append(len(cjtx['inputs']))
-            # num_outputs_list.append(len(cjtx['outputs']))
-
             for index in cjtx['outputs']:
                 if cjtx['outputs'][index]['anon_score'] < target_as:
+                    # Print in red - target as not yet reached
                     print("\033[31m" + f' {round(cjtx['outputs'][index]['anon_score'], 1)}' + "\033[0m", end='')
                     # if cjtx['outputs'][index]['anonymityScore'] == 1:
                     #     print(f' {cjtx['outputs'][index]['address']}', end='')
                 else:
+                    # Print in green - target as reached
                     print("\033[32m" + f' {round(cjtx['outputs'][index]['anon_score'], 1)}' + "\033[0m", end='')
 
             # Compute privacy progress
@@ -193,9 +192,10 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
                     effective_as = min(session_coins[address]['anon_score'], target_as)
                     anon_percentage_status += (effective_as / target_as) * (
                             session_coins[address]['value'] / session_size_inputs)
-            WARN_TOO_HIGH_PRIVACY_PROGRESS = False
+            WARN_TOO_HIGH_PRIVACY_PROGRESS = True
             if WARN_TOO_HIGH_PRIVACY_PROGRESS and anon_percentage_status > 1:
-                print(f'Too large anon_percentage_status: {cjtx['tx']}')
+                print(f'\nToo large anon_percentage_status {round(anon_percentage_status * 100, 1)}%: {cjtxid}')
+                anon_percentage_status = 1
             print(f' {round(anon_percentage_status * 100, 1)}%', end='')
             anon_percentage_status_list.append(anon_percentage_status * 100)
 
@@ -263,6 +263,33 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
         stats['num_inputs'][session_label] = num_inputs_list
         stats['num_outputs'][session_label] = num_outputs_list
 
+    # Anonscore gain achieved by given coinjoin (weighted by in/out size)
+    stats['anon_gain'] = {}
+    stats['anon_gain_ratio'] = {}
+    for session_label in cjtxs['sessions'].keys():
+        anon_gain_list = []
+        anon_gain_ratio_list = []
+        input_coins = {}
+        output_coins = {}
+        for cjtxid in cjtxs['sessions'][session_label]['coinjoins'].keys():
+            cjtx = cjtxs['sessions'][session_label]['coinjoins'][cjtxid]
+            for index in cjtx['inputs']:  # Compute anonscore for all inputs
+                input_coins[cjtx['inputs'][index]['address']] = cjtx['inputs'][index]
+            for index in cjtx['outputs']:  # Compute anonscore for all outputs
+                output_coins[cjtx['outputs'][index]['address']] = cjtx['outputs'][index]
+
+            inputs_size_inputs = sum([input_coins[address]['value'] for address in input_coins.keys()])
+            outputs_size_inputs = sum([output_coins[address]['value'] for address in output_coins.keys()])
+            input_anonscore = sum([input_coins[address]['anon_score'] * input_coins[address]['value'] / inputs_size_inputs for address in input_coins.keys()])
+            output_anonscore = sum([output_coins[address]['anon_score'] * output_coins[address]['value'] / outputs_size_inputs for address in output_coins.keys()])
+
+            anonscore_gain = output_anonscore - input_anonscore
+            anon_gain_list.append(anonscore_gain)
+            anon_gain_ratio_list.append(output_anonscore / input_anonscore)
+
+        stats['anon_gain'][session_label] = anon_gain_list
+        stats['anon_gain_ratio'][session_label] = anon_gain_ratio_list
+
     print(f'\n{mix_name}: Total experiments: {len(cjtxs['sessions'][session_label]['coinjoins'].keys())}, total txs={len(history)}, total coins: {len(coins)}')
 
     print("##################################################")
@@ -322,11 +349,12 @@ def analyse_prison_logs(target_path: str):
     # print(f"TXID: {txid}")
     # print(f"Index: {index}")
 
+
 def plot_cj_heatmap(x, y, x_label, y_label, title):
     heatmap_size = (max(x), max(y))
     heatmap, xedges, yedges = np.histogram2d(x, y, bins=heatmap_size)
     plt.figure(figsize=(8, 6))
-    ax = sns.heatmap(heatmap.T, cmap='viridis', annot=True, fmt='.1f', cbar=True)
+    ax = sns.heatmap(heatmap.T, cmap='viridis', annot=True, fmt='.0f', cbar=True)
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
     ax.set_xticks(np.arange(len(xedges) - 1) + 0.5)
@@ -394,6 +422,10 @@ if __name__ == "__main__":
 
     plot_cj_anonscores(all_stats['anon_percentage_status'], f'All wallets, progress towards fully anonymized liquidity (as={experiment_target_anonscore}); total sessions={len(all_stats['anon_percentage_status'])}',
                        'privacy progress (%)')
+    plot_cj_anonscores(all_stats['anon_gain'], f'All wallets, change in anonscore weighted (as={experiment_target_anonscore}); total sessions={len(all_stats['anon_gain'])}',
+                       'anonscore gain (weighted)')
+    plot_cj_anonscores(all_stats['anon_gain_ratio'], f'All wallets, change in anonscore weighted ratio out/in (as={experiment_target_anonscore}); total sessions={len(all_stats['anon_gain'])}',
+                       'anonscore gain (weighted, ratio)')
     plot_cj_anonscores(all_stats['observed_remix_liquidity_ratio_cumul'], f'All wallets, cumullative remix liquidity ratio; total sessions={len(all_stats['observed_remix_liquidity_ratio_cumul'])}',
                        'cummulative remix ratio')
     plot_cj_anonscores(all_stats['skipped_cjtxs'],
@@ -409,7 +441,7 @@ if __name__ == "__main__":
     for session in all_stats['num_inputs'].keys():
         x.extend(all_stats['num_inputs'][session])
         y.extend(all_stats['num_outputs'][session])
-    plot_cj_heatmap(x, y, 'number of inputs', 'number of outputs','Frequency of inputs to outputs pairs')
+    plot_cj_heatmap(x, y, 'number of inputs', 'number of outputs','Occurence frequency of inputs to outputs pairs')
 
     sessions_lengths = [len(all_cjs['sessions'][session]['coinjoins']) for session in all_cjs['sessions'].keys()]
     print(f'Sessions lengths: median={round(np.median(sessions_lengths), 2)}, average={round(np.average(sessions_lengths), 2)}, min={min(sessions_lengths)}, max={max(sessions_lengths)}')
@@ -426,6 +458,14 @@ if __name__ == "__main__":
     progress_100 = len([all_stats['anon_percentage_status'][session][0] for session in all_stats['anon_percentage_status'] if all_stats['anon_percentage_status'][session][0] > 99])
     print(f'Anonscore target of {experiment_target_anonscore} hit already during first coinjoin for {progress_100} of {len(all_stats['anon_percentage_status'])} sessions {round(progress_100 / len(all_stats['anon_percentage_status']) * 100, 2)}%')
 
+    anonscore_gains = list(chain.from_iterable(all_stats['anon_gain'][session] for session in all_stats['anon_gain']))
+    geometric_mean = np.exp(np.mean(np.log(anonscore_gains)))
+    print(f'Anonscore (weighted) gain per one coinjoin: median={round(np.median(anonscore_gains), 2)}, average={round(np.average(anonscore_gains), 2)}, geometric average={round(geometric_mean, 2)}, min={round(min(anonscore_gains), 2)}, max={round(max(anonscore_gains), 2)}')
+
+    anonscore_gains = list(chain.from_iterable(all_stats['anon_gain_ratio'][session] for session in all_stats['anon_gain']))
+    geometric_mean = np.exp(np.mean(np.log(anonscore_gains)))
+    print(f'Anonscore (weighted) ratio gain per one coinjoin: median={round(np.median(anonscore_gains), 2)}, average={round(np.average(anonscore_gains), 2)}, geometric average={round(geometric_mean, 2)}, min={round(min(anonscore_gains), 2)}, max={round(max(anonscore_gains), 2)}')
+
     exit(42)
 
 
@@ -439,5 +479,7 @@ if __name__ == "__main__":
     # TODO: Fraction of coins already above AS=25, yet remixed again
     # TODO: num inputs / outputs
     # TODO: Prison time distribution
+
+    # TODO: Compute remixed liquidity when as limited to 5
 
 
