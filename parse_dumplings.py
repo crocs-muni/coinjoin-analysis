@@ -1614,6 +1614,35 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
     save_json_to_file_pretty(os.path.join(target_path, 'no_remix_txs.json'), no_remix_all)
 
 
+def wasabi_detect_false(target_path: Path, tx_file: str):
+    files = os.listdir(target_path) if os.path.exists(target_path) else print(
+        f'Path {target_path} does not exist')
+
+    # Load false positives
+    fp_file = os.path.join(target_path, 'false_cjtxs.json')
+    false_cjtxs = load_json_from_file(fp_file)
+
+    no_remix_all = {'inputs': [], 'outputs': [], 'both': []}
+    for dir_name in files:
+        target_base_path = os.path.join(target_path, dir_name)
+        tx_json_file = os.path.join(target_base_path, f'{tx_file}')
+        if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
+            data = load_json_from_file(tx_json_file)
+
+            # Filter false positives
+            for false_tx in false_cjtxs:
+                if false_tx in data['coinjoins'].keys():
+                    data['coinjoins'].pop(false_tx)
+
+            # Detect transactions with no remixes on input/out or both
+            no_remix = als.detect_no_inout_remix_txs(data['coinjoins'])
+            for key in no_remix.keys():
+                no_remix_all[key].extend(no_remix[key])
+
+    # save detected no transactions with no remixes (potentially false positives)
+    save_json_to_file_pretty(os.path.join(target_path, 'no_remix_txs.json'), no_remix_all)
+
+
 def wasabi1_analyse_remixes(mix_id: str, target_path: str):
     data = load_json_from_file(os.path.join(target_path, mix_id, 'coinjoin_tx_info.json'))
     als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], [], MIX_PROTOCOL.WASABI1)
