@@ -770,3 +770,47 @@ def parse_client_coinjoin_logs(base_directory):
     print('finished')
 
     return rounds_logs
+
+
+
+
+def remove_link_between_inputs_and_outputs(coinjoins):
+    for txid in coinjoins.keys():
+        for index, input in coinjoins[txid]['inputs'].items():
+            if 'spending_tx' in coinjoins[txid]['inputs'][index]:
+                coinjoins[txid]['inputs'][index].pop('spending_tx')
+        for index, output in coinjoins[txid]['outputs'].items():
+            if 'spend_by_txid' in coinjoins[txid]['outputs'][index]:
+                coinjoins[txid]['outputs'][index].pop('spend_by_txid')
+
+
+def compute_link_between_inputs_and_outputs(coinjoins, sorted_cjs_in_scope):
+    """
+    Compute backward and forward connection between all transactions in sorted_cjs_in_scope list. As a result,
+    for every input, 'spending_tx' record is inserted pointing to transaction and index of its output spent.
+    For every output, 'spend_by_txid' is inserted pointing to transaction and its index which spents this output.
+    :param coinjoins: structure with coinjoins
+    :param sorted_cjs_in_scope: list of cj transactions to be used for calculating connections. Can be subset of
+    coinjoins parameter - in such case, not all inputs and outputs will have 'spending_tx' and spend_by_txid' filled.
+    :return: Updated structure with coinjoins
+    """
+    all_outputs = {}
+    # Obtain all outputs as (address, value) tuples
+    for tx_index in range(0, len(sorted_cjs_in_scope)):
+        txid = sorted_cjs_in_scope[tx_index]
+        for index, output in coinjoins[txid]['outputs'].items():
+            all_outputs[output['address']] = (txid, index, output)  # (txid, output['address'], output['value'])
+
+    # Check if such combination is in inputs of any other transaction in the scope
+    for tx_index in range(0, len(sorted_cjs_in_scope)):
+        txid = sorted_cjs_in_scope[tx_index]
+        for index, input in coinjoins[txid]['inputs'].items():
+            if input['address'] in all_outputs.keys() and input['value'] == all_outputs[input['address']][2]['value']:
+                # we found corresponding input, mark it as used (tuple (txid, index))
+                # Set also corresponding output 'spend_by_txid'
+                target_output = all_outputs[input['address']]
+                coinjoins[target_output[0]]['outputs'][target_output[1]]['spend_by_txid'] = (txid, index)
+                coinjoins[txid]['inputs'][index]['spending_tx'] = (target_output[0], target_output[1])
+
+    return coinjoins
+
