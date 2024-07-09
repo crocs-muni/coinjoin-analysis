@@ -47,7 +47,7 @@ def plot_cj_anonscores(mfig: Multifig, data: dict, title: str, y_label: str, sho
         cj_label = cj_session
         if not show_txid and cj_session.find('txid:'):
             cj_label = cj_label[0:cj_session.find('txid:')]
-        ax.plot(range(1, len(data[cj_session]) + 1), data[cj_session], label=cj_label, linestyle=line_style)
+        ax.plot(range(1, len(data[cj_session]) + 1), data[cj_session], label=cj_label, linestyle=line_style, alpha=0.7)
 
     def compute_average_at_index(lists, index):
         values = [lists[lst][index] for lst in lists.keys() if index < len(lists[lst])]
@@ -479,6 +479,9 @@ if __name__ == "__main__":
     plot_cj_heatmap(mfig, x, y, 'number of inputs', 'number of outputs','Occurence frequency of inputs to outputs pairs')
 
     sessions_lengths = [len(all_cjs['sessions'][session]['coinjoins']) for session in all_cjs['sessions'].keys()]
+    print(f'Total sessions={len(all_cjs['sessions'].keys())}, total coinjoin txs={sum(sessions_lengths)}')
+
+    sessions_lengths = [len(all_cjs['sessions'][session]['coinjoins']) for session in all_cjs['sessions'].keys()]
     print(f'Session lengths (#cjtxs): median={round(np.median(sessions_lengths), 2)}, average={round(np.average(sessions_lengths), 2)}, min={min(sessions_lengths)}, max={max(sessions_lengths)}')
 
     num_skipped = list(chain.from_iterable(all_stats['skipped_cjtxs'][session] for session in all_stats['skipped_cjtxs']))
@@ -486,6 +489,9 @@ if __name__ == "__main__":
 
     remix_ratios = [max(all_stats['observed_remix_liquidity_ratio_cumul'][session]) for session in all_stats['observed_remix_liquidity_ratio_cumul'].keys()]
     print(f'Remix ratios: median={round(np.median(remix_ratios), 2)}, average={round(np.average(remix_ratios), 2)}, min={round(min(remix_ratios), 2)}, max={round(max(remix_ratios), 2)}')
+
+    expected_remix_fraction = round((np.average(remix_ratios) / (np.average(remix_ratios) + 1)) * 100, 2)
+    print(f'Expected remix fraction: {expected_remix_fraction}%')
 
     num_inputs = list(chain.from_iterable(all_stats['num_inputs'][session] for session in all_stats['num_inputs']))
     print(f'Input stats: median={np.median(num_inputs)}, average={round(np.average(num_inputs), 2)}, min={min(num_inputs)}, max={max(num_inputs)}')
