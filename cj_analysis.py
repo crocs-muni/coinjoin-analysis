@@ -120,6 +120,17 @@ def get_ratio_string(numerator, denominator) -> str:
 
 
 def compute_burntime_correction(coinjoins, sorted_cj_time, event_type, in_or_out: str):
+    """
+    Computes minimum observed burn time from all inputs/outputs event_type (typically REMIX).
+    As the broadcasted cjtx can stay in mempool for prolonged period due to fee spike, mining time
+    can be significantly later than broadcast time. In such a case, the cjtx will be seen as having
+    relatively high burntime of its inputs, but that is caused only by delay in mining.
+    :param coinjoins: all coinnjoins structure
+    :param sorted_cj_time: coinjoin txids sorted based on mining time
+    :param event_type: type of input/out to analyze (typically REMIX)
+    :param in_or_out: 'inputs' or 'outputs'
+    :return: dictionary with {txid: min_burntime} corrections
+    """
     burn_time_correction = {}
     for cjtx in sorted_cj_time:
         burn_times = [coinjoins[cjtx['txid']][in_or_out][index].get('burn_time_cjtxs', sys.maxsize) for index in coinjoins[cjtx['txid']][in_or_out].keys()
