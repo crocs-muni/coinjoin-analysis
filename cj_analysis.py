@@ -191,7 +191,7 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
         burn_time_corrections = compute_burntime_correction(coinjoins, sorted_cj_time, MIX_EVENT_TYPE.MIX_REMIX, 'inputs')
 
     event_type = MIX_EVENT_TYPE.MIX_REMIX
-    BURN_TIME_RANGES = [('1-2', 1, 2), ('3-5', 3, 5), ('6-19', 6, 19), ('20+', 20, 1999), ('2000+', 2000, 1000000)]
+    BURN_TIME_RANGES = [('0-0', 0, 0), ('1-2', 1, 2), ('3-5', 3, 5), ('6-19', 6, 19), ('20+', 20, 999), ('1000-1999', 1000, 1999), ('2000+', 2000, 1000000)]
     for range_val in BURN_TIME_RANGES:
         input_types_nums[f'{event_type.name}_{range_val[0]}'] = get_inputs_type_list(coinjoins, sorted_cj_time, event_type, 'inputs', range_val[1], range_val[2], analyze_values, burn_time_corrections)
 
@@ -227,10 +227,12 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     bars = []
     bars.append((input_types[MIX_EVENT_TYPE.MIX_ENTER.name], 'MIX_ENTER', 'blue', 0.9))
     #bars.append((input_types_nums[MIX_EVENT_TYPE.MIX_REMIX.name], 'MIX_REMIX', 'orange', 0.5))
-    bars.append((input_types['MIX_REMIX_1-2'], 'MIX_REMIX_1-2', 'gold', 0.9))
+    bars.append((input_types['MIX_REMIX_0-0'], 'MIX_REMIX_0-0', 'gold', 1))
+    bars.append((input_types['MIX_REMIX_1-2'], 'MIX_REMIX_1-2', 'gold', 0.8))
     bars.append((input_types['MIX_REMIX_3-5'], 'MIX_REMIX_3-5', 'orange', 0.5))
     bars.append((input_types['MIX_REMIX_6-19'], 'MIX_REMIX_6-19', 'moccasin', 0.5))
     bars.append((input_types['MIX_REMIX_20+'], 'MIX_REMIX_20+', 'lightcoral', 0.7))
+    bars.append((input_types['MIX_REMIX_1000-1999'], 'MIX_REMIX_1000-1999', 'sienna', 0.7))
     bars.append((input_types['MIX_REMIX_2000+'], 'MIX_REMIX_2000+', 'sienna', 1))
     bars.append((input_types[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name], 'MIX_REMIX_FRIENDS', 'green', 0.5))
     bars.append((input_types[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name], 'MIX_REMIX_FRIENDS_WW1', 'green', 0.9))
@@ -314,7 +316,7 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudit
     remix_liquidity = []
     curr_remix_liquidity = initial_liquidity[2]  # Take last remix liquidity from previous interval
     for index in range(0, len(mix_stay)):
-        curr_remix_liquidity = curr_remix_liquidity + mix_enter[index] - mix_leave[index] - stay_liquidity[index]  # prev state + new input liquidity - output liqudity -
+        curr_remix_liquidity = curr_remix_liquidity + mix_enter[index] - mix_leave[index] - stay_liquidity[index]  # prev state + new input liquidity - output liqudity
         remix_liquidity.append(curr_remix_liquidity)
 
     # Plot in btc
