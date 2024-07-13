@@ -2104,7 +2104,7 @@ if __name__ == "__main__":
         if CONSIDER_WW1:
             wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False, CORRECT_BURN_TIMES)
             wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True, CORRECT_BURN_TIMES)
-            wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, True, CORRECT_BURN_TIMES)
+            wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, True, CORRECT_BURN_TIMES)
 
         if CONSIDER_WW2:
             wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True, CORRECT_BURN_TIMES)
