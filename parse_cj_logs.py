@@ -654,9 +654,7 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
     analysis_stats = {}
 
     cj_time = []
-    for cjtxid in coinjoins.keys():
-        cj_time.append({'txid':cjtxid, 'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")})
-    sorted_cj_time = sorted(cj_time,  key=lambda x: x['broadcast_time'])
+    sorted_cj_time = als.sort_coinjoins(coinjoins, False)
 
     # Add placeholder for analytics computed
     if 'analysis' not in cjtx_stats.keys():

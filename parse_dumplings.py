@@ -753,7 +753,9 @@ def process_coinjoins(target_path, mix_protocol: MIX_PROTOCOL, mix_filename, pos
     SM.print(f'Dates from {min_date} to {max_date}')
 
     SM.print('### Simple chain analysis')
-    als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], data.get('premix', {}), mix_protocol)
+    cj_relative_order = als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], data.get('premix', {}), mix_protocol)
+    save_json_to_file_pretty(os.path.join(target_path, f'cj_relative_order.json'), cj_relative_order)
+
     analyze_postmix_spends(data)
     analyze_premix_spends(data)
     analyze_coinjoin_blocks(data)
@@ -1266,9 +1268,7 @@ def plot_analyze_liquidity(mix_id: str, cjtxs):
     plt.figure()
 
     short_exp_name = 'remix'
-    cj_time = [{'txid':cjtxid, 'broadcast_time': precomp_datetime.strptime(cjtxs[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in cjtxs.keys()]
-    sorted_cj_time = sorted(cj_time,  key=lambda x: x['broadcast_time'])
-
+    sorted_cj_time = als.sort_coinjoins(cjtxs, als.SORT_COINJOINS_BY_RELATIVE_ORDER)
     
     #
     # num_unmixed_utxos_per_cj = [len(cjtxs[cjtx['txid']]['analysis2']['unmixed_utxos_in_wallets']) for cjtx in sorted_cj_time]
@@ -1368,9 +1368,7 @@ def wasabi1_analyze_fees(mix_id: str, cjtxs):
 
 def analyze_mining_fees(mix_id: str, data: dict):
     cjtxs = data['coinjoins']
-    cj_time = [{'txid': cjtxid, 'broadcast_time': precomp_datetime.strptime(cjtxs[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")}
-        for cjtxid in cjtxs.keys()]
-    sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
+    sorted_cj_time = als.sort_coinjoins(cjtxs, als.SORT_COINJOINS_BY_RELATIVE_ORDER)
 
     cjtxs_mining_fee = []
     for index in sorted_cj_time:
@@ -1420,9 +1418,7 @@ def analyze_coordinator_fees(mix_id: str, data, mix_protocol):
 
 def wasabi_analyze_coordinator_fees(mix_id: str, cjtxs: dict):
     only_cjtxs = cjtxs['coinjoins']
-    cj_time = [{'txid': cjtxid, 'broadcast_time': precomp_datetime.strptime(only_cjtxs[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")}
-        for cjtxid in only_cjtxs.keys()]
-    sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
+    sorted_cj_time = als.sort_coinjoins(only_cjtxs, als.SORT_COINJOINS_BY_RELATIVE_ORDER)
 
     PLEBS_SATS_LIMIT = 1000000
     WW2_COORD_FEE = 0.003
@@ -2073,6 +2069,9 @@ def analyze_extramix_flows(experiment_id: str, target_path: Path, mix1_precomp_v
 
 
 if __name__ == "__main__":
+    SORT_COINJOINS_BY_RELATIVE_ORDER = True
+    als.SORT_COINJOINS_BY_RELATIVE_ORDER = SORT_COINJOINS_BY_RELATIVE_ORDER
+
     FULL_TX_SET = False
     ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
     DETECT_FALSE_POSITIVES = False

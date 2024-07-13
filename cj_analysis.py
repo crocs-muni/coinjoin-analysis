@@ -9,6 +9,8 @@ import re
 
 SATS_IN_BTC = 100000000
 
+SORT_COINJOINS_BY_RELATIVE_ORDER = True  # If True then relative ordering of transactions based on remix connections
+
 
 class CJ_LOG_TYPES(Enum):
     ROUND_STARTED = 'ROUND_STARTED'
@@ -168,11 +170,8 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     :return:
     """
     coinjoins = data['coinjoins']
-    cj_time = [{'txid': cjtxid, 'broadcast_time': precomp_datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
-    sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
+    sorted_cj_time = sort_coinjoins(coinjoins, SORT_COINJOINS_BY_RELATIVE_ORDER)
     #sorted_cj_time = sorted_cj_time[0:500]
-
-    #no_remix = detect_no_inout_remix_txs(coinjoins)
 
     input_types_nums = {}
     for event_type in MIX_EVENT_TYPE:
@@ -262,8 +261,7 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
 
 def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudity: dict, initial_cj_index: int, ax):
     coinjoins = data['coinjoins']
-    cj_time = [{'txid': cjtxid, 'broadcast_time': precomp_datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
-    sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
+    sorted_cj_time = sort_coinjoins(coinjoins, SORT_COINJOINS_BY_RELATIVE_ORDER)
 
     # New fresh liquidity
     mix_enter = [sum([coinjoins[cjtx['txid']]['inputs'][index]['value'] for index in coinjoins[cjtx['txid']]['inputs'].keys()
@@ -336,10 +334,7 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudit
 
 def plot_mining_fee_rates(mix_id: str, data: dict, mining_fees: dict, ax):
     coinjoins = data['coinjoins']
-    cj_time = [{'txid': cjtxid,
-                'broadcast_time': precomp_datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for
-               cjtxid in coinjoins.keys()]
-    sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
+    sorted_cj_time = sort_coinjoins(coinjoins, False)  # Take real mining time as mining fee are more relevant to it
 
     # For each coinjoin find the closest fee rate record and plot it
     fee_rates = []
@@ -361,10 +356,7 @@ def plot_mining_fee_rates(mix_id: str, data: dict, mining_fees: dict, ax):
 
 def plot_num_wallets(mix_id: str, data: dict, ax):
     coinjoins = data['coinjoins']
-    cj_time = [{'txid': cjtxid,
-                'broadcast_time': precomp_datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for
-               cjtxid in coinjoins.keys()]
-    sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
+    sorted_cj_time = sort_coinjoins(coinjoins, SORT_COINJOINS_BY_RELATIVE_ORDER)
 
     # For each coinjoin find the closest fee rate record and plot it
     AVG_NUM_INPUTS = 1.765  # value taken from simulations for all distributions
@@ -380,6 +372,27 @@ def plot_num_wallets(mix_id: str, data: dict, ax):
         ax.set_ylabel('Estimated number of active wallets', color='green', fontsize='6')
 
     return num_wallets
+
+
+def compute_cjtxs_relative_ordering(coinjoins, sorted_cj_times):
+    coinjoins_relative_distance = {}
+    # 1. Initialize relative distance from first coinjoin tx to 0
+    for i in range(0, len(sorted_cj_times)):
+        coinjoins_relative_distance[sorted_cj_times[i]['txid']] = 0
+
+    # Process from very first coinjoin, update relative distance to be higher (+1) than the distance of maximal distance of any of the inputs
+    for i in range(1, len(sorted_cj_times)):  # skip the very first transaction
+        txid = sorted_cj_times[i]['txid']
+        prev_distances = []
+        for input in coinjoins[txid]['inputs']:
+            prev_tx_str = coinjoins[txid]['inputs'][input].get('spending_tx', None)
+            if prev_tx_str:
+                prev_tx, prev_tx_index = extract_txid_from_inout_string(prev_tx_str)
+                if prev_tx in coinjoins_relative_distance.keys():  # Consider only inputs from previous mixes
+                    prev_distances.append(coinjoins_relative_distance[prev_tx])
+        coinjoins_relative_distance[txid] = max(prev_distances) + 1 if len(prev_distances) > 0 else 0
+
+    return coinjoins_relative_distance
 
 
 def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins={}, ww1_postmix_spend={}):
@@ -404,15 +417,23 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
     total_utxos = 0
     broadcast_times = {cjtx: precomp_datetime.strptime(coinjoins[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for cjtx in coinjoins.keys()}
     broadcast_times.update({tx: precomp_datetime.strptime(postmix_spend[tx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for tx in postmix_spend.keys()})
-    # Sort coinjoins based on time
+    # Sort coinjoins based on mining time
     cj_time = [{'txid': cjtxid, 'broadcast_time': precomp_datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
     sorted_cj_times = sorted(cj_time, key=lambda x: x['broadcast_time'])
-    #coinjoins_list = [cj['txid'] for cj in sorted_cj_times]
-    coinjoins_index = {}  # Precomputed mapping of txid to index for fast buntime computation
+
+    # Precomputed mapping of txid to index for fast burntime computation
+    coinjoins_index = {}
     for i in range(0, len(sorted_cj_times)):
         coinjoins_index[sorted_cj_times[i]['txid']] = i
 
+    # Compute sorting of coinjoins based on their interconnections
+    # Assumptions made:
+    #   1. At least one input is from freshest previous coinjoin (given large number of wallets and remixes, that is expected case)
+    #   2. Output from previous coinjoin X can be registered to next coinjoin as input only after X is mined to block (enforced by coordinator)
+    coinjoins_relative_order = compute_cjtxs_relative_ordering(coinjoins, sorted_cj_times)
+
     for cjtx in coinjoins:
+        coinjoins[cjtx]['relative_order'] = coinjoins_relative_order[cjtx]  # Save computed relative order
         if coinjoins_index[cjtx] % 10000 == 0:
             print(f'  {coinjoins_index[cjtx]} coinjoins processed')
         for input in coinjoins[cjtx]['inputs']:
@@ -441,7 +462,9 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
                 else:  # Direct mix to mix transaction
                     coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX.name
                     coinjoins[cjtx]['inputs'][input]['burn_time'] = round((broadcast_times[cjtx] - broadcast_times[spending_tx]).total_seconds(), 0)
-                    coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] = coinjoins_index[cjtx] - coinjoins_index[spending_tx]
+                    coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs_as_mined'] = coinjoins_index[cjtx] - coinjoins_index[spending_tx]
+                    coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] = coinjoins_relative_order[cjtx] - coinjoins_relative_order[spending_tx]
+                    assert coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] >= 0, 'Invalid burn time for relative order'
             else:
                 total_mix_entering += 1
                 coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_ENTER.name
@@ -467,8 +490,10 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
                 else:
                     # Mix spend: The output is spent by next coinjoin tx => stays in mix
                     coinjoins[cjtx]['outputs'][output]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX.name
-                    coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] = coinjoins_index[spend_by_tx] - coinjoins_index[cjtx]
                     coinjoins[cjtx]['outputs'][output]['burn_time'] = round((broadcast_times[spend_by_tx] - broadcast_times[cjtx]).total_seconds(), 0)
+                    coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs_as_mined'] = coinjoins_index[spend_by_tx] - coinjoins_index[cjtx]
+                    coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] = coinjoins_relative_order[spend_by_tx] - coinjoins_relative_order[cjtx]
+                    assert coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] >= 0, 'Invalid burn time for relative order'
 
     SM.print(f'  {get_ratio_string(total_mix_entering, total_inputs)} Inputs entering mix / total inputs used by mix transactions')
     SM.print(f'  {get_ratio_string(total_mix_friends, total_inputs)} Friends inputs re-entering mix / total inputs used by mix transactions')
@@ -477,6 +502,8 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
     SM.print(f'  {sum(total_mix_staying) / SATS_IN_BTC} btc, total value staying in mix')
 
     logging.debug('analyze_input_out_liquidity() finished')
+
+    return coinjoins_relative_order
 
 
 def compute_averages(lst, window_size):
@@ -825,3 +852,23 @@ def compute_link_between_inputs_and_outputs(coinjoins, sorted_cjs_in_scope):
 
     return coinjoins
 
+
+def sort_coinjoins(cjtxs: dict, sort_by_order: bool = False):
+    """
+    Sort coinjoins based on time of mining or relative order
+    :param cjtxs: coinjoins dictionary
+    :param sort_by_order: if true, then sorted by relative order, by time otherwise
+    :return: sorted list of cjtx ids
+    """
+    if sort_by_order:
+        # Sort based on relative order
+        cj_order = [{'txid': cjtxid, 'relative_order': cjtxs[cjtxid]['relative_order']} for cjtxid in cjtxs.keys()]
+        sorted_cj_order = sorted(cj_order, key=lambda x: x['relative_order'])
+        return sorted_cj_order
+    else:
+        # sort based on broadcast/mining time
+        cj_time = [{'txid': cjtxid, 'broadcast_time': precomp_datetime.strptime(cjtxs[cjtxid]['broadcast_time'],
+                                                                                "%Y-%m-%d %H:%M:%S.%f")}
+                   for cjtxid in cjtxs.keys()]
+        sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
+        return sorted_cj_time
