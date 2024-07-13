@@ -809,9 +809,9 @@ def process_and_save_coinjoins(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
     events = filter_liquidity_events(data)
     save_json_to_file_pretty(os.path.join(target_save_path, f'{mix_id}_events.json'), events)
 
-    # Visualize coinjoins
-    if len(data['coinjoins']) > 0:
-        visualize_coinjoins(data, events, target_save_path, mix_filename)
+    # # Visualize coinjoins
+    # if len(data['coinjoins']) > 0:
+    #     visualize_coinjoins(data, events, target_save_path, mix_filename)
 
     return data
 
@@ -880,9 +880,10 @@ def process_interval(mix_id: str, data: dict, mix_filename: str, premix_filename
         # WW1, WW2
         extract_inputs_distribution(mix_id, target_path, mix_filename, interval_data['coinjoins'], True)
 
-    # Visualize coinjoins
-    if len(interval_data['coinjoins']) > 0:
-        visualize_coinjoins(interval_data, events, interval_path, os.path.basename(interval_path))
+    # Moved under separate command
+    # # Visualize coinjoins
+    # if len(interval_data['coinjoins']) > 0:
+    #     visualize_coinjoins(interval_data, events, interval_path, os.path.basename(interval_path))
 
 
 def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: os.path, start_date: str, stop_date: str, mix_filename: str,
@@ -933,6 +934,63 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
 
     while current_stop_date_str <= last_date_str:
         process_interval(mix_id, data, mix_filename, premix_filename, target_save_path, last_stop_date_str, current_stop_date_str)
+
+        # Move to the next month
+        last_stop_date_str = current_stop_date_str
+
+        current_stop_date = current_stop_date + timedelta(days=32)
+        current_stop_date = datetime(current_stop_date.year, current_stop_date.month, 1)
+        current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def visualize_interval(mix_id: str, data: dict, mix_filename: str, premix_filename: str, target_save_path: str, last_stop_date_str: str, current_stop_date_str: str):
+    logging.info(f'Processing interval {last_stop_date_str} - {current_stop_date_str}')
+
+    interval_path = os.path.join(target_save_path, f'{last_stop_date_str.replace(':', '-')}--{current_stop_date_str.replace(':', '-')}_unknown-static-100-1utxo')
+    assert os.path.exists(interval_path), f'{interval_path} does not exist'
+
+    interval_data = load_json_from_file(os.path.join(interval_path, f'coinjoin_tx_info.json'))
+    events = filter_liquidity_events(interval_data)
+
+    # Visualize coinjoins
+    if len(interval_data['coinjoins']) > 0:
+        visualize_coinjoins(interval_data, events, interval_path, os.path.basename(interval_path))
+
+
+def visualize_intervals(mix_id: str, target_path: os.path, start_date: str, stop_date: str):
+    # Create directory structure with files split per month (around 1000 subsequent coinjoins)
+    # Load all coinjoins first, then filter based on intervals
+    target_save_path = os.path.join(target_path, mix_id)
+    if not os.path.exists(target_save_path):
+        os.makedirs(target_save_path.replace('\\', '/'))
+
+    # Load base files from already stored json
+    logging.info(f'Loading {target_save_path}/coinjoin_tx_info.json ...')
+
+    data = load_json_from_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'))
+
+    logging.info(f'{target_save_path}/coinjoin_tx_info.json loaded with {len(data['coinjoins'])} conjoins')
+
+    # Find first day of a month when first coinjoin occured
+    start_date_obj = precomp_datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S.%f")
+    start_date = datetime(start_date_obj.year, start_date_obj.month, 1)
+
+    # Month After the last coinjoin occured
+    last_date_obj = precomp_datetime.strptime(stop_date, "%Y-%m-%d %H:%M:%S.%f")
+    last_date_obj = last_date_obj + timedelta(days=32)
+    last_date_str = last_date_obj.strftime("%Y-%m-%d %H:%M:%S")
+
+    # Previously used stop date (will become start date for next interval)
+    last_stop_date = start_date
+    last_stop_date_str = last_stop_date.strftime("%Y-%m-%d %H:%M:%S")
+
+    # Current stop date
+    current_stop_date = start_date + timedelta(days=32)
+    current_stop_date = datetime(current_stop_date.year, current_stop_date.month, 1)
+    current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M:%S")
+
+    while current_stop_date_str <= last_date_str:
+        visualize_interval(mix_id, data, target_save_path, last_stop_date_str, current_stop_date_str)
 
         # Move to the next month
         last_stop_date_str = current_stop_date_str
@@ -2027,6 +2085,7 @@ if __name__ == "__main__":
     ANALYSIS_BURN_TIME = False
     PLOT_INTERMIX_FLOWS = False
     CORRECT_BURN_TIMES = False
+    VISUALIZE_ALL_COINJOINS_INTERVALS = False
 
     # Limit analysis only to specific coinjoin type
     CONSIDER_WW1 = False
@@ -2080,8 +2139,18 @@ if __name__ == "__main__":
 
         if CONSIDER_WW2:
             process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', interval_stop_date,
-                                       'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, True)
+                                       'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
             fix_ww2_for_fdnp_ww1('wasabi2', target_path)  # WW2 requires detection of WW1 inflows as friends
+
+    if VISUALIZE_ALL_COINJOINS_INTERVALS:
+        if CONSIDER_WHIRLPOOL:
+            visualize_intervals('whirlpool', target_path, '2019-04-17 01:38:07.000', interval_stop_date)
+
+        if CONSIDER_WW1:
+            visualize_intervals('wasabi1', target_path, '2018-07-19 01:38:07.000', interval_stop_date)
+
+        if CONSIDER_WW2:
+            visualize_intervals('wasabi2', target_path, '2022-06-01 00:00:07.000', interval_stop_date)
 
     if DETECT_FALSE_POSITIVES:
         if CONSIDER_WW1:
