@@ -1509,7 +1509,7 @@ def wasabi2_analyse_remixes(mix_id: str, target_path: str):
     burntime_histogram(mix_id, data)
 
 
-def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_values: bool = True, normalize_values: bool = True, correct_burntimes: bool = False, restrict_to_out_size: int = None):
+def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_values: bool = True, normalize_values: bool = True, restrict_to_out_size: int = None):
     files = os.listdir(target_path) if os.path.exists(target_path) else print(
         f'Path {target_path} does not exist')
 
@@ -1580,7 +1580,7 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
                 no_remix_all[key].extend(no_remix[key])
 
             # Plot bars corresponding to different input types
-            als.plot_inputs_type_ratio(f'{mix_id} {dir_name}', data, initial_cj_index, ax, analyze_values, normalize_values, correct_burntimes)
+            als.plot_inputs_type_ratio(f'{mix_id} {dir_name}', data, initial_cj_index, ax, analyze_values, normalize_values)
 
             # Add current total mix liquidity into the same graph
             ax2 = ax.twinx()
@@ -2069,6 +2069,9 @@ def analyze_extramix_flows(experiment_id: str, target_path: Path, mix1_precomp_v
 
 
 if __name__ == "__main__":
+    # Sorting strategy for coinjoins in time.
+    # If False, coinjoins are sorted using 'broadcast_time' (which is equal to mining_time for on-chain cjtxs where we lack real broadcast time)
+    # If True, then relative ordering based on connections in graph formed by remix inputs/outputs is used
     SORT_COINJOINS_BY_RELATIVE_ORDER = True
     als.SORT_COINJOINS_BY_RELATIVE_ORDER = SORT_COINJOINS_BY_RELATIVE_ORDER
 
@@ -2083,7 +2086,6 @@ if __name__ == "__main__":
     ANALYSIS_INPUTS_DISTRIBUTION = False  # OK
     ANALYSIS_BURN_TIME = False
     PLOT_INTERMIX_FLOWS = False
-    CORRECT_BURN_TIMES = False
     VISUALIZE_ALL_COINJOINS_INTERVALS = False
 
     # Limit analysis only to specific coinjoin type
@@ -2100,7 +2102,7 @@ if __name__ == "__main__":
 
     target_path = os.path.join(target_base_path, 'Scanner')
     SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}, '
-             f'CORRECT_BURN_TIMES={CORRECT_BURN_TIMES}')
+             f'SORT_COINJOINS_BY_RELATIVE_ORDER={SORT_COINJOINS_BY_RELATIVE_ORDER}')
 
     DEBUG = False
     if DEBUG:
@@ -2108,10 +2110,10 @@ if __name__ == "__main__":
         #                     True, False)
         # exit(42)
         wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json',
-                            True, False, CORRECT_BURN_TIMES)
+                            True, False)
         wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json',
-                            True, True, CORRECT_BURN_TIMES)
-        wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True, CORRECT_BURN_TIMES)
+                            True, True)
+        wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True)
         exit(42)
 
         # process_and_save_single_interval('wasabi2_select', MIX_PROTOCOL.WASABI2, target_path, '2024-06-01 00:00:07.000',
@@ -2170,29 +2172,29 @@ if __name__ == "__main__":
         # exit(42)
 
         if CONSIDER_WW1:
-            wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False, CORRECT_BURN_TIMES)
-            wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True, CORRECT_BURN_TIMES)
-            wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, True, CORRECT_BURN_TIMES)
+            wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False)
+            wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True)
+            wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, True)
 
         if CONSIDER_WW2:
-            wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True, CORRECT_BURN_TIMES)
-            wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, False, CORRECT_BURN_TIMES)
-            wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, True, CORRECT_BURN_TIMES)
+            wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True)
+            wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, False)
+            wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, True)
 
         if CONSIDER_WHIRLPOOL:
-            wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, False, CORRECT_BURN_TIMES)
-            wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', False, True, CORRECT_BURN_TIMES)
-            wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, True, CORRECT_BURN_TIMES)
+            wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, False)
+            wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', False, True)
+            wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, True)
 
             # Plotting remixes separately for different Whirlpool pools
             wasabi_plot_remixes('whirlpool_5M', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
-                                True, False, CORRECT_BURN_TIMES, 5000000)
+                                True, False, 5000000)
             wasabi_plot_remixes('whirlpool_100k', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
-                                True, False, CORRECT_BURN_TIMES, 100000)
+                                True, False, 100000)
             wasabi_plot_remixes('whirlpool_1M', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
-                                True, False, CORRECT_BURN_TIMES, 1000000)
+                                True, False, 1000000)
             wasabi_plot_remixes('whirlpool_50M', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
-                                True, False, CORRECT_BURN_TIMES, 50000000)
+                                True, False, 50000000)
 
         # Less beneficial visualizations
         # wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, False)

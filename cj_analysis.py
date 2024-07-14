@@ -121,46 +121,20 @@ def get_ratio_string(numerator, denominator) -> str:
         return f'{numerator}/{0} (0%)'
 
 
-def compute_burntime_correction(coinjoins, sorted_cj_time, event_type, in_or_out: str):
-    """
-    Computes minimum observed burn time from all inputs/outputs event_type (typically REMIX).
-    As the broadcasted cjtx can stay in mempool for prolonged period due to fee spike, mining time
-    can be significantly later than broadcast time. In such a case, the cjtx will be seen as having
-    relatively high burntime of its inputs, but that is caused only by delay in mining.
-    :param coinjoins: all coinnjoins structure
-    :param sorted_cj_time: coinjoin txids sorted based on mining time
-    :param event_type: type of input/out to analyze (typically REMIX)
-    :param in_or_out: 'inputs' or 'outputs'
-    :return: dictionary with {txid: min_burntime} corrections
-    """
-    burn_time_correction = {}
-    for cjtx in sorted_cj_time:
-        burn_times = [coinjoins[cjtx['txid']][in_or_out][index].get('burn_time_cjtxs', sys.maxsize) for index in coinjoins[cjtx['txid']][in_or_out].keys()
-            if coinjoins[cjtx['txid']][in_or_out][index]['mix_event_type'] == event_type.name]
-        if len(burn_times) == 0:
-            burn_time_correction[cjtx['txid']] = 0
-        else:
-            burn_time_correction[cjtx['txid']] = min(burn_times) - 1
-        if burn_time_correction[cjtx['txid']] < 0:
-            print(f'Invalid burn time correction of {burn_time_correction[cjtx['txid']]} for {cjtx['txid']}')
-            burn_time_correction[cjtx['txid']] = 0
-    return burn_time_correction
-
-
-def get_inputs_type_list(coinjoins, sorted_cj_time, event_type, in_or_out: str, burn_time_from, burn_time_to, analyze_values, burn_time_correction: dict):
+def get_inputs_type_list(coinjoins, sorted_cj_time, event_type, in_or_out: str, burn_time_from, burn_time_to, analyze_values):
     if analyze_values:
         return [sum([coinjoins[cjtx['txid']][in_or_out][index]['value'] for index in coinjoins[cjtx['txid']][in_or_out].keys()
                      if coinjoins[cjtx['txid']][in_or_out][index]['mix_event_type'] == event_type.name and
-                     (coinjoins[cjtx['txid']][in_or_out][index].get('burn_time_cjtxs', -1) - burn_time_correction.get(cjtx['txid'], 0)) in range(burn_time_from, burn_time_to + 1)])
+                     coinjoins[cjtx['txid']][in_or_out][index].get('burn_time_cjtxs', -1) in range(burn_time_from, burn_time_to + 1)])
             for cjtx in sorted_cj_time]
     else:
         return [sum([1 for index in coinjoins[cjtx['txid']][in_or_out].keys()
                      if coinjoins[cjtx['txid']][in_or_out][index]['mix_event_type'] == event_type.name and
-                     (coinjoins[cjtx['txid']][in_or_out][index].get('burn_time_cjtxs', -1) - burn_time_correction.get(cjtx['txid'], 0)) in range(burn_time_from, burn_time_to + 1)])
+                     coinjoins[cjtx['txid']][in_or_out][index].get('burn_time_cjtxs', -1) in range(burn_time_from, burn_time_to + 1)])
             for cjtx in sorted_cj_time]
 
 
-def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, analyze_values: bool, normalize_values: bool, correct_burntimes: bool):
+def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, analyze_values: bool, normalize_values: bool):
     """
     Ratio between various types of inputs (fresh, remixed, remixed_friends)
     :param mix_id:
@@ -186,14 +160,10 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
                                         if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == event_type.name])
                                    for cjtx in sorted_cj_time]
 
-    burn_time_corrections = {}
-    if correct_burntimes:
-        burn_time_corrections = compute_burntime_correction(coinjoins, sorted_cj_time, MIX_EVENT_TYPE.MIX_REMIX, 'inputs')
-
     event_type = MIX_EVENT_TYPE.MIX_REMIX
     BURN_TIME_RANGES = [('0-0', 0, 0), ('1-2', 1, 2), ('3-5', 3, 5), ('6-19', 6, 19), ('20+', 20, 999), ('1000-1999', 1000, 1999), ('2000+', 2000, 1000000)]
     for range_val in BURN_TIME_RANGES:
-        input_types_nums[f'{event_type.name}_{range_val[0]}'] = get_inputs_type_list(coinjoins, sorted_cj_time, event_type, 'inputs', range_val[1], range_val[2], analyze_values, burn_time_corrections)
+        input_types_nums[f'{event_type.name}_{range_val[0]}'] = get_inputs_type_list(coinjoins, sorted_cj_time, event_type, 'inputs', range_val[1], range_val[2], analyze_values)
 
     short_exp_name = mix_id
 
