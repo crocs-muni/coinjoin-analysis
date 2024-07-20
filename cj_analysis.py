@@ -36,6 +36,7 @@ class CJ_ALICE_TYPES(Enum):
 
 class PRECOMP_STRPTIME():
     precomp_strptime = {}
+    precomp_strftime = {}
 
     def strptime(self, datestr: str, datestr_format: str) -> datetime:
         if datestr not in self.precomp_strptime:
@@ -46,6 +47,11 @@ class PRECOMP_STRPTIME():
         if datestr not in self.precomp_strptime:
             self.precomp_strptime[datestr] = datetime.fromisoformat(datestr)
         return self.precomp_strptime[datestr]
+
+    def strftime(self, dt: datetime) -> str:
+        if dt not in self.precomp_strftime:
+            self.precomp_strftime[dt] = dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+        return self.precomp_strftime[dt]
 
 
 precomp_datetime = PRECOMP_STRPTIME()
@@ -346,8 +352,11 @@ def plot_num_wallets(mix_id: str, data: dict, ax):
     return num_wallets
 
 
-def compute_cjtxs_relative_ordering(coinjoins, sorted_cj_times):
+def compute_cjtxs_relative_ordering(coinjoins):
     coinjoins_relative_distance = {}
+    cj_time = [{'txid': cjtxid, 'broadcast_time': precomp_datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
+    sorted_cj_times = sorted(cj_time, key=lambda x: x['broadcast_time'])
+
     # 1. Initialize relative distance from first coinjoin tx to 0
     for i in range(0, len(sorted_cj_times)):
         coinjoins_relative_distance[sorted_cj_times[i]['txid']] = 0
@@ -402,7 +411,7 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
     # Assumptions made:
     #   1. At least one input is from freshest previous coinjoin (given large number of wallets and remixes, that is expected case)
     #   2. Output from previous coinjoin X can be registered to next coinjoin as input only after X is mined to block (enforced by coordinator)
-    coinjoins_relative_order = compute_cjtxs_relative_ordering(coinjoins, sorted_cj_times)
+    coinjoins_relative_order = compute_cjtxs_relative_ordering(coinjoins)
 
     for cjtx in coinjoins:
         coinjoins[cjtx]['relative_order'] = coinjoins_relative_order[cjtx]  # Save computed relative order
