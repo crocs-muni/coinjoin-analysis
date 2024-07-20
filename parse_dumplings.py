@@ -754,7 +754,6 @@ def process_coinjoins(target_path, mix_protocol: MIX_PROTOCOL, mix_filename, pos
 
     SM.print('### Simple chain analysis')
     cj_relative_order = als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], data.get('premix', {}), mix_protocol)
-    save_json_to_file_pretty(os.path.join(target_path, f'cj_relative_order.json'), cj_relative_order)
 
     analyze_postmix_spends(data)
     analyze_premix_spends(data)
@@ -802,7 +801,8 @@ def process_and_save_coinjoins(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
     if not target_save_path:
         target_save_path = target_path
     # Process and save full conjoin information
-    data = process_coinjoins(target_path, mix_protocol, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
+    data, cj_relative_order = process_coinjoins(target_path, mix_protocol, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
+    save_json_to_file_pretty(os.path.join(target_save_path, f'cj_relative_order.json'), cj_relative_order)
 
     if SAVE_BASE_FILES_JSON:
         save_json_to_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'), data)
@@ -1502,14 +1502,15 @@ def whirlpool_analyse_remixes(mix_id: str, target_path: str):
 
 def wasabi2_analyse_remixes(mix_id: str, target_path: str):
     data = load_json_from_file(os.path.join(target_path, mix_id, 'coinjoin_tx_info.json'))
-    als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], [], MIX_PROTOCOL.WASABI2)
+    cj_relative_order = als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], [], MIX_PROTOCOL.WASABI2)
+    save_json_to_file_pretty(os.path.join(target_path, mix_id, f'cj_relative_order.json'), cj_relative_order)
 
     wasabi2_analyze_fees(mix_id, data)
     inputs_value_burntime_heatmap(mix_id, data)
     burntime_histogram(mix_id, data)
 
 
-def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_values: bool = True, normalize_values: bool = True, restrict_to_out_size: int = None):
+def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_values: bool = True, normalize_values: bool = True, restrict_to_out_size: int = None, restrict_to_in_size = None):
     files = os.listdir(target_path) if os.path.exists(target_path) else print(
         f'Path {target_path} does not exist')
 
@@ -1540,9 +1541,15 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
     initial_cj_index = 0
     time_liquidity = {}  # If MIX_LEAVE is detected, out liquidity is put into dictionary for future display
     no_remix_all = {'inputs': [], 'outputs': [], 'both': []}
+
+    prev_year = files[0][0:4]
+    #new_month_indices = [('placeholder', 0, files[0][0:7])]  # Start with the first index
+    new_month_indices = []
+    next_month_index = 0
     for dir_name in files:
         target_base_path = os.path.join(target_path, dir_name)
         tx_json_file = os.path.join(target_base_path, f'{tx_file}')
+        current_year = dir_name[0:4]
         if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
             data = load_json_from_file(tx_json_file)
 
@@ -1560,19 +1567,25 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
                     print(f'No coinjoins of specified value {restrict_to_out_size/100000000} found in given interval, skipping')
                     continue
 
-            #print(f'add_subplot({NUM_ROWS}, {NUM_COLUMNS}, {ax_index}) ')
             ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
             ax_index += 1
 
             # Plot lines as separators corresponding to days
             dates = [precomp_datetime.strptime(data['coinjoins'][cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for cjtx in data['coinjoins'].keys()]
-            new_day_indices = [0]  # Start with the first index
+            new_day_indices = [('day', 0)]  # Start with the first index
             for i in range(1, len(dates)):
                 if dates[i].date() != dates[i - 1].date():
-                    new_day_indices.append(i)
+                    new_day_indices.append(('day', i))
             print(new_day_indices)
             for pos in new_day_indices:
-                ax.axvline(x=pos, color='gray', linewidth=1, alpha=0.2)
+                ax.axvline(x=pos[1], color='gray', linewidth=1, alpha=0.2)
+
+            # Store index of coinjoins within this month (to be printed later in cummulative graph)
+            if current_year == prev_year:
+                new_month_indices.append(('month', next_month_index, dir_name[0:7]))
+            else:
+                new_month_indices.append(('year', next_month_index, dir_name[0:7]))
+            next_month_index += len(data['coinjoins'])  # Store index of start fo next month (right after last index of current month)
 
             # Detect transactions with no remixes on input/out or both
             no_remix = als.detect_no_inout_remix_txs(data['coinjoins'])
@@ -1580,7 +1593,7 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
                 no_remix_all[key].extend(no_remix[key])
 
             # Plot bars corresponding to different input types
-            als.plot_inputs_type_ratio(f'{mix_id} {dir_name}', data, initial_cj_index, ax, analyze_values, normalize_values)
+            als.plot_inputs_type_ratio(f'{mix_id} {dir_name}', data, initial_cj_index, ax, analyze_values, normalize_values, restrict_to_in_size)
 
             # Add current total mix liquidity into the same graph
             ax2 = ax.twinx()
@@ -1617,49 +1630,86 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
             padding = 0.02 * (y_range[1] - y_range[0])
             ax.set_ylim(y_range[0] - padding, y_range[1] + padding)
 
+        prev_year = current_year
+
+    def plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, stay_liquidity, mining_fee_rate):
+        # Plot mining fee rate
+        ax.plot(mining_fee_rate, color='gray', alpha=0.3, linewidth=1, linestyle=':', label='Mining fee (90th percentil)')
+        ax.tick_params(axis='y', colors='gray', labelsize=6)
+        ax.set_ylabel('Mining fee rate sats/vB (90th percentil)', color='gray', fontsize='6')
+        #ax.set_xlabel('Coinjoin in time')
+        ax.set_title(f'{mix_id}: Liquidity dynamics in time')
+
+        # Plot changing liquidity in time
+        ax2 = ax.twinx()
+        changing_liquidity_btc = [item / SATS_IN_BTC for item in changing_liquidity]
+        stay_liquidity_btc = [item / SATS_IN_BTC for item in stay_liquidity]
+        ax2.plot(changing_liquidity_btc, color='royalblue', alpha=0.6, label='Changing liquidity (cjtx centric, MIX_ENTER - MIX_LEAVE)')
+        ax2.plot(stay_liquidity_btc, color='darkgreen', alpha=0.6, linestyle='--', label='Unmoved outputs (HODL coins, MIX_STAY)')
+        ax2.plot([a - b for a, b in zip(changing_liquidity_btc, stay_liquidity_btc)], color='red', alpha=0.6, linestyle='-.', label='Actively remixing liquidity (Changing - Unmoved)')
+        ax2.set_ylabel('btc in mix', color='royalblue')
+        ax2.tick_params(axis='y', colors='royalblue')
+
+        ax3 = None
+        PLOT_ESTIMATED_WALLETS = False
+        if PLOT_ESTIMATED_WALLETS:
+            # TODO: Compute wallets estimation based on inputs per time interval, not directly conjoins
+            AVG_WINDOWS = 10
+            num_wallets_avg = als.compute_averages(num_wallets, AVG_WINDOWS)
+            AVG_WINDOWS_100 = 100
+            num_wallets_avg100 = als.compute_averages(num_wallets, AVG_WINDOWS_100)
+            ax3 = ax.twinx()
+            ax3.spines['right'].set_position(('outward', -28))  # Adjust position of the third axis
+            ax3.plot(num_wallets_avg, color='green', alpha=0.4, label=f'Estimated # wallets ({AVG_WINDOWS} avg)')
+            ax3.plot(num_wallets_avg100, color='green', alpha=0.8, label=f'Estimated # wallets ({AVG_WINDOWS_100} avg)')
+            ax3.set_ylabel('Estimated number of active wallets', color='green')
+            ax3.tick_params(axis='y', colors='green')
+
+        # Plot lines as separators corresponding to months
+        for pos in new_month_indices:
+            if pos[0] == 'day' or pos[0] == 'month':
+                ax2.axvline(x=pos[1], color='gray', linewidth=1, alpha=0.2)
+            if pos[0] == 'year':
+                ax2.axvline(x=pos[1], color='gray', linewidth=2, alpha=0.4)
+        ax2.set_xticks([x[1] for x in new_month_indices])
+        labels = []
+        prev_year_offset = -10000
+        for x in new_month_indices:
+            if x[0] == 'year':
+                if x[1] - prev_year_offset > 1000:
+                    labels.append(f'{x[2][0:4]}')
+                    prev_year_offset = x[1]
+                else:
+                    labels.append('')
+            else:
+                labels.append('')
+        ax2.set_xticklabels(labels, rotation=45, fontsize=6)
+
+        if ax:
+            ax.legend(loc='center left')
+        if ax2:
+            ax2.legend(loc='upper left')
+        if ax3:
+            ax3.legend()
+
     # Add additional cummulative plots for all coinjoin in one
     ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
     ax_index += 1
+    plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, stay_liquidity, mining_fee_rate)
 
-    ax.plot(mining_fee_rate, color='gray', alpha=0.4, linewidth=1, linestyle='-.', label='Mining fee (90th percentil)')
-    ax.tick_params(axis='y', colors='gray', labelsize=6)
-    ax.set_ylabel('Mining fee rate sats/vB (90th percentil)', color='gray', fontsize='6')
-    ax.set_xlabel('Coinjoin in time')
-    ax.set_title(f'{mix_id}: Cummulative liquidity and fee rates in time')
-
-    ax2 = ax.twinx()
-    changing_liquidity_btc = [item / SATS_IN_BTC for item in changing_liquidity]
-    stay_liquidity_btc = [item / SATS_IN_BTC for item in stay_liquidity]
-    ax2.plot(changing_liquidity_btc, color='royalblue', alpha=0.6, label='Changing liquidity (cjtx centric)')
-    ax2.plot(stay_liquidity_btc, color='royalblue', alpha=0.6, linestyle='--', label='Unmoved liquidity (MIX_STAY)')
-    ax2.plot([a - b for a, b in zip(changing_liquidity_btc, stay_liquidity_btc)], color='blue', alpha=0.6, linestyle=':', label='Changing - STAY')
-    ax2.set_ylabel('btc in mix', color='royalblue')
-    ax2.tick_params(axis='y', colors='royalblue')
-
-    PLOT_ESTIMATED_WALLETS = False
-    if PLOT_ESTIMATED_WALLETS:
-        # TODO: Compute wallets estimation based on inputs per time interval, not directly conjoins
-        AVG_WINDOWS = 10
-        num_wallets_avg = als.compute_averages(num_wallets, AVG_WINDOWS)
-        AVG_WINDOWS_100 = 100
-        num_wallets_avg100 = als.compute_averages(num_wallets, AVG_WINDOWS_100)
-        ax3 = ax.twinx()
-        ax3.spines['right'].set_position(('outward', -28))  # Adjust position of the third axis
-        ax3.plot(num_wallets_avg, color='green', alpha=0.4, label=f'Estimated # wallets ({AVG_WINDOWS} avg)')
-        ax3.plot(num_wallets_avg100, color='green', alpha=0.8, label=f'Estimated # wallets ({AVG_WINDOWS_100} avg)')
-        ax3.set_ylabel('Estimated number of active wallets', color='green')
-        ax3.tick_params(axis='y', colors='green')
-
-    if ax:
-        ax.legend(loc='center left')
-    if ax2:
-        ax2.legend()
-    if ax3:
-        ax3.legend()
-
-    # Finalize graph
+    # Finalize multigraph graph
     plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
-    save_file = os.path.join(target_path, f'{mix_id}_input_types_{'values' if analyze_values else 'nums'}_{'norm' if normalize_values else 'notnorm'}')
+    save_file = os.path.join(target_path, f'{mix_id}_input_types_{'values' if analyze_values else 'nums'}_{'norm' if normalize_values else 'notnorm'}{'' if restrict_to_in_size is None else f'{round(restrict_to_in_size[1]/SATS_IN_BTC, 2)}btc'}')
+    plt.savefig(f'{save_file}.png', dpi=300)
+    plt.savefig(f'{save_file}.pdf', dpi=300)
+    plt.close()
+
+    # Save generate and save cummulative results separately
+    fig = plt.figure(figsize=(10, 3))
+    ax = fig.add_subplot(1, 1, 1, axes_class=AA.Axes)  # Get next subplot
+    plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, stay_liquidity, mining_fee_rate)
+    plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
+    save_file = os.path.join(target_path, f'{mix_id}_cummul_{'values' if analyze_values else 'nums'}_{'norm' if normalize_values else 'notnorm'}{'' if restrict_to_in_size is None else f'{round(restrict_to_in_size[1]/SATS_IN_BTC, 2)}btc'}')
     plt.savefig(f'{save_file}.png', dpi=300)
     plt.savefig(f'{save_file}.pdf', dpi=300)
     plt.close()
