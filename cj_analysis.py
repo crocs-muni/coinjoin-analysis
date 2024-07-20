@@ -127,20 +127,22 @@ def get_ratio_string(numerator, denominator) -> str:
         return f'{numerator}/{0} (0%)'
 
 
-def get_inputs_type_list(coinjoins, sorted_cj_time, event_type, in_or_out: str, burn_time_from, burn_time_to, analyze_values):
+def get_inputs_type_list(coinjoins, sorted_cj_time, event_type, in_or_out: str, burn_time_from, burn_time_to, analyze_values, restrict_to_in_size: (int, int)):
     if analyze_values:
         return [sum([coinjoins[cjtx['txid']][in_or_out][index]['value'] for index in coinjoins[cjtx['txid']][in_or_out].keys()
                      if coinjoins[cjtx['txid']][in_or_out][index]['mix_event_type'] == event_type.name and
-                     coinjoins[cjtx['txid']][in_or_out][index].get('burn_time_cjtxs', -1) in range(burn_time_from, burn_time_to + 1)])
+                     coinjoins[cjtx['txid']][in_or_out][index].get('burn_time_cjtxs', -1) in range(burn_time_from, burn_time_to + 1) and
+                     restrict_to_in_size[0] <= coinjoins[cjtx['txid']][in_or_out][index]['value'] <= restrict_to_in_size[1]])
             for cjtx in sorted_cj_time]
     else:
         return [sum([1 for index in coinjoins[cjtx['txid']][in_or_out].keys()
                      if coinjoins[cjtx['txid']][in_or_out][index]['mix_event_type'] == event_type.name and
-                     coinjoins[cjtx['txid']][in_or_out][index].get('burn_time_cjtxs', -1) in range(burn_time_from, burn_time_to + 1)])
+                     coinjoins[cjtx['txid']][in_or_out][index].get('burn_time_cjtxs', -1) in range(burn_time_from, burn_time_to + 1) and
+                     restrict_to_in_size[0] <= coinjoins[cjtx['txid']][in_or_out][index]['value'] <= restrict_to_in_size[1]])
             for cjtx in sorted_cj_time]
 
 
-def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, analyze_values: bool, normalize_values: bool):
+def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, analyze_values: bool, normalize_values: bool, restrict_to_in_size: (int, int) = None):
     """
     Ratio between various types of inputs (fresh, remixed, remixed_friends)
     :param mix_id:
@@ -153,17 +155,25 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     sorted_cj_time = sort_coinjoins(coinjoins, SORT_COINJOINS_BY_RELATIVE_ORDER)
     #sorted_cj_time = sorted_cj_time[0:500]
 
+    if restrict_to_in_size is None:
+        restrict_to_in_size = (0, 1000000000000)
+        print(f'No limits for inputs value')
+    else:
+        print(f'Limits for inputs value is {restrict_to_in_size[0]} - {restrict_to_in_size[1]}')
+
     input_types_nums = {}
     for event_type in MIX_EVENT_TYPE:
         if analyze_values:
             # Sum of values of inputs is taken
             input_types_nums[event_type.name] = [sum([coinjoins[cjtx['txid']]['inputs'][index]['value'] for index in coinjoins[cjtx['txid']]['inputs'].keys()
-                                            if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == event_type.name])
+                                        if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == event_type.name and
+                                                      restrict_to_in_size[0] <= coinjoins[cjtx['txid']]['inputs'][index]['value'] <= restrict_to_in_size[1]])
                                             for cjtx in sorted_cj_time]
         else:
             # Only number of inputs is taken
             input_types_nums[event_type.name] = [sum([1 for index in coinjoins[cjtx['txid']]['inputs'].keys()
-                                        if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == event_type.name])
+                                        if coinjoins[cjtx['txid']]['inputs'][index]['mix_event_type'] == event_type.name and
+                                                      restrict_to_in_size[0] <= coinjoins[cjtx['txid']]['inputs'][index]['value'] <= restrict_to_in_size[1]])
                                    for cjtx in sorted_cj_time]
 
     event_type = MIX_EVENT_TYPE.MIX_REMIX
@@ -235,6 +245,8 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
         ax.set_ylabel('Fraction of input numbers')
     if not analyze_values and not normalize_values:
         ax.set_ylabel('Input numbers')
+
+    return input_types
 
 
 def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudity: dict, initial_cj_index: int, ax):
@@ -444,8 +456,9 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
                     coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX.name
                     coinjoins[cjtx]['inputs'][input]['burn_time'] = round((broadcast_times[cjtx] - broadcast_times[spending_tx]).total_seconds(), 0)
                     coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs_as_mined'] = coinjoins_index[cjtx] - coinjoins_index[spending_tx]
-                    coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] = coinjoins_relative_order[cjtx] - coinjoins_relative_order[spending_tx]
-                    assert coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] >= 0, 'Invalid burn time for relative order'
+                    coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs_relative'] = coinjoins_relative_order[cjtx] - coinjoins_relative_order[spending_tx]
+                    coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] = coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs_relative']
+                    assert coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] >= 0, f'Invalid burn time computed for {cjtx}:{input}'
             else:
                 total_mix_entering += 1
                 coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_ENTER.name
@@ -473,9 +486,44 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
                     coinjoins[cjtx]['outputs'][output]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX.name
                     coinjoins[cjtx]['outputs'][output]['burn_time'] = round((broadcast_times[spend_by_tx] - broadcast_times[cjtx]).total_seconds(), 0)
                     coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs_as_mined'] = coinjoins_index[spend_by_tx] - coinjoins_index[cjtx]
-                    coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] = coinjoins_relative_order[spend_by_tx] - coinjoins_relative_order[cjtx]
-                    assert coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] >= 0, 'Invalid burn time for relative order'
+                    coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs_relative'] = coinjoins_relative_order[spend_by_tx] - coinjoins_relative_order[cjtx]
+                    coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] = coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs_relative']
+                    assert coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] >= 0, f'Invalid burn time computed for {cjtx}:{output}'
 
+    # Fix broadcast time based on relative ordering
+    # Set artificial broadcast time base on minimum broadcast time of all txs with same relative order
+    cj_ordering = [{'txid': cjtxid, 'relative_order': coinjoins[cjtxid]['relative_order'], 'broadcast_time': precomp_datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
+    sorted_cj_ordering = sorted(cj_ordering, key=lambda item: (item['relative_order'], item['broadcast_time']), reverse=False)
+
+    min_broadcast_time = sorted_cj_ordering[0]['broadcast_time']
+    min_broadcast_time_order = sorted_cj_ordering[0]['relative_order']
+    broadcast_times_observed = [min_broadcast_time]
+    for tx in sorted_cj_ordering:
+        if min_broadcast_time_order < tx['relative_order']:
+            # Next chuck of cjtxs as sorted by 'relative_order' going to be processed
+
+            # Sanity check on broadcast_times_observed - shall be roughly same
+            sorted_datetimes = sorted(broadcast_times_observed)
+            time_difference = sorted_datetimes[-1] - sorted_datetimes[0]
+            if time_difference > timedelta(days=1):
+                print(f'WARNING: Coinjoins with same relative ordering \'{min_broadcast_time_order}\' differ too much \'{time_difference}\'. ')
+
+            # Set min_broadcast_time as a boradcsat_time of first from this chunk
+            min_broadcast_time = tx['broadcast_time']
+            min_broadcast_time_order = tx['relative_order']
+            broadcast_times_observed = [min_broadcast_time]  # Start new broadcast_times_observed for this chunk
+        else:
+            broadcast_times_observed.append(tx['broadcast_time'])  # Save broadcast_time of this cjtx
+
+        # Set virtual time as minimum from the chunk if distance is more than 30 minutes
+        # (do not correct cases where difference is small and no delay in mining was introduced)
+        time_difference = abs(precomp_datetime.strptime(coinjoins[tx['txid']]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") - min_broadcast_time)
+        if time_difference < timedelta(minutes=120):
+            coinjoins[tx['txid']]['broadcast_time_virtual'] = coinjoins[tx['txid']]['broadcast_time']  # Use original time
+        else:
+            coinjoins[tx['txid']]['broadcast_time_virtual'] = precomp_datetime.strftime(min_broadcast_time)[:-3]  # Use corrected time
+
+            # Print summary results
     SM.print(f'  {get_ratio_string(total_mix_entering, total_inputs)} Inputs entering mix / total inputs used by mix transactions')
     SM.print(f'  {get_ratio_string(total_mix_friends, total_inputs)} Friends inputs re-entering mix / total inputs used by mix transactions')
     SM.print(f'  {get_ratio_string(total_mix_leaving, total_outputs)} Outputs leaving mix / total outputs by mix transactions')
@@ -511,9 +559,14 @@ def get_input_name_string(txid, index):
 
 def extract_interval(data: dict, start_date: str, end_date: str):
     interval_data = {}
-    interval_data['coinjoins'] = {txid: data['coinjoins'][txid] for txid in data['coinjoins'].keys()
-                                  if start_date < data['coinjoins'][txid][
-                                      'broadcast_time'] < end_date}
+    if SORT_COINJOINS_BY_RELATIVE_ORDER:
+        interval_data['coinjoins'] = {txid: data['coinjoins'][txid] for txid in data['coinjoins'].keys()
+                                      if start_date < data['coinjoins'][txid][
+                                          'broadcast_time_virtual'] < end_date}
+    else:
+        interval_data['coinjoins'] = {txid: data['coinjoins'][txid] for txid in data['coinjoins'].keys()
+                                      if start_date < data['coinjoins'][txid][
+                                          'broadcast_time'] < end_date}
     interval_data['postmix'] = {}
     interval_data['rounds'] = {roundid: data['rounds'][roundid] for roundid in data['rounds'].keys()
                                if

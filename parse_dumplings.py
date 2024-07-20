@@ -762,7 +762,7 @@ def process_coinjoins(target_path, mix_protocol: MIX_PROTOCOL, mix_filename, pos
     analyze_coordinator_fees(mix_filename, data, mix_protocol)
     analyze_mining_fees(mix_filename, data)
 
-    return data
+    return data, cj_relative_order
 
 
 def filter_liquidity_events(data):
