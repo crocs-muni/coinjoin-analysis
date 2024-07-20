@@ -2119,16 +2119,26 @@ def analyze_extramix_flows(experiment_id: str, target_path: Path, mix1_precomp_v
 
 
 if __name__ == "__main__":
+    # Limit analysis only to specific coinjoin type
+    CONSIDER_WW1 = False
+    CONSIDER_WW2 = False
+    CONSIDER_WHIRLPOOL = True
+
     # Sorting strategy for coinjoins in time.
     # If False, coinjoins are sorted using 'broadcast_time' (which is equal to mining_time for on-chain cjtxs where we lack real broadcast time)
     # If True, then relative ordering based on connections in graph formed by remix inputs/outputs is used
-    SORT_COINJOINS_BY_RELATIVE_ORDER = True
+    if CONSIDER_WW2:
+        SORT_COINJOINS_BY_RELATIVE_ORDER = True
+    else:
+        SORT_COINJOINS_BY_RELATIVE_ORDER = False
     als.SORT_COINJOINS_BY_RELATIVE_ORDER = SORT_COINJOINS_BY_RELATIVE_ORDER
 
     FULL_TX_SET = False
+
     ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
-    DETECT_FALSE_POSITIVES = False
     PLOT_REMIXES = True
+    PLOT_REMIXES_FLOWS = False
+    DETECT_FALSE_POSITIVES = False
     ANALYSIS_ADDRESS_REUSE = False
     ANALYSIS_PROCESS_ALL_COINJOINS = False
     ANALYSIS_PROCESS_ALL_COINJOINS_DEBUG = False
@@ -2138,11 +2148,6 @@ if __name__ == "__main__":
     PLOT_INTERMIX_FLOWS = False
     VISUALIZE_ALL_COINJOINS_INTERVALS = False
 
-    # Limit analysis only to specific coinjoin type
-    CONSIDER_WW1 = False
-    CONSIDER_WW2 = True
-    CONSIDER_WHIRLPOOL = False
-
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240215\\'
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240417\\'
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240509\\'
@@ -2151,14 +2156,48 @@ if __name__ == "__main__":
     interval_stop_date = '2024-07-02 01:38:07.000'
 
     target_path = os.path.join(target_base_path, 'Scanner')
-    SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}, '
-             f'SORT_COINJOINS_BY_RELATIVE_ORDER={SORT_COINJOINS_BY_RELATIVE_ORDER}')
+    SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
 
     DEBUG = False
     if DEBUG:
-        # wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json',
-        #                     True, False)
+        #wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True)
+        #wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True)
+        wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', False, True)
+        #wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', False, True)
+        exit(42)
+        wasabi_plot_remixes_multilevels()
+        exit(42)
+
+        limits = [1000000, 11000000, 100000000, 1000000000, 10000000000]
+        for limit in limits:
+            # wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False, None, (0, limit))
+            # wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, False, None, (0, limit))
+            wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, True, None,
+                                (0, limit))
+            wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, True, None,
+                                (0, limit))
+        exit(42)
+        wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, True, None, (0, 10000000))
+        exit(42)
+        # process_and_save_single_interval('wasabi2_select', MIX_PROTOCOL.WASABI2, target_path, '2024-05-01 00:00:07.000',
+        #                                   '2024-06-01 23:38:07.000',
+        #                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+        #                                   True)
         # exit(42)
+
+        # process_and_save_single_interval('wasabi2_select', MIX_PROTOCOL.WASABI2, target_path, '2024-06-01 00:00:07.000',
+        #                                   '2024-06-07 23:38:07.000',
+        #                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+        #                                   True)
+        # exit(42)
+
+        # wasabi2_analyse_remixes('wasabi2_select', target_path)
+        # exit(42)
+
+        wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1_select'), 'coinjoin_tx_info.json',
+                            True, False)
+        exit(42)
+
         wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json',
                             True, False)
         wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json',
@@ -2166,11 +2205,6 @@ if __name__ == "__main__":
         wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True)
         exit(42)
 
-        # process_and_save_single_interval('wasabi2_select', MIX_PROTOCOL.WASABI2, target_path, '2024-06-01 00:00:07.000',
-        #                                   '2024-06-07 23:38:07.000',
-        #                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
-        #                                   True)
-        #exit(42)
         wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', False, True)
         wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', True, False)
         wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', True, True)
