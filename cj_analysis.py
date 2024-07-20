@@ -177,9 +177,10 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
                                    for cjtx in sorted_cj_time]
 
     event_type = MIX_EVENT_TYPE.MIX_REMIX
-    BURN_TIME_RANGES = [('0-0', 0, 0), ('1-2', 1, 2), ('3-5', 3, 5), ('6-19', 6, 19), ('20+', 20, 999), ('1000-1999', 1000, 1999), ('2000+', 2000, 1000000)]
+    #BURN_TIME_RANGES = [('1', 1, 1), ('1-2', 1, 2), ('3-5', 3, 5), ('6-19', 6, 19), ('20+', 20, 999), ('1000-1999', 1000, 1999), ('2000+', 2000, 1000000)]
+    BURN_TIME_RANGES = [('1', 1, 1), ('2', 2, 2), ('3-5', 3, 5), ('6-19', 6, 19), ('20+', 20, 999), ('1000-1999', 1000, 1999), ('2000+', 2000, 1000000)]
     for range_val in BURN_TIME_RANGES:
-        input_types_nums[f'{event_type.name}_{range_val[0]}'] = get_inputs_type_list(coinjoins, sorted_cj_time, event_type, 'inputs', range_val[1], range_val[2], analyze_values)
+        input_types_nums[f'{event_type.name}_{range_val[0]}'] = get_inputs_type_list(coinjoins, sorted_cj_time, event_type, 'inputs', range_val[1], range_val[2], analyze_values, restrict_to_in_size)
 
     short_exp_name = mix_id
 
@@ -212,10 +213,9 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     # New version with separated remixes
     bars = []
     bars.append((input_types[MIX_EVENT_TYPE.MIX_ENTER.name], 'MIX_ENTER', 'blue', 0.9))
-    #bars.append((input_types_nums[MIX_EVENT_TYPE.MIX_REMIX.name], 'MIX_REMIX', 'orange', 0.5))
-    bars.append((input_types['MIX_REMIX_0-0'], 'MIX_REMIX_0-0', 'gold', 1))
-    bars.append((input_types['MIX_REMIX_1-2'], 'MIX_REMIX_1-2', 'gold', 0.8))
-    bars.append((input_types['MIX_REMIX_3-5'], 'MIX_REMIX_3-5', 'orange', 0.5))
+    bars.append((input_types['MIX_REMIX_1'], 'MIX_REMIX_1', 'gold', 0.8))
+    bars.append((input_types['MIX_REMIX_2'], 'MIX_REMIX_2', 'orange', 0.4))
+    bars.append((input_types['MIX_REMIX_3-5'], 'MIX_REMIX_3-5', 'orange', 0.8))
     bars.append((input_types['MIX_REMIX_6-19'], 'MIX_REMIX_6-19', 'moccasin', 0.5))
     bars.append((input_types['MIX_REMIX_20+'], 'MIX_REMIX_20+', 'lightcoral', 0.7))
     bars.append((input_types['MIX_REMIX_1000-1999'], 'MIX_REMIX_1000-1999', 'sienna', 0.7))
