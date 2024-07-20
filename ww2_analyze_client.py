@@ -58,7 +58,7 @@ def plot_cj_anonscores(mfig: Multifig, data: dict, title: str, y_label: str, sho
     max_index = max([len(data[cj_session]) for cj_session in data.keys()])
     avg_data = [compute_average_at_index(data, index) for index in range(0, max_index)]
     ax.plot(range(1, len(avg_data) + 1), avg_data, label='Average', linestyle='solid',
-            linewidth=5, alpha=0.5, color='gray')
+            linewidth=7, alpha=0.5, color='gray')
 
     ax.legend(loc="best", fontsize='6')
     ax.set_title(title)
@@ -167,11 +167,16 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
 
             # If final merge transaction detected (some coinjoin txs already detected, use it)
             if len(session_cjtxs) > 0:
-                assert len(session_funding_tx['outputs'].keys()) == 1, f'Funding tx has unexpected numeber of outputs of {len(session_funding_tx['outputs'].keys())}'
+                assert len(session_funding_tx['outputs'].keys()) == 1, f'Funding tx has unexpected number of outputs of {len(session_funding_tx['outputs'].keys())}'
                 norm_tx = {'txid': session_funding_tx['tx'], 'label': session_funding_tx['label'], 'broadcast_time': session_funding_tx['datetime'], 'value': session_funding_tx['outputs']['0']['amount']}
                 session_label = get_session_label(mix_name, session_size_inputs, session_cjtxs, norm_tx)
+
+                als.remove_link_between_inputs_and_outputs(session_cjtxs)
+                als.compute_link_between_inputs_and_outputs(session_cjtxs, [cjtxid for cjtxid in session_cjtxs.keys()])
+
                 cjtxs['sessions'][session_label] = {'coinjoins': session_cjtxs, 'funding_tx': norm_tx}
                 session_cjtxs = {}
+
 
             session_funding_tx = tx
 
@@ -251,27 +256,39 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
         print()
 
     # Number of skipped coinjoins
-    cj_time = [{'txid':cjtxid, 'broadcast_time': datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
-    sorted_cj_times = sorted(cj_time,  key=lambda x: x['broadcast_time'])
+    sorted_cj_times = als.sort_coinjoins(coinjoins, als.SORT_COINJOINS_BY_RELATIVE_ORDER)
     coinjoins_index = {sorted_cj_times[i]['txid']: i for i in range(0, len(sorted_cj_times))}  # Precomputed mapping of txid to index for fast burntime computation
     # coord_logs_sanitized = [{**item, 'mp_first_seen': item['mp_first_seen'] if item['mp_first_seen'] is not None else item['cj_last_seen']} for item in coord_logs]
     # coord_logs_sorted = sorted(coord_logs_sanitized, key=lambda x: x['mp_first_seen'])
     # coinjoins_index = {coord_logs_sorted[i]['id']: i for i in range(0, len(coord_logs_sorted))}
     stats['skipped_cjtxs'] = {}
+    stats['skipped_cjtxs_corrected'] = {}  # TODO: Remove skipped_cjtxs_corrected, is now fixed by relative ordering
     for session_label in cjtxs['sessions'].keys():
         prev_cjtxid = None
         skipped_cjtxs_list = []
+        skipped_cjtxs_corrected_list = []
         for cjtxid in cjtxs['sessions'][session_label]['coinjoins'].keys():
             if cjtxid not in coinjoins_index.keys():
                 print(f'{cjtxid} missing from coord_logs')
                 continue
             skipped = 0 if prev_cjtxid is None else coinjoins_index[cjtxid] - coinjoins_index[prev_cjtxid] - 1
-            #assert skipped >= 0, f'Inconsistent skipped coinjoins of {skipped} for {cjtxid} - {prev_cjtxid}'
+
+            # Compute minimum burn_time for remixed inputs
+            burn_times = []
+            cj_struct = cjtxs['sessions'][session_label]['coinjoins'][cjtxid]['inputs']
+            for input in cj_struct:
+                if 'spending_tx' in cj_struct[input].keys():
+                    spending_tx, index = als.extract_txid_from_inout_string(cj_struct[input]['spending_tx'])
+                    if spending_tx in coinjoins.keys():
+                        burn_times.append(coinjoins_index[cjtxid] - coinjoins_index[spending_tx])
+            min_burn_time = min(burn_times) - 1 if len(burn_times) > 0 else 0
             if skipped < 0:
                 print(f'Inconsistent skipped coinjoins of {skipped} for {cjtxid} - {prev_cjtxid}')
             skipped_cjtxs_list.append(skipped)
+            skipped_cjtxs_corrected_list.append(skipped - min_burn_time)
             prev_cjtxid = cjtxid
         stats['skipped_cjtxs'][session_label] = skipped_cjtxs_list
+        stats['skipped_cjtxs_corrected'][session_label] = skipped_cjtxs_corrected_list
 
     # Number of inputs and outputs
     stats['num_inputs'] = {}
@@ -312,7 +329,23 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
         stats['anon_gain'][session_label] = anon_gain_list
         stats['anon_gain_ratio'][session_label] = anon_gain_ratio_list
 
-    print(f'\n{mix_name}: Total experiments: {len(cjtxs['sessions'][session_label]['coinjoins'].keys())}, total txs={len(history)}, total coins: {len(coins)}')
+    # Compute total number of output utxos created
+    stats['num_coins'] = {}
+    for session_label in cjtxs['sessions'].keys():
+        stats['num_coins'][session_label] = sum([len(cjtxs['sessions'][session_label]['coinjoins'][txid]['outputs']) for txid in cjtxs['sessions'][session_label]['coinjoins'].keys()])
+
+    # Compute total number of inputs used which already reached target anonscore level (aka overmixed coins)
+    stats['num_overmixed_coins'] = {}
+    for session_label in cjtxs['sessions'].keys():
+        num_overmixed = [cjtxs['sessions'][session_label]['coinjoins'][txid]['inputs'][index]['value'] for txid in cjtxs['sessions'][session_label]['coinjoins'].keys()
+                         for index in cjtxs['sessions'][session_label]['coinjoins'][txid]['inputs'].keys()
+                         if cjtxs['sessions'][session_label]['coinjoins'][txid]['inputs'][index]['anon_score'] >= target_as]
+
+        stats['num_overmixed_coins'][session_label] = len(num_overmixed)
+
+    print(f'\n{mix_name}: Total experiments: {len(cjtxs['sessions'][session_label]['coinjoins'].keys())}, total txs={len(history)}, '
+          f'total coins: {sum([stats['num_coins'][session_label] for session_label in stats['num_coins'].keys()])}, '
+          f'total overmixed coins: {sum([len([stats['num_overmixed_coins'][session_label] for session_label in stats['num_overmixed_coins'].keys()])])}')
 
     print("##################################################")
 
@@ -388,6 +421,7 @@ def plot_cj_heatmap(mfig: Multifig, x, y, x_label, y_label, title):
 
 
 if __name__ == "__main__":
+    als.SORT_COINJOINS_BY_RELATIVE_ORDER = False
     # round_logs = als.parse_client_coinjoin_logs(target_path)
     # exit(42)
 
@@ -440,7 +474,7 @@ if __name__ == "__main__":
 
 
     NUM_COLUMNS = 4
-    NUM_ROWS = 4
+    NUM_ROWS = 5
     fig = plt.figure(figsize=(40, NUM_ROWS * 5))
     mfig = Multifig(plt, fig, NUM_ROWS, NUM_COLUMNS)
 
@@ -455,16 +489,19 @@ if __name__ == "__main__":
     als.merge_dicts(wallet_stats, all_stats)
     assert len(all_stats['anon_percentage_status']) == 23, f'Unexpected number of coinjoin sessions {len(all_stats['anon_percentage_status'])}'
 
-    plot_cj_anonscores(mfig, all_stats['anon_percentage_status'], f'All wallets, progress towards fully anonymized liquidity (as={experiment_target_anonscore}); total sessions={len(all_stats['anon_percentage_status'])}',
+    plot_cj_anonscores(mfig, all_stats['anon_percentage_status'], f'All wallets, progress towards fully anonymized liquidity (AS={experiment_target_anonscore}); total sessions={len(all_stats['anon_percentage_status'])}',
                        'privacy progress (%)')
-    plot_cj_anonscores(mfig, all_stats['anon_gain'], f'All wallets, change in anonscore weighted (as={experiment_target_anonscore}); total sessions={len(all_stats['anon_gain'])}',
+    plot_cj_anonscores(mfig, all_stats['anon_gain'], f'All wallets, change in anonscore weighted (AS={experiment_target_anonscore}); total sessions={len(all_stats['anon_gain'])}',
                        'anonscore gain (weighted)')
-    plot_cj_anonscores(mfig, all_stats['anon_gain_ratio'], f'All wallets, change in anonscore weighted ratio out/in (as={experiment_target_anonscore}); total sessions={len(all_stats['anon_gain'])}',
+    plot_cj_anonscores(mfig, all_stats['anon_gain_ratio'], f'All wallets, change in anonscore weighted ratio out/in (AS={experiment_target_anonscore}); total sessions={len(all_stats['anon_gain'])}',
                        'anonscore gain (weighted, ratio)')
-    plot_cj_anonscores(mfig, all_stats['observed_remix_liquidity_ratio_cumul'], f'All wallets, cumullative remix liquidity ratio; total sessions={len(all_stats['observed_remix_liquidity_ratio_cumul'])}',
+    plot_cj_anonscores(mfig, all_stats['observed_remix_liquidity_ratio_cumul'], f'All wallets, cumullative remix liquidity ratio (AS={experiment_target_anonscore}); total sessions={len(all_stats['observed_remix_liquidity_ratio_cumul'])}',
                        'cummulative remix ratio')
     plot_cj_anonscores(mfig, all_stats['skipped_cjtxs'],
                        f'All wallets, skipped cjtxs;total sessions={len(all_stats['skipped_cjtxs'])}',
+                       'num cjtxs skipped')
+    plot_cj_anonscores(mfig, all_stats['skipped_cjtxs_corrected'],
+                       f'All wallets, skipped cjtxs corrected by smallest burntime;total sessions={len(all_stats['skipped_cjtxs_corrected'])}',
                        'num cjtxs skipped')
     plot_cj_anonscores(mfig, all_stats['num_inputs'],
                        f'All wallets, number of inputs;total sessions={len(all_stats['num_inputs'])}',
@@ -480,12 +517,20 @@ if __name__ == "__main__":
 
     sessions_lengths = [len(all_cjs['sessions'][session]['coinjoins']) for session in all_cjs['sessions'].keys()]
     print(f'Total sessions={len(all_cjs['sessions'].keys())}, total coinjoin txs={sum(sessions_lengths)}')
-
-    sessions_lengths = [len(all_cjs['sessions'][session]['coinjoins']) for session in all_cjs['sessions'].keys()]
     print(f'Session lengths (#cjtxs): median={round(np.median(sessions_lengths), 2)}, average={round(np.average(sessions_lengths), 2)}, min={min(sessions_lengths)}, max={max(sessions_lengths)}')
+
+    total_output_coins = [all_stats['num_coins'][session] for session in all_stats['num_coins']]
+    print(f'Total output coins: {sum(total_output_coins)}')
+
+    total_overmixed_coins = [all_stats['num_overmixed_coins'][session] for session in all_stats['num_overmixed_coins']]
+    print(f'Total overmixed input coins: {sum(total_overmixed_coins)}')
+
 
     num_skipped = list(chain.from_iterable(all_stats['skipped_cjtxs'][session] for session in all_stats['skipped_cjtxs']))
     print(f'Skipped txs stats: median={np.median(num_skipped)}, average={round(np.average(num_skipped), 2)}, min={min(num_skipped)}, max={max(num_skipped)}')
+
+    num_skipped_corrected = list(chain.from_iterable(all_stats['skipped_cjtxs_corrected'][session] for session in all_stats['skipped_cjtxs_corrected']))
+    print(f'Skipped corrected txs stats: median={np.median(num_skipped_corrected)}, average={round(np.average(num_skipped_corrected), 2)}, min={min(num_skipped_corrected)}, max={max(num_skipped_corrected)}')
 
     remix_ratios = [max(all_stats['observed_remix_liquidity_ratio_cumul'][session]) for session in all_stats['observed_remix_liquidity_ratio_cumul'].keys()]
     print(f'Remix ratios: median={round(np.median(remix_ratios), 2)}, average={round(np.average(remix_ratios), 2)}, min={round(min(remix_ratios), 2)}, max={round(max(remix_ratios), 2)}')
