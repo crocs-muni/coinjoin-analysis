@@ -89,6 +89,12 @@ class CoinJoinStats:
 
         self.cj_type = MIX_PROTOCOL.UNSET
 
+WHIRLPOOL_FUNDING_TXS = {}
+WHIRLPOOL_FUNDING_TXS[100000] = {'start_date': '2021-03-05 23:50:59.000', 'funding_txs': ['ac9566a240a5e037471b1a58ea50206062c13e1a75c0c2de3f21c7053573330a']}
+WHIRLPOOL_FUNDING_TXS[1000000] = {'start_date': '2019-05-23 20:54:27.000', 'funding_txs': ['c6c27bef217583cca5f89de86e0cd7d8b546844f800da91d91a74039c3b40fba', 'a42596825352055841949a8270eda6fb37566a8780b2aec6b49d8035955d060e', '4c906f897467c7ed8690576edfcaf8b1fb516d154ef6506a2c4cab2c48821728']}
+WHIRLPOOL_FUNDING_TXS[5000000] = {'start_date': '2019-04-17 16:20:09.000', 'funding_txs': ['a554db794560458c102bab0af99773883df13bc66ad287c29610ad9bac138926', '792c0bfde7f6bf023ff239660fb876315826a0a52fd32e78ea732057789b2be0', '94b0da89431d8bd74f1134d8152ed1c7c4f83375e63bc79f19cf293800a83f52', 'e04e5a5932e8d42e4ef641c836c6d08d9f0fff58ab4527ca788485a3fceb2416']}
+WHIRLPOOL_FUNDING_TXS[50000000] = {'start_date': '2019-08-02 17:45:23.000', 'funding_txs': ['b42df707a3d876b24a22b0199e18dc39aba2eafa6dbeaaf9dd23d925bb379c59']}
+
 
 def load_json_from_file(file_path: str) -> dict:
     with open(file_path, "rb") as file:
@@ -206,18 +212,7 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
 
         # backward reference to spending transaction output is already set ('spending_tx'),
         # now set also forward link ('spend_by_tx')
-        for txid in cj_stats.keys():
-            for index in cj_stats[txid]['inputs'].keys():
-                input = cj_stats[txid]['inputs'][index]
-
-                if 'spending_tx' in input.keys():
-                    tx, vout = als.extract_txid_from_inout_string(input['spending_tx'])
-                    # Try to find transaction and set its record
-                    if tx in cj_stats.keys() and vout in cj_stats[tx]['outputs'].keys():
-                        cj_stats[tx]['outputs'][vout]['spend_by_tx'] = get_input_name_string(txid, index)
-
-        with open(json_file, "wb") as file:
-            pickle.dump(cj_stats, file)
+        update_spend_by_reference(cj_stats, cj_stats)
 
     return cj_stats
 
@@ -257,33 +252,26 @@ def compute_mix_postmix_link(data: dict):
     """
     # backward reference to spending transaction output is already set ('spending_tx'),
     # now set also forward link ('spend_by_tx')
-    for txid in data['postmix'].keys():
-        for index in data['postmix'][txid]['inputs'].keys():
-            input = data['postmix'][txid]['inputs'][index]
-            if 'spending_tx' in input.keys():
-                tx, vout = als.extract_txid_from_inout_string(input['spending_tx'])
-                # Try to find transaction in mix (coinjoins) and set its record
-                if tx in data['coinjoins'].keys() and vout in data['coinjoins'][tx]['outputs'].keys():
-                    data['coinjoins'][tx]['outputs'][vout]['spend_by_tx'] = get_input_name_string(txid, index)
+    update_spend_by_reference(data['postmix'], data['coinjoins'])
 
     if 'premix' in data.keys():
         # backward reference from coinjoin to premix is already set ('spending_tx')
         # now set also forward link ('spend_by_tx')
-        for txid in data['coinjoins'].keys():
-            for index in data['coinjoins'][txid]['inputs'].keys():
-                input = data['coinjoins'][txid]['inputs'][index]
-                if 'spending_tx' in input.keys():
-                    tx, vout = als.extract_txid_from_inout_string(input['spending_tx'])
-                    # Try to find transaction in mix (coinjoins) and set its record
-                    if tx in data['premix'].keys() and vout in data['premix'][tx]['outputs'].keys():
-                        data['premix'][tx]['outputs'][vout]['spend_by_tx'] = get_input_name_string(txid, index)
+        update_spend_by_reference(data['coinjoins'], data['premix'])
 
     return data
 
 
-def filter_false_coinjoins(data, cj_type):
+def filter_false_coinjoins(data, mix_protocol):
+    false_cjtxs = {}
     cjtxids = list(data['coinjoins'].keys())
-    # for cjtx in cjtxids:
+    for cjtx in cjtxids:
+        if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
+            if not is_whirlpool_coinjoin_tx(data['coinjoins'][cjtx]):
+                logging.info(f'{cjtx} is not whirlpool coinjoin, removing from coinjoin list')
+                false_cjtxs[cjtx] = data['coinjoins'][cjtx]
+                data['coinjoins'].pop(cjtx)
+
         #if cj_type == MIX_PROTOCOL.WASABI2:
             # Not WW2 coinjoin if:
             # P2SH, P2PKH addresses,
@@ -292,6 +280,40 @@ def filter_false_coinjoins(data, cj_type):
             # if len(data['coinjoins'][cjtx]['inputs']) < 100:
             #     print(f'{cjtx} is false coinjoin, removing....')
             #     data['coinjoins'].pop(cjtx)
+
+    return data, false_cjtxs
+
+
+def update_spend_by_reference(updating: dict, updated: dict):
+    updating_keys = updating.keys()  # Create copy for case when updating == updated
+    total_updated = 0
+    for txid in updating_keys:  # 'coinjoin' by 'coinjoin'
+        for index in updating[txid]['inputs'].keys():
+            input = updating[txid]['inputs'][index]
+
+            if 'spending_tx' in input.keys():
+                tx, vout = als.extract_txid_from_inout_string(input['spending_tx'])
+                # Try to find transaction and set its record
+                if tx in updated.keys() and vout in updated[tx]['outputs'].keys():
+                    updated[tx]['outputs'][vout]['spend_by_tx'] = get_input_name_string(txid, index)
+                    total_updated += 1
+
+    return total_updated
+
+
+def update_all_spend_by_reference(data: dict):
+    # backward reference to spending transaction output is already set ('spending_tx'),
+    # now set also forward link ('spend_by_tx')
+
+    # Update 'premix' based on 'coinjoin' tx 'spending_tx'
+    total_updated = update_spend_by_reference(data['coinjoins'], data['premix'])
+    logging.debug(f'Update premix based on coinjoins: {total_updated}')
+    # Update 'coinjoin' based on 'coinjoin'
+    total_updated = update_spend_by_reference(data['coinjoins'], data['coinjoins'])
+    logging.debug(f'Update coinjoins based on coinjoins: {total_updated}')
+    # Update 'coinjoin' based on 'postmix'
+    total_updated = update_spend_by_reference(data['coinjoins'], data['postmix'])
+    logging.debug(f'Update coinjoins based on postmix: {total_updated}')
 
     return data
 
@@ -303,11 +325,9 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
             'coinjoins': load_coinjoin_stats_from_file(os.path.join(target_path, mix_filename), start_date, stop_date),
             'postmix': load_coinjoin_stats_from_file(os.path.join(target_path, postmix_filename), start_date, stop_date)}
 
-    # Filter mistakes in Dumplings analysis of coinjoins
-    data = filter_false_coinjoins(data, mix_protocol)
-
     # Only Samourai Whirlpool is having premix tx (TX0)
-    if premix_filename is not None:
+    cjtxs_fixed = 0
+    if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
         data['premix'] = load_coinjoin_stats_from_file(os.path.join(target_path, premix_filename), start_date, stop_date)
         for txid in list(data['premix'].keys()):
             if is_whirlpool_coinjoin_tx(data['premix'][txid]):
@@ -315,6 +335,25 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
                 data['coinjoins'][txid] = data['premix'][txid]
                 data['premix'].pop(txid)
                 logging.info(f'{txid} is mix transaction, removing from premix and putting to mix')
+                cjtxs_fixed += 1
+    logging.info(f'{cjtxs_fixed} total premix txs moved into coinjoins')
+
+    # Detect misclassified Whirlpool coinjoin transactions found in Dumpling's postmix txs
+    cjtxs_fixed = 0
+    if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
+        for txid in list(data['postmix'].keys()):
+            if is_whirlpool_coinjoin_tx(data['postmix'][txid]):
+                # Misclassified mix transaction, move between groups
+                data['coinjoins'][txid] = data['postmix'][txid]
+                data['postmix'].pop(txid)
+                logging.info(f'{txid} is mix transaction, removing from postmix and putting to mix')
+                cjtxs_fixed += 1
+    logging.info(f'{cjtxs_fixed} total postmix txs moved into coinjoins')
+
+    # Filter mistakes in Dumplings analysis of coinjoins
+    data, false_cjtxs = filter_false_coinjoins(data, mix_protocol)
+
+    data = update_all_spend_by_reference(data)
 
     # Set spending transactions also between mix and postmix
     data = compute_mix_postmix_link(data)
@@ -401,15 +440,18 @@ def analyze_postmix_spends(tx_dict: dict) -> dict:
     return tx_dict
 
 
-def is_whirlpool_coinjoin_tx(premix_tx):
+def is_whirlpool_coinjoin_tx(test_tx):
     # The transaction is whirlpool coinjoin transaction if number of inputs is bigger than 4
-    if len(premix_tx['inputs']) >= 5:
+    if len(test_tx['inputs']) >= 5:
         # ... number of inputs and outputs is the same
-        if len(premix_tx['inputs']) == len(premix_tx['outputs']):
+        if len(test_tx['inputs']) == len(test_tx['outputs']):
             # ... all outputs are the same value
-            if all(premix_tx['outputs'][vout]['value'] == premix_tx['outputs']['0']['value']
-                   for vout in premix_tx['outputs'].keys()):
-                return True
+            if all(test_tx['outputs'][vout]['value'] == test_tx['outputs']['0']['value']
+                   for vout in test_tx['outputs'].keys()):
+                # ... and output sizes are one of the pool sizes [100k, 1M, 5M, 50M]
+                if all(test_tx['outputs'][vout]['value'] in [100000, 1000000, 5000000, 50000000]
+                       for vout in test_tx['outputs'].keys()):
+                    return True
 
     return False
 
@@ -742,9 +784,12 @@ def visualize_coinjoins(data, events, base_path, experiment_name):
 
 
 def process_coinjoins(target_path, mix_protocol: MIX_PROTOCOL, mix_filename, postmix_filename, premix_filename, start_date: str, stop_date: str):
-    data = load_coinjoins(target_path, mix_protocol, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
+    data, false_cjtxs = load_coinjoins(target_path, mix_protocol, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
     if len(data['coinjoins']) == 0:
         return data
+
+    false_cjtxs_file = os.path.join(target_path, f'{mix_protocol.name}_false_filtered_cjtxs.json')
+    save_json_to_file_pretty(false_cjtxs_file, false_cjtxs)
 
     SM.print('*******************************************')
     SM.print(f'{mix_filename} coinjoins: {len(data['coinjoins'])}')
@@ -943,6 +988,8 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
         current_stop_date = current_stop_date + timedelta(days=32)
         current_stop_date = datetime(current_stop_date.year, current_stop_date.month, 1)
         current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M:%S")
+
+    return data
 
 
 def visualize_interval(mix_id: str, data: dict, mix_filename: str, premix_filename: str, target_save_path: str, last_stop_date_str: str, current_stop_date_str: str):
@@ -2118,6 +2165,40 @@ def analyze_extramix_flows(experiment_id: str, target_path: Path, mix1_precomp_v
     return flow_sizes
 
 
+
+def whirlpool_extract_pool(full_data: dict, mix_id: str, target_path: Path, pool_id: str, pool_size: int):
+    # Start from initial tx for specific pool size
+    # Add iteratively additional transactions if connected to already included ones
+    all_cjtxs_keys = full_data['coinjoins'].keys()
+    # Initial seeding for given pool size
+    pool_txs = {cjtx: full_data['coinjoins'][cjtx] for cjtx in WHIRLPOOL_FUNDING_TXS[pool_size]['funding_txs']}
+    txs_to_probe = list(pool_txs.keys())
+    while len(txs_to_probe) > 0:
+        next_txs_to_probe = []
+        for cjtx in txs_to_probe:
+            for output in pool_txs[cjtx]['outputs'].keys():
+                if 'spend_by_tx' in pool_txs[cjtx]['outputs'][output].keys():
+                    txid, index = als.extract_txid_from_inout_string(pool_txs[cjtx]['outputs'][output]['spend_by_tx'])
+                    if txid not in pool_txs.keys() and txid in all_cjtxs_keys:
+                        next_txs_to_probe.append(txid)
+                        pool_txs[txid] = full_data['coinjoins'][txid]
+
+        if len(pool_txs.keys()) % 1000 == 0:
+            logging.info(f'Discovered {len(pool_txs)} cjtxs for pool {pool_size}')
+
+        txs_to_probe = next_txs_to_probe
+
+    logging.info(f'Total cjtxs extracted for pool {pool_size}: {len(pool_txs)}')
+
+    target_save_path = os.path.join(target_path, pool_id)
+    logging.info(f'Saving to {target_save_path}/coinjoin_tx_info.json ...')
+    if not os.path.exists(target_save_path):
+        os.makedirs(target_save_path.replace('\\', '/'))
+    save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': pool_txs})
+
+    return {'coinjoins': pool_txs}
+
+
 if __name__ == "__main__":
     # Limit analysis only to specific coinjoin type
     CONSIDER_WW1 = False
@@ -2136,9 +2217,10 @@ if __name__ == "__main__":
     FULL_TX_SET = False
 
     ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
-    PLOT_REMIXES = True
-    PLOT_REMIXES_FLOWS = False
     DETECT_FALSE_POSITIVES = False
+    SPLIT_WHIRLPOOL_POOLS = True
+    PLOT_REMIXES = False
+    PLOT_REMIXES_FLOWS = False
     ANALYSIS_ADDRESS_REUSE = False
     ANALYSIS_PROCESS_ALL_COINJOINS = False
     ANALYSIS_PROCESS_ALL_COINJOINS_DEBUG = False
@@ -2158,8 +2240,26 @@ if __name__ == "__main__":
     target_path = os.path.join(target_base_path, 'Scanner')
     SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
 
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
+        # Plotting remixes separately for different Whirlpool pools
+        wasabi_plot_remixes('whirlpool_100k', os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
+                            True, False)
+        wasabi_plot_remixes('whirlpool_1M', os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
+                            True, False)
+        # wasabi_plot_remixes('whirlpool_5M', os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
+        #                     True, False)
+        wasabi_plot_remixes('whirlpool_50M', os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
+                            True, False)
+        exit(42)
+        wasabi_plot_remixes('whirlpool_100k', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
+                            True, False)
+        wasabi_plot_remixes('whirlpool_1M', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
+                            True, False)
+        wasabi_plot_remixes('whirlpool_50M', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
+                            True, False)
+
+        exit(42)
         #wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True)
         #wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True)
         wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', False, True)
@@ -2214,9 +2314,32 @@ if __name__ == "__main__":
     #
     if ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS:
         if CONSIDER_WHIRLPOOL:
-            process_and_save_intervals_filter('whirlpool', MIX_PROTOCOL.WHIRLPOOL, target_path, '2019-04-17 01:38:07.000', interval_stop_date,
+            all_data = process_and_save_intervals_filter('whirlpool', MIX_PROTOCOL.WHIRLPOOL, target_path, '2019-04-17 01:38:07.000', interval_stop_date,
                                        'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt',
                                               SAVE_BASE_FILES_JSON, False)
+
+            # Split Whirlpool based on pools
+            whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_100k', 100000)
+            whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_1M', 1000000)
+            whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_5M', 5000000)
+            whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_50M', 50000000)
+
+            # 100k pool
+            process_and_save_intervals_filter('whirlpool_100k', MIX_PROTOCOL.WHIRLPOOL, target_path,
+                                              WHIRLPOOL_FUNDING_TXS[100000]['start_date'], interval_stop_date,
+                                              None, None, None, SAVE_BASE_FILES_JSON, True)
+            # 1M pool
+            process_and_save_intervals_filter('whirlpool_1M', MIX_PROTOCOL.WHIRLPOOL, target_path,
+                                              WHIRLPOOL_FUNDING_TXS[1000000]['start_date'], interval_stop_date,
+                                              None, None, None, SAVE_BASE_FILES_JSON, True)
+            # 5M pool
+            process_and_save_intervals_filter('whirlpool_5M', MIX_PROTOCOL.WHIRLPOOL, target_path,
+                                              WHIRLPOOL_FUNDING_TXS[5000000]['start_date'], interval_stop_date,
+                                              None, None, None, SAVE_BASE_FILES_JSON, True)
+            # 50M pool
+            process_and_save_intervals_filter('whirlpool_50M', MIX_PROTOCOL.WHIRLPOOL, target_path,
+                                              WHIRLPOOL_FUNDING_TXS[50000000]['start_date'], interval_stop_date,
+                                              None, None, None, SAVE_BASE_FILES_JSON, True)
 
         if CONSIDER_WW1:
             process_and_save_intervals_filter('wasabi1', MIX_PROTOCOL.WASABI1, target_path, '2018-07-19 01:38:07.000', interval_stop_date,
@@ -2239,11 +2362,26 @@ if __name__ == "__main__":
 
     if DETECT_FALSE_POSITIVES:
         if CONSIDER_WW1:
-            wasabi_detect_false(os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json',)
+            wasabi_detect_false(os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json')
         if CONSIDER_WW2:
-            wasabi_detect_false(os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json',)
+            wasabi_detect_false(os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json')
         if CONSIDER_WHIRLPOOL:
-            wasabi_detect_false(os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',)
+            wasabi_detect_false(os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json')
+            wasabi_detect_false(os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json')
+            wasabi_detect_false(os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json')
+            wasabi_detect_false(os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json')
+            wasabi_detect_false(os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json')
+
+    if SPLIT_WHIRLPOOL_POOLS:
+        if CONSIDER_WHIRLPOOL:
+            target_load_path = os.path.join(target_path, 'whirlpool')
+            logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
+            data = load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
+
+            whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_100k', 100000)
+            whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_1M', 1000000)
+            whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_5M', 5000000)
+            whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_50M', 50000000)
 
     if PLOT_INTERMIX_FLOWS:
         analyze_mixes_flows(target_path)
@@ -2271,18 +2409,24 @@ if __name__ == "__main__":
             wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, True)
 
             # Plotting remixes separately for different Whirlpool pools
-            wasabi_plot_remixes('whirlpool_5M', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
-                                True, False, 5000000)
-            wasabi_plot_remixes('whirlpool_100k', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
-                                True, False, 100000)
-            wasabi_plot_remixes('whirlpool_1M', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
-                                True, False, 1000000)
-            wasabi_plot_remixes('whirlpool_50M', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
-                                True, False, 50000000)
+            wasabi_plot_remixes('whirlpool_100k', os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
+                                True, False)
+            wasabi_plot_remixes('whirlpool_1M', os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
+                                True, False)
+            wasabi_plot_remixes('whirlpool_5M', os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
+                                True, False)
+            wasabi_plot_remixes('whirlpool_50M', os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
+                                True, False)
 
         # Less beneficial visualizations
         # wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, False)
         # wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, True)
+
+    if PLOT_REMIXES_FLOWS:
+        wasabi_plot_remixes_flows('wasabi2_select',
+                             os.path.join(target_path, 'wasabi2_select'),
+                             'coinjoin_tx_info.json', False, True)
+        exit(42)
 
     if ANALYSIS_BURN_TIME:
         if CONSIDER_WW1:
@@ -2332,4 +2476,9 @@ if __name__ == "__main__":
     # TODO: Filter false positives for hits coinjoin detection (Standa?)
     # BUGBUG: Finish detection of friends do not pay
 
+    # TODO; Analyze Whirlpool consolidations. e.g. https://mempool.space/tx/890fb564ce500739a1566b29de9d53a8a0e545e8d1243224dfbed336219d8889
+    #  is huge consolidation of whirlpool coins then resend 4 times, likely to confuse filters detecting whirlpool
+    #  Consolidation https://mempool.space/tx/52e36136c4b45eb6b9effcdf7fa79997e4b5efb611675356702bcbb6ce9d5e8c#flow=&vin=6
 
+    # TODO: Huge consolidation of Whirlpool coins: https://mempool.space/tx/d463b35b3d18dda4e59f432728c7a365eaefd50b24a6596ab42a077868e9d7e5
+    #  (>60btc total, payjoin (possibly fake) attempted, 140+ inputs from various )
