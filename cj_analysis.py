@@ -568,9 +568,10 @@ def extract_interval(data: dict, start_date: str, end_date: str):
                                       if start_date < data['coinjoins'][txid][
                                           'broadcast_time'] < end_date}
     interval_data['postmix'] = {}
-    interval_data['rounds'] = {roundid: data['rounds'][roundid] for roundid in data['rounds'].keys()
-                               if
-                               start_date < data['rounds'][roundid]['round_start_time'] < end_date}
+    if 'rounds' in data.keys():
+        interval_data['rounds'] = {roundid: data['rounds'][roundid] for roundid in data['rounds'].keys()
+                                   if
+                                   start_date < data['rounds'][roundid]['round_start_time'] < end_date}
     interval_data['wallets_info'], interval_data['wallets_coins'] = extract_wallets_info(interval_data)
 
     if 'premix' in data.keys():  # Only for Whirlpool
