@@ -2225,17 +2225,10 @@ if __name__ == "__main__":
     target_path = os.path.join(target_base_path, 'Scanner')
     SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
-        # Plotting remixes separately for different Whirlpool pools
-        wasabi_plot_remixes('whirlpool_100k', os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
-                            True, False)
-        wasabi_plot_remixes('whirlpool_1M', os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
-                            True, False)
-        # wasabi_plot_remixes('whirlpool_5M', os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
-        #                     True, False)
-        wasabi_plot_remixes('whirlpool_50M', os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
-                            True, False)
+        wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, False)
+
         exit(42)
         wasabi_plot_remixes('whirlpool_100k', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
                             True, False)
@@ -2497,3 +2490,9 @@ if __name__ == "__main__":
 
     # TODO: Huge consolidation of Whirlpool coins: https://mempool.space/tx/d463b35b3d18dda4e59f432728c7a365eaefd50b24a6596ab42a077868e9d7e5
     #  (>60btc total, payjoin (possibly fake) attempted, 140+ inputs from various )
+    # https://mempool.space/tx/8f59577b2dfa88e7d7fdd206a17618893db7559007a15658872b665bc16417c5
+    # https://mempool.space/tx/d463b35b3d18dda4e59f432728c7a365eaefd50b24a6596ab42a077868e9d7e5
+    # https://mempool.space/tx/57a8ea3ba1568fed4d9f7d7b3b84cdec552d9c49d4849bebf77a1053c180d0d1
+    # https://mempool.space/tx/8f59577b2dfa88e7d7fdd206a17618893db7559007a15658872b665bc16417c5
+    # https://mempool.space/tx/d463b35b3d18dda4e59f432728c7a365eaefd50b24a6596ab42a077868e9d7e5
+    #
