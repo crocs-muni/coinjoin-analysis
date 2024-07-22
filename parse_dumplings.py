@@ -1603,7 +1603,7 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
             dates = [precomp_datetime.strptime(data['coinjoins'][cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for cjtx in data['coinjoins'].keys()]
             new_day_indices = [('day', 0)]  # Start with the first index
             for i in range(1, len(dates)):
-                if dates[i].date() != dates[i - 1].date():
+                if dates[i].day != dates[i - 1].day:
                     new_day_indices.append(('day', i))
             print(new_day_indices)
             for pos in new_day_indices:
@@ -1661,7 +1661,7 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
 
         prev_year = current_year
 
-    def plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, stay_liquidity, mining_fee_rate):
+    def plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, stay_liquidity, mining_fee_rate, separators_to_plot: list):
         # Plot mining fee rate
         ax.plot(mining_fee_rate, color='gray', alpha=0.3, linewidth=1, linestyle=':', label='Mining fee (90th percentil)')
         ax.tick_params(axis='y', colors='gray', labelsize=6)
@@ -1696,10 +1696,11 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
 
         # Plot lines as separators corresponding to months
         for pos in new_month_indices:
-            if pos[0] == 'day' or pos[0] == 'month':
-                ax2.axvline(x=pos[1], color='gray', linewidth=1, alpha=0.2)
-            if pos[0] == 'year':
-                ax2.axvline(x=pos[1], color='gray', linewidth=2, alpha=0.4)
+            if pos[0] in separators_to_plot:
+                if pos[0] == 'day' or pos[0] == 'month':
+                    ax2.axvline(x=pos[1], color='gray', linewidth=1, alpha=0.1)
+                if pos[0] == 'year':
+                    ax2.axvline(x=pos[1], color='gray', linewidth=2, alpha=0.4)
         ax2.set_xticks([x[1] for x in new_month_indices])
         labels = []
         prev_year_offset = -10000
@@ -1724,19 +1725,20 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
     # Add additional cummulative plots for all coinjoin in one
     ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
     ax_index += 1
-    plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, stay_liquidity, mining_fee_rate)
+    plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, stay_liquidity, mining_fee_rate, ['month', 'year'])
 
     # Finalize multigraph graph
-    plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
-    save_file = os.path.join(target_path, f'{mix_id}_input_types_{'values' if analyze_values else 'nums'}_{'norm' if normalize_values else 'notnorm'}{'' if restrict_to_in_size is None else f'{round(restrict_to_in_size[1]/SATS_IN_BTC, 2)}btc'}')
-    plt.savefig(f'{save_file}.png', dpi=300)
-    plt.savefig(f'{save_file}.pdf', dpi=300)
+    if plot_multigraph:
+        plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
+        save_file = os.path.join(target_path, f'{mix_id}_input_types_{'values' if analyze_values else 'nums'}_{'norm' if normalize_values else 'notnorm'}{'' if restrict_to_in_size is None else f'{round(restrict_to_in_size[1]/SATS_IN_BTC, 2)}btc'}')
+        plt.savefig(f'{save_file}.png', dpi=300)
+        plt.savefig(f'{save_file}.pdf', dpi=300)
     plt.close()
 
     # Save generate and save cummulative results separately
     fig = plt.figure(figsize=(10, 3))
     ax = fig.add_subplot(1, 1, 1, axes_class=AA.Axes)  # Get next subplot
-    plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, stay_liquidity, mining_fee_rate)
+    plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, stay_liquidity, mining_fee_rate, ['month', 'year'])
     plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
     save_file = os.path.join(target_path, f'{mix_id}_cummul_{'values' if analyze_values else 'nums'}_{'norm' if normalize_values else 'notnorm'}{'' if restrict_to_in_size is None else f'{round(restrict_to_in_size[1]/SATS_IN_BTC, 2)}btc'}')
     plt.savefig(f'{save_file}.png', dpi=300)
