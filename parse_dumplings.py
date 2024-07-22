@@ -1,6 +1,7 @@
 import copy
 import os
 import pickle
+import shutil
 from datetime import datetime, timedelta
 from collections import defaultdict, Counter
 from pathlib import Path
@@ -1049,33 +1050,14 @@ def visualize_intervals(mix_id: str, target_path: os.path, start_date: str, stop
         current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def process_and_save_single_interval(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: os.path, start_date: str, stop_date: str, mix_filename: str,
-                                      postmix_filename: str, premix_filename: str=None, save_base_files=True, load_base_files=False):
-    # Create directory structure with files split per month (around 1000 subsequent coinjoins)
+def process_and_save_single_interval(mix_id: str, data: dict, mix_protocol: MIX_PROTOCOL, target_path: os.path, start_date: str, stop_date: str):
+    # Create directory structure for target interval
     # Load all coinjoins first, then filter based on intervals
     target_save_path = os.path.join(target_path, mix_id)
     if not os.path.exists(target_save_path):
         os.makedirs(target_save_path.replace('\\', '/'))
 
-    if load_base_files:
-        # Load base files from already stored json
-        logging.info(f'Loading {target_save_path}/coinjoin_tx_info.json ...')
-        data = load_json_from_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'))
-        logging.info(f'{target_save_path}/coinjoin_tx_info.json loaded with {len(data['coinjoins'])} conjoins')
-    else:
-        # Compute base files (time intensive)
-        SAVE_BASE_FILES_JSON = False
-        data = process_and_save_coinjoins(mix_id, mix_protocol, target_path, mix_filename, postmix_filename, premix_filename, None, None, target_save_path)
-        SAVE_BASE_FILES_JSON = save_base_files
-
-    if premix_filename:
-        # Whirlpool
-        extract_inputs_distribution(mix_id, target_path, premix_filename, data['premix'], True)
-    else:
-        # WW1, WW2
-        extract_inputs_distribution(mix_id, target_path, mix_filename, data['coinjoins'], True)
-
-    process_interval(mix_id, data, mix_filename, premix_filename, target_save_path, start_date, stop_date)
+    process_interval(mix_id, data, None, None, target_save_path, start_date, stop_date)
 
 
 def find_whirlpool_tx0_reuse(mix_id: str, target_path: Path, premix_filename: str):
@@ -1557,7 +1539,7 @@ def wasabi2_analyse_remixes(mix_id: str, target_path: str):
     burntime_histogram(mix_id, data)
 
 
-def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_values: bool = True, normalize_values: bool = True, restrict_to_out_size: int = None, restrict_to_in_size = None):
+def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_values: bool = True, normalize_values: bool = True, restrict_to_out_size: int = None, restrict_to_in_size = None, plot_multigraph: bool = True):
     files = os.listdir(target_path) if os.path.exists(target_path) else print(
         f'Path {target_path} does not exist')
 
@@ -2217,8 +2199,9 @@ if __name__ == "__main__":
     FULL_TX_SET = False
 
     ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
+    PROCESS_NOTABLE_INTERVALS = False
     DETECT_FALSE_POSITIVES = False
-    SPLIT_WHIRLPOOL_POOLS = True
+    SPLIT_WHIRLPOOL_POOLS = False
     PLOT_REMIXES = False
     PLOT_REMIXES_FLOWS = False
     ANALYSIS_ADDRESS_REUSE = False
@@ -2308,6 +2291,27 @@ if __name__ == "__main__":
         wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', False, True)
         wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', True, False)
         wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', True, True)
+
+    if PROCESS_NOTABLE_INTERVALS:
+        if CONSIDER_WW1:
+            target_load_path = os.path.join(target_path, 'wasabi1')
+            all_data = load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
+
+            def process_joint_interval(mix_origin_name, interval_name, all_data, mix_type, target_path, start_date: str, end_date: str):
+                process_and_save_single_interval(interval_name, all_data, mix_type, target_path, start_date,end_date)
+                shutil.copyfile(os.path.join(target_path, mix_origin_name, 'fee_rates.json'), os.path.join(target_path, interval_name, 'fee_rates.json'))
+                shutil.copyfile(os.path.join(target_path, mix_origin_name, 'false_cjtxs.json'), os.path.join(target_path, interval_name, 'false_cjtxs.json'))
+                wasabi_plot_remixes(interval_name, os.path.join(target_path, interval_name), 'coinjoin_tx_info.json', True, False)
+
+            # Large inflows into WW1 in 2019-08-09, mixed and the all taken out
+            process_joint_interval('wasabi1', 'wasabi1__2019_08-09', all_data, MIX_PROTOCOL.WASABI1, target_path, '2019-08-01 00:00:07.000', '2019-09-30 23:59:59.000')
+
+            # Large single inflow with long remixing continously taken out
+            process_joint_interval('wasabi1', 'wasabi1__2020_03-04', all_data, MIX_PROTOCOL.WASABI1, target_path, '2020-03-26 00:00:07.000','2020-04-20 23:59:59.000')
+
+            # Two inflows, subsequent remixing
+            process_joint_interval('wasabi1', 'wasabi1__2022_04-05', all_data, MIX_PROTOCOL.WASABI1, target_path, '2022-04-23 00:00:07.000', '2022-05-06 23:59:59.000')
+
 
     #
     #
