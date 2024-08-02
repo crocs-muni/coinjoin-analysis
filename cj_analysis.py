@@ -350,13 +350,16 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudit
 
 def plot_mining_fee_rates(mix_id: str, data: dict, mining_fees: dict, ax):
     coinjoins = data['coinjoins']
-    sorted_cj_time = sort_coinjoins(coinjoins, False)  # Take real mining time as mining fee are more relevant to it
+    # Take real mining time as mining fee are more relevant to it, but adapt to relative ordering used for plotting
+    sorted_cj_fee_time = sort_coinjoins(coinjoins, False)  # Real time of mining => time of minig fee rate application
+    sorted_cj_fee_time_dict = {cj['txid']: cj for cj in sorted_cj_fee_time}  # Turn list into dict for faster lookups
+    sorted_cj_time = sort_coinjoins(coinjoins, False)  # Take relative ordering of cjtxs
 
     # For each coinjoin find the closest fee rate record and plot it
     fee_rates = []
     fee_start_index = 0
     for cj in sorted_cj_time:
-        timestamp = cj['broadcast_time'].timestamp()
+        timestamp = sorted_cj_fee_time_dict[cj['txid']]['broadcast_time'].timestamp()
         while timestamp > mining_fees[fee_start_index]['timestamp']:
             fee_start_index = fee_start_index + 1
         closest_fee = mining_fees[fee_start_index - 1]['avgFee_90']
