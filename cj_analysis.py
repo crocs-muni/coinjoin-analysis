@@ -1,6 +1,8 @@
 import logging
 import os
 import sys
+import orjson
+import json
 
 import numpy as np
 from datetime import datetime, timedelta
@@ -55,6 +57,30 @@ class PRECOMP_STRPTIME():
 
 
 precomp_datetime = PRECOMP_STRPTIME()
+
+
+def load_json_from_file(file_path: str) -> dict:
+    with open(file_path, "rb") as file:
+        return orjson.loads(file.read())
+
+    # with open(file_path, "r") as file:
+    #     return json.load(file)
+
+
+def save_json_to_file(file_path: str, data: dict):
+    with open(file_path, "wb") as file:
+        file.write(orjson.dumps(data))
+
+    # with open(file_path, "w") as file:
+    #     file.write(json.dumps(dict(sorted(data.items())), indent=4))
+
+
+def save_json_to_file_pretty(file_path: str, data: dict, sort: bool = False):
+    with open(file_path, "w") as file:
+        if sort:
+            file.write(json.dumps(dict(sorted(data.items())), indent=4))
+        else:
+            file.write(json.dumps(data, indent=4))
 
 
 def detect_no_inout_remix_txs(coinjoins):

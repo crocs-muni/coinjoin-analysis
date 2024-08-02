@@ -94,13 +94,13 @@ def get_session_label(mix_name: str, session_size_inputs: int, segment: list, se
 
 def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experiment_start_date: str):
     target_path = os.path.join(target_base_path, f'{mix_name}_history.json')
-    history_all = dmp.load_json_from_file(target_path)['result']
+    history_all = als.load_json_from_file(target_path)['result']
     target_path = os.path.join(target_base_path, f'{mix_name}_coins.json')
-    coins = dmp.load_json_from_file(target_path)['result']
+    coins = als.load_json_from_file(target_path)['result']
     target_path = os.path.join(target_base_path, f'coinjoin_tx_info.json')
-    coinjoins = dmp.load_json_from_file(target_path)['coinjoins']
+    coinjoins = als.load_json_from_file(target_path)['coinjoins']
     target_path = os.path.join(target_base_path, f'logww2.json')
-    coord_logs = dmp.load_json_from_file(target_path)
+    coord_logs = als.load_json_from_file(target_path)
 
     # Filter all items from history older than experiment start date
     history = [tx for tx in history_all if tx['datetime'] >= experiment_start_cut_date]
@@ -488,6 +488,15 @@ if __name__ == "__main__":
     als.merge_dicts(cjs, all_cjs)
     als.merge_dicts(wallet_stats, all_stats)
     assert len(all_stats['anon_percentage_status']) == 23, f'Unexpected number of coinjoin sessions {len(all_stats['anon_percentage_status'])}'
+
+    # Save extracted information
+    save_path = os.path.join(target_path, 'as25_coinjoin_tx_info.json')
+    als.save_json_to_file_pretty(save_path, all_cjs)
+    save_path = os.path.join(target_path, 'as25_stats.json')
+    als.save_json_to_file_pretty(save_path, all_stats)
+
+    # Extract complete coinjoins info
+
 
     plot_cj_anonscores(mfig, all_stats['anon_percentage_status'], f'All wallets, progress towards fully anonymized liquidity (AS={experiment_target_anonscore}); total sessions={len(all_stats['anon_percentage_status'])}',
                        'privacy progress (%)')

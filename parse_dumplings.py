@@ -9,7 +9,6 @@ import numpy as np
 import seaborn as sns
 from scipy import stats
 import logging
-import json
 from cj_analysis import MIX_EVENT_TYPE, get_output_name_string, get_input_name_string
 from cj_analysis import MIX_PROTOCOL
 from cj_analysis import precomp_datetime
@@ -97,28 +96,6 @@ WHIRLPOOL_FUNDING_TXS[5000000] = {'start_date': '2019-04-17 16:20:09.000', 'fund
 WHIRLPOOL_FUNDING_TXS[50000000] = {'start_date': '2019-08-02 17:45:23.000', 'funding_txs': ['b42df707a3d876b24a22b0199e18dc39aba2eafa6dbeaaf9dd23d925bb379c59']}
 
 
-def load_json_from_file(file_path: str) -> dict:
-    with open(file_path, "rb") as file:
-        return orjson.loads(file.read())
-
-    # with open(file_path, "r") as file:
-    #     return json.load(file)
-
-
-def save_json_to_file(file_path: str, data: dict):
-    with open(file_path, "wb") as file:
-        file.write(orjson.dumps(data))
-
-    # with open(file_path, "w") as file:
-    #     file.write(json.dumps(dict(sorted(data.items())), indent=4))
-
-
-def save_json_to_file_pretty(file_path: str, data: dict, sort: bool = False):
-    with open(file_path, "w") as file:
-        if sort:
-            file.write(json.dumps(dict(sorted(data.items())), indent=4))
-        else:
-            file.write(json.dumps(data, indent=4))
 
 
 def set_key_value_assert(data, key, value, hard_assert):
@@ -790,7 +767,7 @@ def process_coinjoins(target_path, mix_protocol: MIX_PROTOCOL, mix_filename, pos
         return data
 
     false_cjtxs_file = os.path.join(target_path, f'{mix_protocol.name}_false_filtered_cjtxs.json')
-    save_json_to_file_pretty(false_cjtxs_file, false_cjtxs)
+    als.save_json_to_file_pretty(false_cjtxs_file, false_cjtxs)
 
     SM.print('*******************************************')
     SM.print(f'{mix_filename} coinjoins: {len(data['coinjoins'])}')
@@ -848,14 +825,14 @@ def process_and_save_coinjoins(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
         target_save_path = target_path
     # Process and save full conjoin information
     data, cj_relative_order = process_coinjoins(target_path, mix_protocol, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
-    save_json_to_file_pretty(os.path.join(target_save_path, f'cj_relative_order.json'), cj_relative_order)
+    als.save_json_to_file_pretty(os.path.join(target_save_path, f'cj_relative_order.json'), cj_relative_order)
 
     if SAVE_BASE_FILES_JSON:
-        save_json_to_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'), data)
+        als.save_json_to_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'), data)
 
     # Filter only liquidity-relevant events to maintain smaller file
     events = filter_liquidity_events(data)
-    save_json_to_file_pretty(os.path.join(target_save_path, f'{mix_id}_events.json'), events)
+    als.save_json_to_file_pretty(os.path.join(target_save_path, f'{mix_id}_events.json'), events)
 
     # # Visualize coinjoins
     # if len(data['coinjoins']) > 0:
@@ -915,10 +892,10 @@ def process_interval(mix_id: str, data: dict, mix_filename: str, premix_filename
     # Filter only data relevant for given interval and save
     interval_data = als.extract_interval(data, last_stop_date_str, current_stop_date_str)
 
-    save_json_to_file(os.path.join(interval_path, f'coinjoin_tx_info.json'), interval_data)
+    als.save_json_to_file(os.path.join(interval_path, f'coinjoin_tx_info.json'), interval_data)
     # Filter only liquidity-relevant events to maintain smaller file
     events = filter_liquidity_events(interval_data)
-    save_json_to_file_pretty(os.path.join(interval_path, f'{mix_id}_events.json'), events)
+    als.save_json_to_file_pretty(os.path.join(interval_path, f'{mix_id}_events.json'), events)
 
     # extract liquidity for given interval
     if premix_filename:
@@ -946,7 +923,7 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
         # Load base files from already stored json
         logging.info(f'Loading {target_save_path}/coinjoin_tx_info.json ...')
 
-        data = load_json_from_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'))
+        data = als.load_json_from_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'))
 
         logging.info(f'{target_save_path}/coinjoin_tx_info.json loaded with {len(data['coinjoins'])} conjoins')
     else:
@@ -999,7 +976,7 @@ def visualize_interval(mix_id: str, data: dict, mix_filename: str, premix_filena
     interval_path = os.path.join(target_save_path, f'{last_stop_date_str.replace(':', '-')}--{current_stop_date_str.replace(':', '-')}_unknown-static-100-1utxo')
     assert os.path.exists(interval_path), f'{interval_path} does not exist'
 
-    interval_data = load_json_from_file(os.path.join(interval_path, f'coinjoin_tx_info.json'))
+    interval_data = als.load_json_from_file(os.path.join(interval_path, f'coinjoin_tx_info.json'))
     events = filter_liquidity_events(interval_data)
 
     # Visualize coinjoins
@@ -1017,7 +994,7 @@ def visualize_intervals(mix_id: str, target_path: os.path, start_date: str, stop
     # Load base files from already stored json
     logging.info(f'Loading {target_save_path}/coinjoin_tx_info.json ...')
 
-    data = load_json_from_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'))
+    data = als.load_json_from_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'))
 
     logging.info(f'{target_save_path}/coinjoin_tx_info.json loaded with {len(data['coinjoins'])} conjoins')
 
@@ -1123,9 +1100,9 @@ def find_address_reuse(mix_id: str, txs: dict, target_path: Path = None, ignore_
 
     if target_path and save_outputs:
         target_save_path = target_path
-        save_json_to_file_pretty(os.path.join(target_save_path, f'{mix_id}_reused_addresses.json'), reused_addresses)
-        save_json_to_file_pretty(os.path.join(target_save_path, f'{mix_id}_reused_addresses_single.json'), single_reuse)
-        save_json_to_file_pretty(os.path.join(target_save_path, f'{mix_id}_reused_addresses_multiple.json'), multiple_reuse)
+        als.save_json_to_file_pretty(os.path.join(target_save_path, f'{mix_id}_reused_addresses.json'), reused_addresses)
+        als.save_json_to_file_pretty(os.path.join(target_save_path, f'{mix_id}_reused_addresses_single.json'), single_reuse)
+        als.save_json_to_file_pretty(os.path.join(target_save_path, f'{mix_id}_reused_addresses_multiple.json'), multiple_reuse)
 
     # TODO: Plot characteristics of address reuse (time between reuse, ocurence in real time...)
 
@@ -1136,7 +1113,7 @@ def extract_coinjoin_interval(mix_id: str, target_path: Path, txs: dict, start_d
     logging.info(f'  Interval extracted for {start_date} to {stop_date}, total {len(inputs.keys())} coinjoins found')
     interval_data = {'coinjoins': inputs, 'start_date': start_date, 'stop_date': stop_date}
     if save_outputs:
-        save_json_to_file(os.path.join(target_path, f'{mix_id}_conjoins_interval_{start_date[:start_date.find(' ') - 1]}-{stop_date[:stop_date.find(' ') - 1]}.json'), interval_data)
+        als.save_json_to_file(os.path.join(target_path, f'{mix_id}_conjoins_interval_{start_date[:start_date.find(' ') - 1]}-{stop_date[:stop_date.find(' ') - 1]}.json'), interval_data)
 
     return interval_data
 
@@ -1206,7 +1183,7 @@ def extract_inputs_distribution(mix_id: str, target_path: Path, tx_filename: str
     inputs_info = {'mix_id': mix_id, 'path': tx_filename, 'distrib': inputs_distrib}
     logging.info(f'  Distribution extracted, total {len(inputs_info['distrib'])} different input values found')
     if save_outputs:
-        save_json_to_file_pretty(os.path.join(target_path, f'{mix_id}_inputs_distribution.json'), inputs_info)
+        als.save_json_to_file_pretty(os.path.join(target_path, f'{mix_id}_inputs_distribution.json'), inputs_info)
 
     return inputs_info, inputs
 
@@ -1522,7 +1499,7 @@ def whirlpool_analyze_coordinator_fees(mix_id: str, data: dict):
 
 
 def whirlpool_analyse_remixes(mix_id: str, target_path: str):
-    data = load_json_from_file(os.path.join(target_path, mix_id, 'coinjoin_tx_info.json'))
+    data = als.load_json_from_file(os.path.join(target_path, mix_id, 'coinjoin_tx_info.json'))
     als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], data['premix'], MIX_PROTOCOL.WHIRLPOOL)
     whirlpool_analyze_fees(mix_id, data)
     inputs_value_burntime_heatmap(mix_id, data)
@@ -1530,9 +1507,9 @@ def whirlpool_analyse_remixes(mix_id: str, target_path: str):
 
 
 def wasabi2_analyse_remixes(mix_id: str, target_path: str):
-    data = load_json_from_file(os.path.join(target_path, mix_id, 'coinjoin_tx_info.json'))
+    data = als.load_json_from_file(os.path.join(target_path, mix_id, 'coinjoin_tx_info.json'))
     cj_relative_order = als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], [], MIX_PROTOCOL.WASABI2)
-    save_json_to_file_pretty(os.path.join(target_path, mix_id, f'cj_relative_order.json'), cj_relative_order)
+    als.save_json_to_file_pretty(os.path.join(target_path, mix_id, f'cj_relative_order.json'), cj_relative_order)
 
     wasabi2_analyze_fees(mix_id, data)
     inputs_value_burntime_heatmap(mix_id, data)
@@ -1544,11 +1521,11 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
         f'Path {target_path} does not exist')
 
     # Load fee rates
-    mining_fee_rates = load_json_from_file(os.path.join(target_path, 'fee_rates.json'))
+    mining_fee_rates = als.load_json_from_file(os.path.join(target_path, 'fee_rates.json'))
 
     # Load false positives
     fp_file = os.path.join(target_path, 'false_cjtxs.json')
-    false_cjtxs = load_json_from_file(fp_file)
+    false_cjtxs = als.load_json_from_file(fp_file)
 
     # Compute number of required month subgraphs
     num_months = sum([1 for dir_name in files
@@ -1580,7 +1557,7 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
         tx_json_file = os.path.join(target_base_path, f'{tx_file}')
         current_year = dir_name[0:4]
         if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
-            data = load_json_from_file(tx_json_file)
+            data = als.load_json_from_file(tx_json_file)
 
             # Filter false positives
             for false_tx in false_cjtxs:
@@ -1746,7 +1723,7 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
     plt.close()
 
     # save detected no transactions with no remixes (potentially false positives)
-    save_json_to_file_pretty(os.path.join(target_path, 'no_remix_txs.json'), no_remix_all)
+    als.save_json_to_file_pretty(os.path.join(target_path, 'no_remix_txs.json'), no_remix_all)
 
 
 def wasabi_detect_false(target_path: Path, tx_file: str):
@@ -1755,14 +1732,14 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
 
     # Load false positives
     fp_file = os.path.join(target_path, 'false_cjtxs.json')
-    false_cjtxs = load_json_from_file(fp_file)
+    false_cjtxs = als.load_json_from_file(fp_file)
 
     no_remix_all = {'inputs': [], 'outputs': [], 'both': []}
     for dir_name in files:
         target_base_path = os.path.join(target_path, dir_name)
         tx_json_file = os.path.join(target_base_path, f'{tx_file}')
         if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
-            data = load_json_from_file(tx_json_file)
+            data = als.load_json_from_file(tx_json_file)
 
             # Filter false positives
             for false_tx in false_cjtxs:
@@ -1775,11 +1752,13 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
                 no_remix_all[key].extend(no_remix[key])
 
     # save detected no transactions with no remixes (potentially false positives)
-    save_json_to_file_pretty(os.path.join(target_path, 'no_remix_txs.json'), no_remix_all)
+    als.save_json_to_file_pretty(os.path.join(target_path, 'no_remix_txs.json'), no_remix_all)
+
+    #
 
 
 def wasabi1_analyse_remixes(mix_id: str, target_path: str):
-    data = load_json_from_file(os.path.join(target_path, mix_id, 'coinjoin_tx_info.json'))
+    data = als.load_json_from_file(os.path.join(target_path, mix_id, 'coinjoin_tx_info.json'))
     als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], [], MIX_PROTOCOL.WASABI1)
 
     wasabi1_analyze_fees(mix_id, data)
@@ -1808,7 +1787,7 @@ def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: Path):
     # Now fix all prepared paths
     for path in paths_to_process:
         logging.info(f'Processing {path}...')
-        ww2_data = load_json_from_file(os.path.join(path, f'coinjoin_tx_info.json'))
+        ww2_data = als.load_json_from_file(os.path.join(path, f'coinjoin_tx_info.json'))
 
         # For all values with mix_event_type equal to MIX_ENTER check if they are not from WW1
         # with friends-do-not-pay rule
@@ -1827,7 +1806,7 @@ def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: Path):
 
         print(f'Total WW1 inputs with friends-do-not-pay rule: {total_ww1_inputs}')
 
-        save_json_to_file(os.path.join(path, f'coinjoin_tx_info.json'), ww2_data)
+        als.save_json_to_file(os.path.join(path, f'coinjoin_tx_info.json'), ww2_data)
 
 
 def extract_flows_blocksci(flows: dict):
@@ -2030,13 +2009,13 @@ def plot_steamgraph_example():
 def analyze_mixes_flows(target_path):
     flows_file = os.path.join(target_path, 'one_hop_flows_misclassifications.json')
     if os.path.exists(flows_file):
-        flows = load_json_from_file(flows_file)
+        flows = als.load_json_from_file(flows_file)
         print(f'Total misclassifications: {len(flows.keys())}')
 
     # Visualization of results from BlockSci
     flows_file = os.path.join(target_path, 'one_hop_flows.json')
     if os.path.exists(flows_file):
-        flows = load_json_from_file(flows_file)
+        flows = als.load_json_from_file(flows_file)
         flows_in_time = extract_flows_blocksci(flows)
         #plot_flows_steamgraph(flows_in_time['broadcast_time_mix1'], 'BlockSci flows (1 hop), mix1')
         plot_flows_steamgraph(flows_in_time['broadcast_time_bridge'], 'BlockSci flows (1 hop), bridge tx time')
@@ -2046,14 +2025,14 @@ def analyze_mixes_flows(target_path):
     if TWO_HOPS:
         flows_file = os.path.join(target_path, 'two_hops_flows.json')
         if os.path.exists(flows_file):
-            flows = load_json_from_file(flows_file)
+            flows = als.load_json_from_file(flows_file)
             flows_in_time = extract_flows_blocksci(flows)
             plot_flows_steamgraph(flows_in_time, 'BlockSci flows (2 hops)')
 
     # Visualization of results from Dumplings
     flows_file = os.path.join(target_path, 'mix_flows.json')
     if os.path.exists(flows_file):
-        flows = load_json_from_file(flows_file)
+        flows = als.load_json_from_file(flows_file)
         flows_in_time = extract_flows_dumplings(flows)
         plot_flows_steamgraph(flows_in_time, 'Dumplings flows (1 hop)')
     else:
@@ -2112,7 +2091,7 @@ def analyze_mixes_flows(target_path):
         # analyze_extramix_flows('Wasabi2 -> Wasabi2', target_path, wasabi2_postmix, wasabi2_premix_dict)
         # analyze_extramix_flows('Whirlpool -> Whirlpool', target_path, whirlpool_postmix, whirlpool_premix)
 
-        save_json_to_file_pretty(os.path.join(target_path, 'mix_flows.json'), flows)
+        als.save_json_to_file_pretty(os.path.join(target_path, 'mix_flows.json'), flows)
         flows_in_time = extract_flows_dumplings(flows)
         plot_flows_steamgraph(flows_in_time, 'Dumplings flows')
 
@@ -2178,7 +2157,7 @@ def whirlpool_extract_pool(full_data: dict, mix_id: str, target_path: Path, pool
     logging.info(f'Saving to {target_save_path}/coinjoin_tx_info.json ...')
     if not os.path.exists(target_save_path):
         os.makedirs(target_save_path.replace('\\', '/'))
-    save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': pool_txs})
+    als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': pool_txs})
 
     return {'coinjoins': pool_txs}
 
@@ -2290,7 +2269,7 @@ if __name__ == "__main__":
     if PROCESS_NOTABLE_INTERVALS:
         if CONSIDER_WW1:
             target_load_path = os.path.join(target_path, 'wasabi1')
-            all_data = load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
+            all_data = als.load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
 
             def process_joint_interval(mix_origin_name, interval_name, all_data, mix_type, target_path, start_date: str, end_date: str):
                 process_and_save_single_interval(interval_name, all_data, mix_type, target_path, start_date,end_date)
@@ -2376,7 +2355,7 @@ if __name__ == "__main__":
             # Load txs for all pools
             target_load_path = os.path.join(target_path, 'whirlpool')
             logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
-            data = load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
+            data = als.load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
 
             # Separate per pool
             pool_100k = whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_100k', 100000)
@@ -2387,7 +2366,7 @@ if __name__ == "__main__":
             # Detect transactions which were not assigned to any pool
             missed_cjtxs = list(set(data['coinjoins'].keys()) - set(pool_100k['coinjoins'].keys()) - set(pool_1M['coinjoins'].keys())
                                 - set(pool_5M['coinjoins'].keys()) - set(pool_50M['coinjoins'].keys()))
-            save_json_to_file_pretty(os.path.join(target_load_path, f'coinjoin_tx_info__missed.json'), missed_cjtxs)
+            als.save_json_to_file_pretty(os.path.join(target_load_path, f'coinjoin_tx_info__missed.json'), missed_cjtxs)
             print(f'Total transactions not separated into pools: {len(missed_cjtxs)}')
             print(missed_cjtxs)
 
