@@ -226,9 +226,10 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     print(f'MIX_REMIX_FRIENDS median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name]) * 100, 2)}%')
     print(f'MIX_REMIX_FRIENDS_WW1 median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name]) * 100, 2)}%')
 
-    # Convert non-normalized values from sats to btc
-    for item in input_types_nums.keys():
-        input_types_nums[item] = np.array(input_types_nums[item]) / SATS_IN_BTC
+    # Convert non-normalized values from sats to btc (for sats values only)
+    if analyze_values:
+        for item in input_types_nums.keys():
+            input_types_nums[item] = np.array(input_types_nums[item]) / SATS_IN_BTC
 
     # Set normalized or non-normalized version to use
     input_types = input_types_nums_normalized if normalize_values else input_types_nums
@@ -270,7 +271,7 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     if not analyze_values and normalize_values:
         ax.set_ylabel('Fraction of input numbers')
     if not analyze_values and not normalize_values:
-        ax.set_ylabel('Input numbers')
+        ax.set_ylabel('Number of inputs')
 
     return input_types
 

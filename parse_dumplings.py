@@ -1153,7 +1153,7 @@ def analyze_interval_data(interval_data, stats: CoinJoinStats, results: dict):
         logging.info(f'  #cjs per one input coin= {round(stats.no_pool.num_mixes / stats.no_pool.num_coins, 2)}')
 
 
-def process_inputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_filename: str, save_outputs = False):
+def process_inputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_filename: str, save_outputs: bool= False):
     logging.info(f'Processing {mix_id}')
     txs = load_coinjoin_stats_from_file(os.path.join(target_path, tx_filename))
     als.analyze_input_out_liquidity(txs, [], [], mix_protocol)
@@ -1543,6 +1543,7 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
     mining_fee_rate = []  # Mining fee rate
     remix_liquidity = [0] # Liquidity that is remixed in time despite likely reaching target anonscore
     coord_fee_rate = []  # Coordinator fee payments
+    input_types = {}
     num_wallets = []
     initial_cj_index = 0
     time_liquidity = {}  # If MIX_LEAVE is detected, out liquidity is put into dictionary for future display
@@ -1599,7 +1600,11 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
                 no_remix_all[key].extend(no_remix[key])
 
             # Plot bars corresponding to different input types
-            als.plot_inputs_type_ratio(f'{mix_id} {dir_name}', data, initial_cj_index, ax, analyze_values, normalize_values, restrict_to_in_size)
+            input_types_interval = als.plot_inputs_type_ratio(f'{mix_id} {dir_name}', data, initial_cj_index, ax, analyze_values, normalize_values, restrict_to_in_size)
+            for input_type in input_types_interval:
+                if input_type not in input_types.keys():
+                    input_types[input_type] = []
+                input_types[input_type].extend(input_types_interval[input_type])
 
             # Add current total mix liquidity into the same graph
             ax2 = ax.twinx()
@@ -1609,10 +1614,10 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
             remix_liquidity.extend(remix_liquidity_interval)
 
             # Add fee rate into the same graph
-            PLOT_FEERATE = False
+            PLOT_FEERATE = True
             if PLOT_FEERATE:
                 ax3 = ax.twinx()
-                ax3.spines['right'].set_position(('outward', -28))  # Adjust position of the third axis
+                ax3.spines['right'].set_position(('outward', -30))  # Adjust position of the third axis
             else:
                 ax3 = None
             mining_fee_rate_interval = als.plot_mining_fee_rates(f'{mix_id} {dir_name}', data, mining_fee_rates, ax3)
@@ -1640,11 +1645,29 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
 
     def plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, stay_liquidity, mining_fee_rate, separators_to_plot: list):
         # Plot mining fee rate
-        ax.plot(mining_fee_rate, color='gray', alpha=0.3, linewidth=1, linestyle=':', label='Mining fee (90th percentil)')
-        ax.tick_params(axis='y', colors='gray', labelsize=6)
-        ax.set_ylabel('Mining fee rate sats/vB (90th percentil)', color='gray', fontsize='6')
-        #ax.set_xlabel('Coinjoin in time')
+        PLOT_FEERATE = False
+        if PLOT_FEERATE:
+            ax.plot(mining_fee_rate, color='gray', alpha=0.3, linewidth=1, linestyle=':', label='Mining fee (90th percentil)')
+            ax.tick_params(axis='y', colors='gray', labelsize=6)
+            ax.set_ylabel('Mining fee rate sats/vB (90th percentil)', color='gray', fontsize='6')
+            #ax.set_xlabel('Coinjoin in time')
+
+        def plot_bars_downscaled(values, downscalefactor, color, ax):
+            downscaled_values = [sum(values[i:i + n]) for i in range(0, len(values), n)]
+            downscaled_indices = range(0, len(values), n)
+            ax.bar(downscaled_indices, downscaled_values, color=color, width=n, alpha=0.2)
+            #ax.set_yscale('log')
+
+        n = 100  # Number of items to sum
+        # Fresh liquidity - MIX_ENTER + MIX_REMIX_FRIENDS_WW1
+        new_liquidity = [input_types[MIX_EVENT_TYPE.MIX_ENTER.name][i] + input_types[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name][i] for i in range(len(input_types[MIX_EVENT_TYPE.MIX_ENTER.name]))]
+        plot_bars_downscaled(new_liquidity, n, 'gray', ax)
+        # Outflows
+        out_liquidity = [input_types[MIX_EVENT_TYPE.MIX_LEAVE.name][i] for i in range(len(input_types[MIX_EVENT_TYPE.MIX_LEAVE.name]))]
+        plot_bars_downscaled(out_liquidity, n, 'red', ax)
         ax.set_title(f'{mix_id}: Liquidity dynamics in time')
+        ax.set_ylabel('Fresh liquidity (btc)', color='gray', fontsize='6')
+        ax.tick_params(axis='y', colors='gray')
 
         # Plot changing liquidity in time
         ax2 = ax.twinx()
@@ -1674,10 +1697,11 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
         # Plot lines as separators corresponding to months
         for pos in new_month_indices:
             if pos[0] in separators_to_plot:
-                if pos[0] == 'day' or pos[0] == 'month':
-                    ax2.axvline(x=pos[1], color='gray', linewidth=1, alpha=0.1)
+                PLOT_DAYS_MONTHS = False
+                if pos[0] == 'day' or pos[0] == 'month' and PLOT_DAYS_MONTHS:
+                    ax2.axvline(x=pos[1], color='gray', linewidth=0.5, alpha=0.1, linestyle='--')
                 if pos[0] == 'year':
-                    ax2.axvline(x=pos[1], color='gray', linewidth=2, alpha=0.4)
+                    ax2.axvline(x=pos[1], color='gray', linewidth=1, alpha=0.4, linestyle='--')
         ax2.set_xticks([x[1] for x in new_month_indices])
         labels = []
         prev_year_offset = -10000
@@ -1692,10 +1716,10 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
                 labels.append('')
         ax2.set_xticklabels(labels, rotation=45, fontsize=6)
 
-        if ax:
-            ax.legend(loc='center left')
+        # if ax:
+        #     ax.legend(loc='center left')
         if ax2:
-            ax2.legend(loc='upper left')
+            ax2.legend(loc='upper left', fontsize='small')
         if ax3:
             ax3.legend()
 
