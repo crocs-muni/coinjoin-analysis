@@ -165,8 +165,8 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                     this_input['spending_tx'] = get_output_name_string(segments[0], segments[1])
                     this_input['value'] = int(segments[2])
                     this_input['wallet_name'] = 'real_unknown'
-                    #this_input['script'] = segments[3]
-                    #this_input['script_type'] = segments[4]
+                    this_input['script'] = segments[3]
+                    this_input['script_type'] = segments[4]
                     # TODO: generate proper address from script, now replaced by synthetic
                     this_input['address'] = get_synthetic_address(segments[0], segments[1])
 
@@ -317,6 +317,8 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
                 data['premix'].pop(txid)
                 logging.info(f'{txid} is mix transaction, removing from premix and putting to mix')
                 cjtxs_fixed += 1
+    else:
+        data['premix'] = {}
     logging.info(f'{cjtxs_fixed} total premix txs moved into coinjoins')
 
     # Detect misclassified Whirlpool coinjoin transactions found in Dumpling's postmix txs
