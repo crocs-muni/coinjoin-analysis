@@ -932,7 +932,8 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
 
         logging.info(f'{target_save_path}/coinjoin_tx_info.json loaded with {len(data['coinjoins'])} conjoins')
     else:
-        # Compute base files (time intensive)
+        #
+        # Convert all Dumplings files into json (time intensive)
         SAVE_BASE_FILES_JSON = False
         data = process_and_save_coinjoins(mix_id, mix_protocol, target_path, mix_filename, postmix_filename, premix_filename, None, None, target_save_path)
         SAVE_BASE_FILES_JSON = save_base_files
@@ -1241,7 +1242,7 @@ def extract_inputs_distribution(mix_id: str, target_path: Path, tx_filename: str
     inputs_info = {'mix_id': mix_id, 'path': tx_filename, 'distrib': inputs_distrib}
     logging.info(f'  Distribution extracted, total {len(inputs_info['distrib'])} different input values found')
     if save_outputs:
-        als.save_json_to_file_pretty(os.path.join(target_path, f'{mix_id}_inputs_distribution.json'), inputs_info)
+        als.save_json_to_file_pretty(os.path.join(target_path, mix_id, f'{mix_id}_inputs_distribution.json'), inputs_info)
 
     return inputs_info, inputs
 
@@ -1636,7 +1637,7 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
             ax_index += 1
 
             # Plot lines as separators corresponding to days
-            dates = [precomp_datetime.strptime(data['coinjoins'][cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for cjtx in data['coinjoins'].keys()]
+            dates = sorted([precomp_datetime.strptime(data['coinjoins'][cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for cjtx in data['coinjoins'].keys()])
             new_day_indices = [('day', 0)]  # Start with the first index
             for i in range(1, len(dates)):
                 if dates[i].day != dates[i - 1].day:
@@ -1711,9 +1712,9 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
             #ax.set_xlabel('Coinjoin in time')
 
         def plot_bars_downscaled(values, downscalefactor, color, ax):
-            downscaled_values = [sum(values[i:i + n]) for i in range(0, len(values), n)]
-            downscaled_indices = range(0, len(values), n)
-            ax.bar(downscaled_indices, downscaled_values, color=color, width=n, alpha=0.2)
+            downscaled_values = [sum(values[i:i + downscalefactor]) for i in range(0, len(values), downscalefactor)]
+            downscaled_indices = range(0, len(values), downscalefactor)
+            ax.bar(downscaled_indices, downscaled_values, color=color, width=downscalefactor, alpha=0.2)
             #ax.set_yscale('log')
 
         n = 100  # Number of items to sum
@@ -1724,7 +1725,8 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
         out_liquidity = [input_types[MIX_EVENT_TYPE.MIX_LEAVE.name][i] for i in range(len(input_types[MIX_EVENT_TYPE.MIX_LEAVE.name]))]
         plot_bars_downscaled(out_liquidity, n, 'red', ax)
         ax.set_title(f'{mix_id}: Liquidity dynamics in time')
-        ax.set_ylabel('Fresh liquidity (btc)', color='gray', fontsize='6')
+        label = f'{'Fresh liquidity (btc)' if analyze_values else 'Number of inputs'} {'normalized' if normalize_values else ''}'
+        ax.set_ylabel(label, color='gray', fontsize='6')
         ax.tick_params(axis='y', colors='gray')
 
         # Plot changing liquidity in time
@@ -1849,6 +1851,13 @@ def wasabi1_analyse_remixes(mix_id: str, target_path: str):
 
 
 def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: Path):
+    """
+    Detects and corrects all information of WW2 extracted from coinjoin_tx_info.json based on WW1 inflows.
+    Process also subfolders with monthly intervals
+    :param mix_id:
+    :param target_path:
+    :return:
+    """
     #'wasabi2', target_path, os.path.join(target_path, 'wasabi1_burn', 'coinjoin_tx_info.json.full'))
     # Load Wasabi1 files, then update MIX_ENTER for Wasabi2 where friends-do-not-pay rule does not apply
     ww1_coinjoins = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiCoinJoins.txt'))
@@ -2217,6 +2226,8 @@ def whirlpool_extract_pool(full_data: dict, mix_id: str, target_path: Path, pool
     all_cjtxs_keys = full_data['coinjoins'].keys()
     # Initial seeding for given pool size
     pool_txs = {cjtx: full_data['coinjoins'][cjtx] for cjtx in WHIRLPOOL_FUNDING_TXS[pool_size]['funding_txs']}
+    # Initial premix txs
+    pool_premix_txs = {}
     txs_to_probe = list(pool_txs.keys())
     while len(txs_to_probe) > 0:
         next_txs_to_probe = []
@@ -2228,20 +2239,27 @@ def whirlpool_extract_pool(full_data: dict, mix_id: str, target_path: Path, pool
                         next_txs_to_probe.append(txid)
                         pool_txs[txid] = full_data['coinjoins'][txid]
 
+                        # If Whirlpool, check all inputs for this tx if is premix
+                        if 'premix' in full_data.keys():
+                            for input in full_data['coinjoins'][txid]['inputs'].keys():
+                                if 'spending_tx' in full_data['coinjoins'][txid]['inputs'][input].keys():
+                                    txid_premix, index = als.extract_txid_from_inout_string(full_data['coinjoins'][txid]['inputs'][input]['spending_tx'])
+                                    if txid_premix not in pool_premix_txs.keys() and txid_premix in full_data['premix'].keys():
+                                        pool_premix_txs[txid_premix] = full_data['premix'][txid_premix]
+
         if len(pool_txs.keys()) % 1000 == 0:
             logging.info(f'Discovered {len(pool_txs)} cjtxs for pool {pool_size}')
 
         txs_to_probe = next_txs_to_probe
-
     logging.info(f'Total cjtxs extracted for pool {pool_size}: {len(pool_txs)}')
 
     target_save_path = os.path.join(target_path, pool_id)
     logging.info(f'Saving to {target_save_path}/coinjoin_tx_info.json ...')
     if not os.path.exists(target_save_path):
         os.makedirs(target_save_path.replace('\\', '/'))
-    als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': pool_txs})
+    als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': pool_txs, 'premix': pool_premix_txs})
 
-    return {'coinjoins': pool_txs}
+    return {'coinjoins': pool_txs, 'premix': pool_premix_txs}
 
 
 if __name__ == "__main__":
@@ -2253,6 +2271,7 @@ if __name__ == "__main__":
     # Sorting strategy for coinjoins in time.
     # If False, coinjoins are sorted using 'broadcast_time' (which is equal to mining_time for on-chain cjtxs where we lack real broadcast time)
     # If True, then relative ordering based on connections in graph formed by remix inputs/outputs is used
+    # BUGBUG: SORT_COINJOINS_BY_RELATIVE_ORDER prevents corrects use of CONSIDER_WW2 and CONSIDER_WW1 / CONSIDER_WHIRLPOOL at the same time
     if CONSIDER_WW2:
         SORT_COINJOINS_BY_RELATIVE_ORDER = True
     else:
@@ -2408,7 +2427,8 @@ if __name__ == "__main__":
         if CONSIDER_WW2:
             process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', interval_stop_date,
                                        'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
-            fix_ww2_for_fdnp_ww1('wasabi2', target_path)  # WW2 requires detection of WW1 inflows as friends
+            # WW2 needs additional treatment - detect and fix origin of WW1 inflows as friends
+            fix_ww2_for_fdnp_ww1(mix_id, target_path)
 
     if VISUALIZE_ALL_COINJOINS_INTERVALS:
         if CONSIDER_WHIRLPOOL:
@@ -2469,23 +2489,25 @@ if __name__ == "__main__":
             wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, False)
 
         if CONSIDER_WHIRLPOOL:
+            PLOT_OPTIONS = []  # (analyze_values, normalize_values, plot_multigraph)
+            PLOT_OPTIONS.append((True, False, False))  # values, not normalized
+            PLOT_OPTIONS.append((False, True, False))  # number of inputs, normalized
+            PLOT_OPTIONS.append((True, True, False))  # values, normalized
+            PLOT_OPTIONS.append((False, False, False))  # number of inputs, not normalized
+            for option in PLOT_OPTIONS:
+                # Plotting remixes separately for different Whirlpool pools
+                wasabi_plot_remixes('whirlpool_100k', os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
+                                    option[0], option[1], None, None, option[2])
+                wasabi_plot_remixes('whirlpool_1M', os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
+                                    option[0], option[1], None, None, option[2])
+                wasabi_plot_remixes('whirlpool_5M', os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
+                                    option[0], option[1], None, None, option[2])
+                wasabi_plot_remixes('whirlpool_50M', os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
+                                    option[0], option[1], None, None, option[2])
+            exit(42)
             wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, False, None, None, False)
             wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', False, True, None, None, False)
             wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, True, None, None, False)
-
-            # Plotting remixes separately for different Whirlpool pools
-            wasabi_plot_remixes('whirlpool_100k', os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
-                                True, False, None, None, False)
-            wasabi_plot_remixes('whirlpool_1M', os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
-                                True, False, None, None, False)
-            wasabi_plot_remixes('whirlpool_5M', os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
-                                True, False, None, None, False)
-            wasabi_plot_remixes('whirlpool_50M', os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
-                                True, False, None, None, False)
-
-        # Less beneficial visualizations
-        # wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, False)
-        # wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, True)
 
     if PLOT_REMIXES_FLOWS:
         wasabi_plot_remixes_flows('wasabi2_select',
@@ -2503,10 +2525,12 @@ if __name__ == "__main__":
 
     # Extract distribution of mix fresh input sizes
     if ANALYSIS_INPUTS_DISTRIBUTION:
+        # TODO: Compute input / output distributions from processed coinjoin_tx_info.json files including removal of false positives
+        # Produce figure with distribution of diffferent pools merged
         if CONSIDER_WW1:
             process_inputs_distribution('Wasabi1', MIX_PROTOCOL.WASABI1,  target_path, 'WasabiCoinJoins.txt', True)
         if CONSIDER_WHIRLPOOL:
-            process_inputs_distribution('whirlpool_tx0_test', MIX_PROTOCOL.WHIRLPOOL, target_path, 'sam_premix_test.txt', True)
+            #process_inputs_distribution('whirlpool_tx0_test', MIX_PROTOCOL.WHIRLPOOL, target_path, 'sam_premix_test.txt', True)
             process_inputs_distribution('whirlpool_tx0', MIX_PROTOCOL.WHIRLPOOL,  target_path, 'SamouraiTx0s.txt', True)
         if CONSIDER_WW2:
             process_inputs_distribution('Wasabi2', MIX_PROTOCOL.WASABI2,  target_path, 'Wasabi2CoinJoins.txt', True)
