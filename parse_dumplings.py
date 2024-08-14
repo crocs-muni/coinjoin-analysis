@@ -1179,6 +1179,59 @@ def process_inputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target_
     plt.show()
 
 
+def process_estimated_wallets_distribution(mix_id: str, target_path: Path, inputs_wallet_factor: list, save_outputs: bool= True):
+    logging.info(f'Processing process_estimated_wallets_distribution({mix_id})')
+    # Load txs for all pools
+    target_load_path = os.path.join(target_path, mix_id)
+
+    data = als.load_coinjoins_from_file(target_load_path, True)
+
+    # For each cjtx compute rough number of wallets present based on the inputs_wallet_factor
+    num_wallets = [len(data['coinjoins'][txid]['inputs'].keys()) for txid in data['coinjoins'].keys()]
+
+    for factor in inputs_wallet_factor:
+        logging.info(f' Processing factor={factor}')
+        wallets_distrib = Counter([round(item / factor) for item in num_wallets])
+        wallets_distrib = dict(sorted(wallets_distrib.items(), key=lambda item: (-item[1], item[0])))
+        wallets_info = {'mix_id': mix_id, 'path': target_load_path, 'wallets_distrib': wallets_distrib, 'wallets_distrib_factor': factor}
+        logging.info(f'  Distribution of walets extracted, total {len(wallets_info['wallets_distrib'])} different input values found')
+        if save_outputs:
+            als.save_json_to_file_pretty(os.path.join(target_path, mix_id, f'{mix_id}_wallets_distribution_factor{factor}.json'), wallets_info)
+
+        labels = list(wallets_distrib.keys())
+        values = list(wallets_distrib.values())
+        plt.figure(figsize=(10, 3))
+        plt.bar(labels, values)
+        plt.title(f'{mix_id}: distribution of number of wallets in coinjoins (est. by factor {factor})')
+        plt.xlabel(f'Number of wallets')
+        plt.ylabel(f'Number of occurences')
+        save_file = os.path.join(target_path, mix_id, f'{mix_id}_wallets_distribution_factor{factor}')
+        plt.subplots_adjust(bottom=0.17)
+        plt.savefig(f'{save_file}.png', dpi=300)
+        plt.savefig(f'{save_file}.pdf', dpi=300)
+        plt.close()
+
+
+def process_inputs_distribution2(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_filename: str, save_outputs: bool= True):
+    logging.info(f'Processing {mix_id} process_inputs_distribution2()')
+    # Load txs for all pools
+    target_load_path = os.path.join(target_path, mix_id)
+
+    data = als.load_coinjoins_from_file(target_load_path, True)
+    inputs_info, inputs = extract_inputs_distribution(mix_id, target_path, tx_filename, data['coinjoins'], save_outputs)
+
+    log_data = np.log(inputs)
+    hist, bins = np.histogram(log_data, bins=100)
+    plt.bar(bins[:-1], hist, width=np.diff(bins))
+    xticks = np.linspace(min(log_data), max(log_data), num=10)
+    plt.xscale('log')
+    plt.xticks(xticks, np.round(np.exp(xticks), decimals=0), rotation=45, fontsize=6)
+    plt.title(f'{mix_id} inputs histogram (x axis is log)')
+    plt.xlabel(f'Size of input')
+    plt.ylabel(f'Number of inputs')
+    plt.show()
+
+
 def extract_inputs_distribution(mix_id: str, target_path: Path, tx_filename: str, txs: dict, save_outputs = False):
     inputs = [txs[txid]['inputs'][index]['value'] for txid in txs.keys() for index in txs[txid]['inputs'].keys()
               if 'mix_event_type' in txs[txid]['inputs'][index].keys() and
