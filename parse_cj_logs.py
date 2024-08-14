@@ -30,7 +30,12 @@ from bitcoinlib.transactions import Transaction
 import cj_analysis as als
 from cj_analysis import MIX_PROTOCOL
 from cj_analysis import CJ_LOG_TYPES
+import logging
 
+# Configure the logging module
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger_to_disable = logging.getLogger("mathplotlib")
+logger_to_disable.setLevel(logging.WARNING)
 
 BTC_CLI_PATH = 'C:\\bitcoin-25.0\\bin\\bitcoin-cli'
 WASABIWALLET_DATA_DIR = 'c:\\Users\\xsvenda\\AppData\\Roaming'
@@ -54,6 +59,9 @@ COLORS = ['darkorange', 'green', 'lightblue', 'gray', 'aquamarine', 'darkorchid1
           'deeppink1', 'cadetblue', 'darkgreen', 'burlywood4', 'cyan', 'darkgray', 'darkslateblue', 'dodgerblue4',
           'greenyellow', 'indigo', 'lightslateblue', 'plum3', 'tan1', 'black']
 LINE_STYLES = ['-', '--', '-.', ':']
+
+SM = als.SummaryMessages()
+als.SM = SM
 
 
 def float_equals(a, b, tolerance=1e-9):
@@ -714,9 +722,9 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
                         num_overmixed_utxos += 1
                     total_utxos += 1
     if total_utxos > 0:
-        print(f'Total overmixed outputs: {num_overmixed_utxos} / {total_utxos} ({round((num_overmixed_utxos/total_utxos)*100, 1)}%)')
+        SM.print(f'Total overmixed outputs: {num_overmixed_utxos} / {total_utxos} ({round((num_overmixed_utxos/total_utxos)*100, 1)}%)')
     else:
-        print('Total overmixed outputs: nothing found.')
+        SM.print('Total overmixed outputs: nothing found.')
 
 
     # Compute number of new / mixed / outgoing utxos for each coinjoin
@@ -1009,8 +1017,8 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
 
     unused_wallets = [wallet_times_used[0] for wallet_times_used in wallets_used if wallet_times_used[1] == 0]
     wallets_used_times = [wallet_times_used[1] for wallet_times_used in wallets_used]
-    print(f'Number of wallets with no inputs mixed: {len(unused_wallets)} out of {len(wallets_used)} total')
-    print(f'  {unused_wallets}')
+    SM.print(f'Number of wallets with no inputs mixed: {len(unused_wallets)} out of {len(wallets_used)} total')
+    SM.print(f'  {unused_wallets}')
 
     x_ticks = list(wallets_info.keys())
 
@@ -1852,8 +1860,8 @@ def parse_backend_coinjoin_logs(coord_input_file, raw_tx_db: dict = {}):
     full_round_ids = full_round_ids + full_blame_round_ids
     start_round_ids.update(start_blame_rounds_id)
 
-    print('Total fully finished coinjoins found: {}'.format(len(full_round_ids)))
-    print('Total blame coinjoins found: {}'.format(len(full_blame_round_ids)))
+    SM.print('Total fully finished coinjoins found: {}'.format(len(full_round_ids)))
+    SM.print('Total blame coinjoins found: {}'.format(len(full_blame_round_ids)))
     print('Parsing separate coinjoin transactions ', end='')
     cjtx_stats = {}
     for round_id in full_round_ids:
@@ -1873,10 +1881,11 @@ def parse_backend_coinjoin_logs(coord_input_file, raw_tx_db: dict = {}):
         else:
             print('ERROR: decoding transaction for tx={} (round id={})'.format(round_cjtx_mapping[round_id], round_id))
         print('.', end='')
+    print('done')
 
     # print only logs with full rounds
     # [print_round_logs(coord_input_file, id) for id in full_round_ids]
-    print('\n\nTotal complete rounds found: {}'.format(len(full_round_ids)))
+    SM.print('Total complete rounds found: {}'.format(len(full_round_ids)))
 
     # 2023-08-22 11:06:35.181 [21] DEBUG	CoinJoinClient.CreateRegisterAndConfirmCoinsAsync (469)	Round (5f3425c1f2e0cc81c9a74a213abf1ea3f128247d6be78ecd259158a5e1f9b66c): Inputs(4) registration started - it will end in: 00:01:22.
     # regex_pattern = r"(.*) \[.+(?P<method>CoinJoinClient\..*) \([0-9]+\).*Round \((?P<round_id>.*)\): Inputs\((?P<num_inputs>[0-9]+)\) registration started - it will end in: ([0-9:]+)\."
@@ -1885,7 +1894,7 @@ def parse_backend_coinjoin_logs(coord_input_file, raw_tx_db: dict = {}):
     # regex_pattern = r"(.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Successfully broadcast the coinjoin: (?P<cj_tx_id>[0-9a-f]*)\.?"
 
 
-    print('Total fully finished coinjoins processed: {}'.format(len(cjtx_stats.keys())))
+    SM.print('Total fully finished coinjoins processed: {}'.format(len(cjtx_stats.keys())))
 
     return cjtx_stats
 
@@ -2396,7 +2405,7 @@ def load_prison_data(cjtx_stats, base_path):
                 cjtx_stats['rounds'][prison_log['round_id']]['logs'].append(prison_log)
                 items_in_prison += 1
 
-        print('Total {} records found in prison'.format(items_in_prison))
+        SM.print('Total {} records found in prison'.format(items_in_prison))
     else:
         print('WARNING: No prison file found at {}'.format(prison_file))
     return cjtx_stats
@@ -2435,7 +2444,7 @@ def load_anonscore_data(cjtx_stats, base_path):
                 else:
                     print('Strange, isinstance(txid, str) is false')
 
-        print('Total {} UTXOs with only base anonscore (=1) and {} with better than base anonscore found.'.format(anonscore_1, anonscore_gt1))
+        SM.print('Total {} UTXOs with only base anonscore (=1) and {} with better than base anonscore found.'.format(anonscore_1, anonscore_gt1))
     else:
         print('Anonscore statistics not found in {}'.format(anonscore_file))
     return cjtx_stats
@@ -2724,7 +2733,7 @@ def process_experiment(args):
         cjplots.savefig(f'{fig_save_file}.pdf', short_exp_name)
 
         cjplots.clear()
-        print(f'Basic coinjoins statistics saved into {fig_save_file}')
+        SM.print(f'Basic coinjoins statistics saved into {fig_save_file}')
 
     # Save updated information with analysis results
     if not READ_ONLY_COINJOIN_TX_INFO and SAVE_ANALYTICS_TO_FILE:
@@ -2781,7 +2790,7 @@ def get_experiments_base_paths(base_path: str):
 
 
 def process_multiple_experiments(base_path: str, save_figs=False, num_threads=-1):
-    print(f'Starting analysis of multiple folders in {base_path}')
+    SM.print(f'Starting analysis of multiple folders in {base_path}')
 
     results = {}  # Aggregated results
 
@@ -2853,7 +2862,7 @@ def visualize_aggregated_graphs(experiment_paths_sorted, graphs, base_path: str,
         axis_index = -1
         last_num_wallets = -1
         for experiment_path, num_wallets, *rest in experiment_paths_sorted:
-            print(f'INPUT PATH: {experiment_path}')
+            SM.print(f'INPUT PATH: {experiment_path}')
             data_file = os.path.join(experiment_path, "coinjoin_tx_info.json")
             # Load parsed coinjoin transactions again
             with open(data_file, "r") as file:
@@ -3137,7 +3146,7 @@ if __name__ == "__main__":
     #cfg = AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL
     #cfg = AnalysisType.COMPUTE_COINJOIN_TXINFO_REMOTE
 
-    print('Analysis configuration: {}'.format(cfg.name))
+    SM.print('Analysis configuration: {}'.format(cfg.name))
 
     RAW_TXS_DB = {}
 
@@ -3454,6 +3463,11 @@ if __name__ == "__main__":
         results = process_multiple_experiments(base_path, SAVE_BASE_FIGS, NUM_THREADS)
         analyze_multiple_experiments(results, base_path)
         all_results.update(results)
+
+    print('### SUMMARY #############################')
+    SM.print_summary()
+    print('### END SUMMARY #########################')
+    exit(42)
 
     # Analyze usage frequency of all wallets
     analyze_wallet_usage_frequency(super_base_path, target_base_paths)

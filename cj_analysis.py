@@ -124,8 +124,9 @@ class SummaryMessages:
         self.summary_messages.append(message)
 
     def print_summary(self):
+        print(f'Total log messages: {len(self.summary_messages)}')
         for message in self.summary_messages:
-            logging.info(message)
+            print(message)
 
 
 SM = SummaryMessages()
@@ -218,13 +219,13 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     for item in input_types_nums.keys():
         input_types_nums_normalized[item] = np.array(input_types_nums[item]) / total_values
 
-    print(f'MIX_ENTER median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_ENTER.name]) * 100, 2)}%')
-    print(f'MIX_REMIX median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX.name]) * 100, 2)}%')
+    SM.print(f'MIX_ENTER median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_ENTER.name]) * 100, 2)}%')
+    SM.print(f'MIX_REMIX median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX.name]) * 100, 2)}%')
     for range_val in BURN_TIME_RANGES:
         remix_name = f'{event_type.name}_{range_val[0]}'
         print(f'{remix_name} median ratio: {round(np.median(input_types_nums_normalized[remix_name]) * 100, 2)}%')
-    print(f'MIX_REMIX_FRIENDS median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name]) * 100, 2)}%')
-    print(f'MIX_REMIX_FRIENDS_WW1 median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name]) * 100, 2)}%')
+    SM.print(f'MIX_REMIX_FRIENDS median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name]) * 100, 2)}%')
+    SM.print(f'MIX_REMIX_FRIENDS_WW1 median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name]) * 100, 2)}%')
 
     # Convert non-normalized values from sats to btc (for sats values only)
     if analyze_values:
