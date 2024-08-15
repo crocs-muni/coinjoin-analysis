@@ -2317,7 +2317,7 @@ if __name__ == "__main__":
     PROCESS_NOTABLE_INTERVALS = False
     DETECT_FALSE_POSITIVES = False
     SPLIT_WHIRLPOOL_POOLS = False
-    PLOT_REMIXES = False
+    PLOT_REMIXES = True
     PLOT_REMIXES_FLOWS = False
     ANALYSIS_ADDRESS_REUSE = False
     ANALYSIS_PROCESS_ALL_COINJOINS = False
@@ -2333,13 +2333,91 @@ if __name__ == "__main__":
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240509\\'
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240605\\'
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240701\\'
-    interval_stop_date = '2024-07-02 01:38:07.000'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240802\\'
+    interval_stop_date = '2024-08-03 00:00:07.000'
 
     target_path = os.path.join(target_base_path, 'Scanner')
     SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
 
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
+        wasabi_plot_remixes('whirlpool_5M_test', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_5M_test'), 'coinjoin_tx_info.json',
+                            True, False, None, None, False)
+        exit(42)
+        SORT_COINJOINS_BY_RELATIVE_ORDER = False
+        als.SORT_COINJOINS_BY_RELATIVE_ORDER = SORT_COINJOINS_BY_RELATIVE_ORDER
+        target_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240701\\Scanner\\'
+        wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json',
+                            True, False, None, None, False)
+        exit(42)
+        SORT_COINJOINS_BY_RELATIVE_ORDER = True
+        als.SORT_COINJOINS_BY_RELATIVE_ORDER = SORT_COINJOINS_BY_RELATIVE_ORDER
+        wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json',
+                            True, False, None, None, False)
+        SORT_COINJOINS_BY_RELATIVE_ORDER = False
+        als.SORT_COINJOINS_BY_RELATIVE_ORDER = SORT_COINJOINS_BY_RELATIVE_ORDER
+        wasabi_plot_remixes('whirlpool_100k', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
+                            True, False, None, None, False)
+        wasabi_plot_remixes('whirlpool_1M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
+                            True, False, None, None, False)
+        wasabi_plot_remixes('whirlpool_5M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
+                            True, False, None, None, False)
+        wasabi_plot_remixes('whirlpool_50M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
+                            True, False, None, None, False)
+        wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
+                            True, False, None, None, False)
+        target_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240701\\Scanner\\'
+        wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json',
+                            True, False, None, None, False)
+        exit(42)
+        wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json',
+                            True, False, None, None, False)
+        wasabi_plot_remixes('whirlpool_5M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
+                            True, False, None, None, False)
+        exit(42)
+        wasabi_plot_remixes('whirlpool_50M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
+                            True, False, None, None, False)
+        wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json',
+                            True, False, None, None, False)
+        exit(42)
+        #process_inputs_distribution2('wasabi2_test', MIX_PROTOCOL.WASABI2, target_path, 'Wasabi2CoinJoins.txt', True)
+        process_estimated_wallets_distribution('wasabi2', target_path, [1.8, 2.0, 2.3, 2.7], True)
+        exit(42)
+
+        process_and_save_intervals_filter('wasabi2_as25', MIX_PROTOCOL.WASABI2, target_path, '2024-05-01 00:00:07.000',
+                                          '2024-06-01 00:00:07.000',
+                                          'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+                                          False)
+        fix_ww2_for_fdnp_ww1('wasabi2_as25', target_path)  # WW2 requires detection of WW1 inflows as friends
+        exit(42)
+        wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, False, None,
+                            None, True)
+        wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, False, None,
+                            None, True)
+        exit(42)
+        wasabi_plot_remixes('whirlpool_100k', os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
+                            True, False, None, None, True)
+        wasabi_plot_remixes('whirlpool_1M', os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
+                            True, False, None, None, True)
+        wasabi_plot_remixes('whirlpool_5M', os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
+                            True, False, None, None, True)
+        wasabi_plot_remixes('whirlpool_50M', os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
+                            True, False, None, None, True)
+
+        exit(42)
+        wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False, None,
+                            None, False)
+        exit(42)
+
+        wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', True, False, None,
+                            None, False)
+        exit(42)
+
+        wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, False, None,
+                            None, False)
+        exit(42)
+
+
         wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, False)
 
         exit(42)
@@ -2607,6 +2685,20 @@ if __name__ == "__main__":
     # https://mempool.space/tx/8f59577b2dfa88e7d7fdd206a17618893db7559007a15658872b665bc16417c5
     # https://mempool.space/tx/d463b35b3d18dda4e59f432728c7a365eaefd50b24a6596ab42a077868e9d7e5
     # https://mempool.space/tx/57a8ea3ba1568fed4d9f7d7b3b84cdec552d9c49d4849bebf77a1053c180d0d1
-    # https://mempool.space/tx/8f59577b2dfa88e7d7fdd206a17618893db7559007a15658872b665bc16417c5
-    # https://mempool.space/tx/d463b35b3d18dda4e59f432728c7a365eaefd50b24a6596ab42a077868e9d7e5
     #
+
+    # Analyze dominance cost:
+    # 1. Coordinator fee to maintain X% pool liquidity at the time (put new input in if current liquidity below X%)
+    # 2. Mining fees to maintain X% control of all inputs / outputs of each coinjoin. Disregard outliers with large sudden
+    # incoming liquidity which will not be completely mixed anyway
+    # - Stay in pool if already there (not to pay coordination fee again)
+    # - Maximize impact of X% presence (WW2 outputs computation deviation)
+    # Have X% control of all standard output denominations
+    # (=> for whirlpool, have X% of all active remixing liquidity => will be selected )
+
+    # Fee rates download
+    # curl -sSL "https://mempool.space/api/v1/mining/blocks/fee-rates/all" > fee_rates.json.all
+    # curl -sSL "https://mempool.space/api/v1/mining/blocks/fee-rates/3y" > fee_rates.json.3y
+
+    # TODO: Filter overall smaller and bigger cjtxs and plot separately
+
