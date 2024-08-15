@@ -1185,7 +1185,7 @@ def process_estimated_wallets_distribution(mix_id: str, target_path: Path, input
     # Load txs for all pools
     target_load_path = os.path.join(target_path, mix_id)
 
-    data = als.load_coinjoins_from_file(target_load_path, True)
+    data = als.load_coinjoins_from_file(target_load_path, None, True)
 
     # For each cjtx compute rough number of wallets present based on the inputs_wallet_factor
     num_wallets = [len(data['coinjoins'][txid]['inputs'].keys()) for txid in data['coinjoins'].keys()]
@@ -1218,7 +1218,7 @@ def process_inputs_distribution2(mix_id: str, mix_protocol: MIX_PROTOCOL, target
     # Load txs for all pools
     target_load_path = os.path.join(target_path, mix_id)
 
-    data = als.load_coinjoins_from_file(target_load_path, True)
+    data = als.load_coinjoins_from_file(target_load_path, None, True)
     inputs_info, inputs = extract_inputs_distribution(mix_id, target_path, tx_filename, data['coinjoins'], save_outputs)
 
     log_data = np.log(inputs)
@@ -1617,12 +1617,7 @@ def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_va
         tx_json_file = os.path.join(target_base_path, f'{tx_file}')
         current_year = dir_name[0:4]
         if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
-            data = als.load_json_from_file(tx_json_file)
-
-            # Filter false positives
-            for false_tx in false_cjtxs:
-                if false_tx in data['coinjoins'].keys():
-                    data['coinjoins'].pop(false_tx)
+            data = als.load_coinjoins_from_file(target_base_path, false_cjtxs, True)
 
             # If required, filter only coinjoins with specific size (whirlpool pools)
             if restrict_to_out_size is not None:

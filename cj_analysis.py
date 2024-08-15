@@ -942,14 +942,15 @@ def sort_coinjoins(cjtxs: dict, sort_by_order: bool = False):
         return sorted_cj_time
 
 
-def load_coinjoins_from_file(target_load_path: str, filter_false_positives: bool) -> dict:
+def load_coinjoins_from_file(target_load_path: str, false_cjtxs: dict, filter_false_positives: bool) -> dict:
     logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
     data = load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
 
     # Filter false positives if required
     if filter_false_positives:
-        fp_file = os.path.join(target_load_path, 'false_cjtxs.json')
-        false_cjtxs = load_json_from_file(fp_file)
+        if false_cjtxs is None:
+            fp_file = os.path.join(target_load_path, 'false_cjtxs.json')
+            false_cjtxs = load_json_from_file(fp_file)
         for false_tx in false_cjtxs:
             if false_tx in data['coinjoins'].keys():
                 data['coinjoins'].pop(false_tx)
