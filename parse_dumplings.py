@@ -1612,6 +1612,8 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
     #new_month_indices = [('placeholder', 0, files[0][0:7])]  # Start with the first index
     new_month_indices = []
     next_month_index = 0
+    weeks_dict = defaultdict(dict)
+    days_dict = defaultdict(dict)
     for dir_name in files:
         target_base_path = os.path.join(target_path, dir_name)
         tx_json_file = os.path.join(target_base_path, f'{tx_file}')
@@ -1690,6 +1692,19 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
             ax.set_title(f'Type of inputs for given cjtx ({'values' if analyze_values else 'number'})\n{mix_id} {dir_name}')
             logging.info(f'{target_base_path} inputs analyzed')
 
+            # Compute liquidity inflows (sum of weeks)
+            # Split cjtxs into weeks, then compute sum of MIX_ENTER
+            for key, record in data['coinjoins'].items():
+                # Parse the 'broadcast_time/virtual' string into a datetime object
+                if mix_protocol == MIX_PROTOCOL.WASABI2:
+                    dt = datetime.strptime(record['broadcast_time_virtual'], '%Y-%m-%d %H:%M:%S.%f')
+                else:
+                    dt = datetime.strptime(record['broadcast_time'], '%Y-%m-%d %H:%M:%S.%f')
+                year, week_num, _ = dt.isocalendar()
+                weeks_dict[(year, week_num)][key] = record
+                day_key = (dt.year, dt.month, dt.day)
+                days_dict[day_key][key] = record
+
             # Extend the y-limits to ensure the vertical lines go beyond the plot edges
             y_range = ax.get_ylim()
             padding = 0.02 * (y_range[1] - y_range[0])
@@ -1704,21 +1719,44 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
             ax.plot(mining_fee_rate, color='gray', alpha=0.3, linewidth=1, linestyle=':', label='Mining fee (90th percentil)')
             ax.tick_params(axis='y', colors='gray', labelsize=6)
             ax.set_ylabel('Mining fee rate sats/vB (90th percentil)', color='gray', fontsize='6')
-            #ax.set_xlabel('Coinjoin in time')
 
         def plot_bars_downscaled(values, downscalefactor, color, ax):
             downscaled_values = [sum(values[i:i + downscalefactor]) for i in range(0, len(values), downscalefactor)]
             downscaled_indices = range(0, len(values), downscalefactor)
-            ax.bar(downscaled_indices, downscaled_values, color=color, width=downscalefactor, alpha=0.2)
-            #ax.set_yscale('log')
+            ax.bar(downscaled_indices, downscaled_values, color=color, width=downscalefactor, alpha=0.2, edgecolor='none')
 
-        n = 100  # Number of items to sum
-        # Fresh liquidity - MIX_ENTER + MIX_REMIX_FRIENDS_WW1
-        new_liquidity = [input_types[MIX_EVENT_TYPE.MIX_ENTER.name][i] + input_types[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name][i] for i in range(len(input_types[MIX_EVENT_TYPE.MIX_ENTER.name]))]
-        plot_bars_downscaled(new_liquidity, n, 'gray', ax)
+        # Create artificial limits if not provided
+        if restrict_to_in_size is None:
+            limit_size = (0, 1000000000000)
+            print(f'No limits for inputs value')
+        else:
+            limit_size = restrict_to_in_size
+            print(f'Limits for inputs value is {limit_size[0]} - {limit_size[1]}')
+
+        # Decide on resolution of liqudity display
+        #interval_to_display = weeks_dict
+        interval_to_display = days_dict
+
+        def compute_aggregated_interval_liquidity(interval_to_display):
+            liquidity = [0]
+            for interval in sorted(interval_to_display.keys()):
+                records = interval_to_display[interval]
+                mix_enter_values = [records[cjtx]['inputs'][index]['value'] for cjtx in records.keys() for index in
+                                    records[cjtx]['inputs'].keys()
+                                    if records[cjtx]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name or
+                                    records[cjtx]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name and
+                                    limit_size[0] <= records[cjtx]['inputs'][index]['value'] <= limit_size[1]]
+                liquidity.extend([sum(mix_enter_values) / SATS_IN_BTC] * len(records))
+                print(f"Interval {interval}: {sum(mix_enter_values)}sats, num_cjtxs={len(records)}")
+            return liquidity
+
+        new_liquidity = compute_aggregated_interval_liquidity(interval_to_display)
+        assert len(new_liquidity) == len(changing_liquidity), f'Incorrect enter_liquidity length: expected: {len(changing_liquidity)}, got {len(new_liquidity)}'
+        plot_bars_downscaled(new_liquidity, 1, 'gray', ax)
+
         # Outflows
-        out_liquidity = [input_types[MIX_EVENT_TYPE.MIX_LEAVE.name][i] for i in range(len(input_types[MIX_EVENT_TYPE.MIX_LEAVE.name]))]
-        plot_bars_downscaled(out_liquidity, n, 'red', ax)
+        # out_liquidity = [input_types[MIX_EVENT_TYPE.MIX_LEAVE.name][i] for i in range(len(input_types[MIX_EVENT_TYPE.MIX_LEAVE.name]))]
+        # plot_bars_downscaled(out_liquidity, 1, 'red', ax)
         ax.set_title(f'{mix_id}: Liquidity dynamics in time')
         label = f'{'Fresh liquidity (btc)' if analyze_values else 'Number of inputs'} {'normalized' if normalize_values else ''}'
         ax.set_ylabel(label, color='gray', fontsize='6')
