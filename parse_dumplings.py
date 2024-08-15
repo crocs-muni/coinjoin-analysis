@@ -1575,7 +1575,7 @@ def wasabi2_analyse_remixes(mix_id: str, target_path: str):
     burntime_histogram(mix_id, data)
 
 
-def wasabi_plot_remixes(mix_id: str, target_path: Path, tx_file: str, analyze_values: bool = True, normalize_values: bool = True, restrict_to_out_size: int = None, restrict_to_in_size = None, plot_multigraph: bool = True):
+def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_file: str, analyze_values: bool = True, normalize_values: bool = True, restrict_to_out_size: int = None, restrict_to_in_size = None, plot_multigraph: bool = True):
     files = os.listdir(target_path) if os.path.exists(target_path) else print(
         f'Path {target_path} does not exist')
 
@@ -2371,7 +2371,7 @@ if __name__ == "__main__":
                 process_and_save_single_interval(interval_name, all_data, mix_type, target_path, start_date,end_date)
                 shutil.copyfile(os.path.join(target_path, mix_origin_name, 'fee_rates.json'), os.path.join(target_path, interval_name, 'fee_rates.json'))
                 shutil.copyfile(os.path.join(target_path, mix_origin_name, 'false_cjtxs.json'), os.path.join(target_path, interval_name, 'false_cjtxs.json'))
-                wasabi_plot_remixes(interval_name, os.path.join(target_path, interval_name), 'coinjoin_tx_info.json', True, False)
+                wasabi_plot_remixes(interval_name, MIX_PROTOCOL.WASABI1, os.path.join(target_path, interval_name), 'coinjoin_tx_info.json', True, False)
 
             # Large inflows into WW1 in 2019-08-09, mixed and the all taken out
             process_joint_interval('wasabi1', 'wasabi1__2019_08-09', all_data, MIX_PROTOCOL.WASABI1, target_path, '2019-08-01 00:00:07.000', '2019-09-30 23:59:59.000')
@@ -2473,15 +2473,15 @@ if __name__ == "__main__":
 
     if PLOT_REMIXES:
         if CONSIDER_WW1:
-            wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False)
-            wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True)
-            wasabi_plot_remixes('wasabi1', os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, True)
+            wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False)
+            wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True)
+            wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, True)
 
         if CONSIDER_WW2:
-            wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, False)
-            wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, True)
-            wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True)
-            wasabi_plot_remixes('wasabi2', os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, False)
+            wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, False)
+            wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, True)
+            wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True)
+            wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, False)
 
         if CONSIDER_WHIRLPOOL:
             PLOT_OPTIONS = []  # (analyze_values, normalize_values, plot_multigraph)
@@ -2491,18 +2491,18 @@ if __name__ == "__main__":
             PLOT_OPTIONS.append((False, False, False))  # number of inputs, not normalized
             for option in PLOT_OPTIONS:
                 # Plotting remixes separately for different Whirlpool pools
-                wasabi_plot_remixes('whirlpool_100k', os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
+                wasabi_plot_remixes('whirlpool_100k', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
                                     option[0], option[1], None, None, option[2])
-                wasabi_plot_remixes('whirlpool_1M', os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
+                wasabi_plot_remixes('whirlpool_1M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
                                     option[0], option[1], None, None, option[2])
-                wasabi_plot_remixes('whirlpool_5M', os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
+                wasabi_plot_remixes('whirlpool_5M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
                                     option[0], option[1], None, None, option[2])
-                wasabi_plot_remixes('whirlpool_50M', os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
+                wasabi_plot_remixes('whirlpool_50M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
                                     option[0], option[1], None, None, option[2])
-            exit(42)
-            wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, False, None, None, False)
-            wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', False, True, None, None, False)
-            wasabi_plot_remixes('whirlpool', os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, True, None, None, False)
+
+            wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, False, None, None, False)
+            wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', False, True, None, None, False)
+            wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, True, None, None, False)
 
     if PLOT_REMIXES_FLOWS:
         wasabi_plot_remixes_flows('wasabi2_select',
