@@ -3392,8 +3392,8 @@ if __name__ == "__main__":
     # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2'),
     #                      os.path.join(super_base_path, 'grid_uniform_test3')]
 
-    super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    target_base_paths = [os.path.join(super_base_path, 'unproccesed')]
+    super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\'
+    target_base_paths = [os.path.join(super_base_path, '!unproccesed')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'long_runs')]
@@ -3442,6 +3442,16 @@ if __name__ == "__main__":
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'grid_lognorm-static-5utxo_only250w')]
+
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol13\\'
+    # target_base_paths = [os.path.join(super_base_path, '120blocks')]
+
+    #super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol13\\'
+    #target_base_paths = [os.path.join(super_base_path, '300blocks-lognorm-as25')]
+    #target_base_paths = [os.path.join(super_base_path, '300blocks-lognorm-as5')]
+    #target_base_paths = [os.path.join(super_base_path, '300blocks-lognorm-as50')]
+    #target_base_paths = [os.path.join(super_base_path, 'emu_validation')]
+
     #
     ##Generate aggregated visualizations
     # generate_aggregated_visualization(target_base_paths)
