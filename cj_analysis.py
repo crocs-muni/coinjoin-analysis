@@ -1,6 +1,8 @@
 import logging
 import os
 import sys
+from collections import Counter
+
 import orjson
 import json
 
@@ -154,19 +156,21 @@ def get_ratio_string(numerator, denominator) -> str:
         return f'{numerator}/{0} (0%)'
 
 
-def get_inputs_type_list(coinjoins, sorted_cj_time, event_type, in_or_out: str, burn_time_from, burn_time_to, analyze_values, restrict_to_in_size: (int, int)):
+def get_inputs_type_list(coinjoins, sorted_cj_time, event_type, in_or_out: str, burn_time_from, burn_time_to, analyze_values, restrict_to_in_size: (int, int), only_standard_denoms: False):
     if analyze_values:
         return [sum([coinjoins[cjtx['txid']][in_or_out][index]['value'] for index in coinjoins[cjtx['txid']][in_or_out].keys()
                      if coinjoins[cjtx['txid']][in_or_out][index]['mix_event_type'] == event_type.name and
                      coinjoins[cjtx['txid']][in_or_out][index].get('burn_time_cjtxs', -1) in range(burn_time_from, burn_time_to + 1) and
-                     restrict_to_in_size[0] <= coinjoins[cjtx['txid']][in_or_out][index]['value'] <= restrict_to_in_size[1]])
+                     restrict_to_in_size[0] <= coinjoins[cjtx['txid']][in_or_out][index]['value'] <= restrict_to_in_size[1] and
+                     coinjoins[cjtx['txid']][in_or_out][index].get('is_standard_denom', False) == only_standard_denoms])
             for cjtx in sorted_cj_time]
     else:
         return [sum([1 for index in coinjoins[cjtx['txid']][in_or_out].keys()
                      if coinjoins[cjtx['txid']][in_or_out][index]['mix_event_type'] == event_type.name and
                      coinjoins[cjtx['txid']][in_or_out][index].get('burn_time_cjtxs', -1) in range(burn_time_from, burn_time_to + 1) and
-                     restrict_to_in_size[0] <= coinjoins[cjtx['txid']][in_or_out][index]['value'] <= restrict_to_in_size[1]])
-            for cjtx in sorted_cj_time]
+                     restrict_to_in_size[0] <= coinjoins[cjtx['txid']][in_or_out][index]['value'] <= restrict_to_in_size[1] and
+                     coinjoins[cjtx['txid']][in_or_out][index].get('is_standard_denom', False) == only_standard_denoms])
+        for cjtx in sorted_cj_time]
 
 
 def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, analyze_values: bool, normalize_values: bool, restrict_to_in_size: (int, int) = None):
@@ -205,11 +209,14 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
                                                       restrict_to_in_size[0] <= coinjoins[cjtx['txid']]['inputs'][index]['value'] <= restrict_to_in_size[1]])
                                    for cjtx in sorted_cj_time]
 
+    # Obtain vector number of inputs/values for each remix, based on burn time
+    # First take remixes with standard denominations
     event_type = MIX_EVENT_TYPE.MIX_REMIX
-    #BURN_TIME_RANGES = [('1', 1, 1), ('1-2', 1, 2), ('3-5', 3, 5), ('6-19', 6, 19), ('20+', 20, 999), ('1000-1999', 1000, 1999), ('2000+', 2000, 1000000)]
     BURN_TIME_RANGES = [('1', 1, 1), ('2', 2, 2), ('3-5', 3, 5), ('6-19', 6, 19), ('20+', 20, 999), ('1000-1999', 1000, 1999), ('2000+', 2000, 1000000)]
     for range_val in BURN_TIME_RANGES:
-        input_types_nums[f'{event_type.name}_{range_val[0]}'] = get_inputs_type_list(coinjoins, sorted_cj_time, event_type, 'inputs', range_val[1], range_val[2], analyze_values, restrict_to_in_size)
+        input_types_nums[f'{event_type.name}_{range_val[0]}'] = get_inputs_type_list(coinjoins, sorted_cj_time, event_type, 'inputs', range_val[1], range_val[2], analyze_values, restrict_to_in_size, True)
+    # Add remixes of non-standard denominations ("change" outputs)
+    input_types_nums['MIX_REMIX_nonstd'] = get_inputs_type_list(coinjoins, sorted_cj_time, MIX_EVENT_TYPE.MIX_REMIX, 'inputs', 1, 10000000, analyze_values, restrict_to_in_size, False)
 
     short_exp_name = mix_id
 
@@ -222,6 +229,7 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
         input_types_nums_normalized[item] = np.array(input_types_nums[item]) / total_values
 
     SM.print(f'  MIX_ENTER median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_ENTER.name]) * 100, 2)}%')
+    SM.print(f'  MIX_REMIX_nonstd median ratio: {round(np.median(input_types_nums_normalized['MIX_REMIX_nonstd']) * 100, 2)}%')
     SM.print(f'  MIX_REMIX median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX.name]) * 100, 2)}%')
     for range_val in BURN_TIME_RANGES:
         remix_name = f'{event_type.name}_{range_val[0]}'
@@ -243,6 +251,7 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     # New version with separated remixes
     bars = []
     bars.append((input_types[MIX_EVENT_TYPE.MIX_ENTER.name], 'MIX_ENTER', 'blue', 0.9))
+    bars.append((input_types['MIX_REMIX_nonstd'], 'MIX_REMIX_nonstd', 'blue', 0.3))
     bars.append((input_types['MIX_REMIX_1'], 'MIX_REMIX_1', 'gold', 0.8))
     bars.append((input_types['MIX_REMIX_2'], 'MIX_REMIX_2', 'orange', 0.4))
     bars.append((input_types['MIX_REMIX_3-5'], 'MIX_REMIX_3-5', 'orange', 0.8))
@@ -306,6 +315,11 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudit
     # Output staying in mix MIX_EVENT_TYPE.MIX_REMIX
     mix_remix = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
                                     if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name])
+                               for cjtx in sorted_cj_time]
+    # Output staying in mix MIX_EVENT_TYPE.MIX_REMIX with non-standard values
+    mix_remix_nonstandard = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
+                                    if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name and
+                                       coinjoins[cjtx['txid']]['outputs'][index].get('is_standard_denom') == False])
                                for cjtx in sorted_cj_time]
 
 
@@ -522,6 +536,23 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
                     coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs_relative'] = coinjoins_relative_order[spend_by_tx] - coinjoins_relative_order[cjtx]
                     coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] = coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs_relative']
                     assert coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] >= 0, f'Invalid burn time computed for {cjtx}:{output}'
+
+    # Establish standard denominations for this coinjoin (depends on coinjoin design)
+    # Heuristics: standard denomination is denomination which is repeated at least two times in outputs (anonset>=2)
+    # Needs to be computed for each coinjoin again, as standard denominations may change in time
+    # Compute first for all outputs, then assign to related inputs (if remix)
+    for cjtx in coinjoins_relative_order:
+        denom_frequencies = Counter([coinjoins[cjtx]['outputs'][output]['value'] for output in coinjoins[cjtx]['outputs']])
+        std_denoms = {value: count for value, count in denom_frequencies.items() if count > 1}
+        for output in coinjoins[cjtx]['outputs']:
+            coinjoins[cjtx]['outputs'][output]['is_standard_denom'] = coinjoins[cjtx]['outputs'][output]['value'] in std_denoms.keys()
+    # Now set to spending inputs retrospectively
+    for cjtx in coinjoins_relative_order:
+        for input in coinjoins[cjtx]['inputs']:
+            if 'spending_tx' in coinjoins[cjtx]['inputs'][input].keys():
+                spending_tx, index = extract_txid_from_inout_string(coinjoins[cjtx]['inputs'][input]['spending_tx'])
+                if spending_tx in coinjoins.keys():
+                    coinjoins[cjtx]['inputs'][input]['is_standard_denom'] = coinjoins[spending_tx]['outputs'][index]['is_standard_denom']
 
     # Fix broadcast time based on relative ordering
     # Set artificial broadcast time base on minimum broadcast time of all txs with same relative order
