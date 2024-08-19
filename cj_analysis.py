@@ -328,8 +328,8 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudit
     assert len(mix_enter) == len(mix_leave) == len(mix_remixfriend) == len(mix_remixfriend_ww1) == len(mix_stay), logging.error(f'Mismatch in length of input/out sum arrays: {len(mix_enter)} vs. {len(mix_leave)}')
     # Change in liquidity as observed by each coinjoin (increase directly when mix_enter, decrease directly even when mix_leave happens later)
     for index in range(0, len(mix_enter)):
-        curr_liquidity = curr_liquidity + mix_enter[index] + mix_remixfriend[index] + mix_remixfriend_ww1[index] - mix_leave[index]
         liquidity_step = mix_enter[index] + mix_remixfriend[index] + mix_remixfriend_ww1[index] - mix_leave[index]
+        # Print significant changes in liquidity for easier debugging
         if mix_enter[index] > 100 * SATS_IN_BTC:
             print(f'Fresh input jump    of {round(mix_enter[index] / SATS_IN_BTC, 1)} at {index}: {sorted_cj_time[index]}')
         if liquidity_step > 100 * SATS_IN_BTC:
@@ -587,7 +587,7 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
         else:
             coinjoins[tx['txid']]['broadcast_time_virtual'] = precomp_datetime.strftime(min_broadcast_time)[:-3]  # Use corrected time
 
-            # Print summary results
+    # Print summary results
     SM.print(f'  {get_ratio_string(total_mix_entering, total_inputs)} Inputs entering mix / total inputs used by mix transactions')
     SM.print(f'  {get_ratio_string(total_mix_friends, total_inputs)} Friends inputs re-entering mix / total inputs used by mix transactions')
     SM.print(f'  {get_ratio_string(total_mix_leaving, total_outputs)} Outputs leaving mix / total outputs by mix transactions')

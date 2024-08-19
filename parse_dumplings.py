@@ -2479,15 +2479,19 @@ if __name__ == "__main__":
         wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', True, True)
 
     if PROCESS_NOTABLE_INTERVALS:
+        def process_joint_interval(mix_origin_name, interval_name, all_data, mix_type, target_path, start_date: str,
+                                   end_date: str):
+            process_and_save_single_interval(interval_name, all_data, mix_type, target_path, start_date, end_date)
+            shutil.copyfile(os.path.join(target_path, mix_origin_name, 'fee_rates.json'),
+                            os.path.join(target_path, interval_name, 'fee_rates.json'))
+            shutil.copyfile(os.path.join(target_path, mix_origin_name, 'false_cjtxs.json'),
+                            os.path.join(target_path, interval_name, 'false_cjtxs.json'))
+            wasabi_plot_remixes(interval_name, MIX_PROTOCOL.WASABI1, os.path.join(target_path, interval_name),
+                                'coinjoin_tx_info.json', True, False)
+
         if CONSIDER_WW1:
             target_load_path = os.path.join(target_path, 'wasabi1')
-            all_data = als.load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
-
-            def process_joint_interval(mix_origin_name, interval_name, all_data, mix_type, target_path, start_date: str, end_date: str):
-                process_and_save_single_interval(interval_name, all_data, mix_type, target_path, start_date,end_date)
-                shutil.copyfile(os.path.join(target_path, mix_origin_name, 'fee_rates.json'), os.path.join(target_path, interval_name, 'fee_rates.json'))
-                shutil.copyfile(os.path.join(target_path, mix_origin_name, 'false_cjtxs.json'), os.path.join(target_path, interval_name, 'false_cjtxs.json'))
-                wasabi_plot_remixes(interval_name, MIX_PROTOCOL.WASABI1, os.path.join(target_path, interval_name), 'coinjoin_tx_info.json', True, False)
+            all_data = als.load_coinjoins_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'), None, True)
 
             # Large inflows into WW1 in 2019-08-09, mixed and the all taken out
             process_joint_interval('wasabi1', 'wasabi1__2019_08-09', all_data, MIX_PROTOCOL.WASABI1, target_path, '2019-08-01 00:00:07.000', '2019-09-30 23:59:59.000')
@@ -2539,7 +2543,7 @@ if __name__ == "__main__":
             process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', interval_stop_date,
                                        'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
             # WW2 needs additional treatment - detect and fix origin of WW1 inflows as friends
-            fix_ww2_for_fdnp_ww1(mix_id, target_path)
+            fix_ww2_for_fdnp_ww1('wasabi2', target_path)
 
     if VISUALIZE_ALL_COINJOINS_INTERVALS:
         if CONSIDER_WHIRLPOOL:
@@ -2662,6 +2666,8 @@ if __name__ == "__main__":
     #     process_and_save_intervals_filter('wasabi2false', target_path, '2022-06-18 01:38:07.000', '2024-02-15 01:38:07.000',
     #                                'Wasabi2CoinJoins_false.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON)
 
+    # TODO: Analyze difference of unmoved and dynamic liquidity for Whirlpool between 2024-04-24 and 2024-08-24 (impact of knowledge of whirlpool seizure). Show last 1 year.
+
     print('### SUMMARY #############################')
     SM.print_summary()
     print('### END SUMMARY #########################')
@@ -2701,4 +2707,6 @@ if __name__ == "__main__":
     # curl -sSL "https://mempool.space/api/v1/mining/blocks/fee-rates/3y" > fee_rates.json.3y
 
     # TODO: Filter overall smaller and bigger cjtxs and plot separately
+
+    # TODO: Plot graph of remix rates (values, num_inputs) as line plot for all months into single graph
 
