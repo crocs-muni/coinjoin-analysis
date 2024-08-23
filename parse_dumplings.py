@@ -1738,7 +1738,7 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
             limit_size = restrict_to_in_size
             print(f'Limits for inputs value is {limit_size[0]} - {limit_size[1]}')
 
-        # Decide on resolution of liqudity display
+        # Decide on resolution of liquidity display
         #interval_to_display = weeks_dict
         interval_to_display = days_dict
 
@@ -1841,7 +1841,7 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
         # if ax:
         #     ax.legend(loc='center left')
         if ax2:
-            ax2.legend(loc='upper left', fontsize='small')
+            ax2.legend(loc='upper left', fontsize='small', bbox_to_anchor=(0.01, 0.85), borderaxespad=0)
         if ax3:
             ax3.legend()
 
