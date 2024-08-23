@@ -1753,14 +1753,38 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
         new_liquidity = compute_aggregated_interval_liquidity(interval_to_display)
         assert len(new_liquidity) == len(changing_liquidity), f'Incorrect enter_liquidity length: expected: {len(changing_liquidity)}, got {len(new_liquidity)}'
         plot_bars_downscaled(new_liquidity, 1, 'gray', ax)
-
-        # Outflows
-        # out_liquidity = [input_types[MIX_EVENT_TYPE.MIX_LEAVE.name][i] for i in range(len(input_types[MIX_EVENT_TYPE.MIX_LEAVE.name]))]
-        # plot_bars_downscaled(out_liquidity, 1, 'red', ax)
         ax.set_title(f'{mix_id}: Liquidity dynamics in time')
         label = f'{'Fresh liquidity (btc)' if analyze_values else 'Number of inputs'} {'normalized' if normalize_values else ''}'
         ax.set_ylabel(label, color='gray', fontsize='6')
         ax.tick_params(axis='y', colors='gray')
+
+        # Outflows
+        # out_liquidity = [input_types[MIX_EVENT_TYPE.MIX_LEAVE.name][i] for i in range(len(input_types[MIX_EVENT_TYPE.MIX_LEAVE.name]))]
+        # plot_bars_downscaled(out_liquidity, 1, 'red', ax)
+
+        # Remix ratio
+        remix_ratios_all = [input_types[MIX_EVENT_TYPE.MIX_REMIX.name][i] * 100 for i in
+                            range(len(input_types[MIX_EVENT_TYPE.MIX_REMIX.name]))]  # All remix including nonstandard
+        remix_ratios_nonstd = [input_types['MIX_REMIX_nonstd'][i] * 100 for i in
+                               range(len(input_types['MIX_REMIX_nonstd']))]  # Nonstd remixes
+        remix_ratios_std = [remix_ratios_all[i] - remix_ratios_nonstd[i] for i in
+                            range(len(remix_ratios_all))]  # Only standard remixes
+        WINDOWS_SIZE = round(len(remix_ratios_all) / 1000)  # Set windows size to get 1000 points total (unless short, then only 5)
+        WINDOWS_SIZE = 1 if WINDOWS_SIZE < 1 else WINDOWS_SIZE
+        remix_ratios_avg = [np.average(remix_ratios_std[i:i + WINDOWS_SIZE]) for i in
+                            range(0, len(remix_ratios_std), WINDOWS_SIZE)]
+        ax2 = ax.twinx()
+        ax2.plot(range(0, len(remix_ratios_std), WINDOWS_SIZE), remix_ratios_avg, label=f'MIX_REMIX avg({WINDOWS_SIZE})',
+                 color='brown', linewidth=1, linestyle='--', alpha=0.5)
+        ax2.set_ylim(0, 100)  # Force whole range of yaxis
+        ax2.tick_params(axis='y', colors='brown', labelsize=6)
+        ax2.set_ylabel('Median remix rate %', color='brown', fontsize='6')
+        ax2.spines['right'].set_position(('outward', -30))  # Adjust position of the third axis
+
+        # Save computed remixes to file
+        save_file = os.path.join(target_path,
+                         f'{mix_id}_remixrate_{'values' if analyze_values else 'nums'}_{'norm' if normalize_values else 'notnorm'}{'' if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 2)}btc'}')
+        als.save_json_to_file_pretty(f'{save_file}.json', {'remix_ratios_all': remix_ratios_all, 'remix_ratios_nonstd': remix_ratios_nonstd, 'remix_ratios_std': remix_ratios_std})
 
         # Plot changing liquidity in time
         ax2 = ax.twinx()
@@ -1768,7 +1792,7 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
         stay_liquidity_btc = [item / SATS_IN_BTC for item in stay_liquidity]
         ax2.plot(changing_liquidity_btc, color='royalblue', alpha=0.6, label='Changing liquidity (cjtx centric, MIX_ENTER - MIX_LEAVE)')
         ax2.plot(stay_liquidity_btc, color='darkgreen', alpha=0.6, linestyle='--', label='Unmoved outputs (HODL coins, MIX_STAY)')
-        ax2.plot([a - b for a, b in zip(changing_liquidity_btc, stay_liquidity_btc)], color='red', alpha=0.6, linestyle='-.', label='Actively remixing liquidity (Changing - Unmoved)')
+        ax2.plot([a - b for a, b in zip(changing_liquidity_btc, stay_liquidity_btc)], color='red', alpha=0.6, linestyle='-.', label='Actively remixed liquidity (Changing - Unmoved)')
         ax2.set_ylabel('btc in mix', color='royalblue')
         ax2.tick_params(axis='y', colors='royalblue')
 

@@ -293,6 +293,16 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     if not analyze_values and not normalize_values:
         ax.set_ylabel('Number of inputs')
 
+    WINDOWS_SIZE = 5
+    remix_ratios_all = [input_types[MIX_EVENT_TYPE.MIX_REMIX.name][i] * 100 for i in range(len(input_types[MIX_EVENT_TYPE.MIX_REMIX.name]))]  # All remix including nonstandard
+    remix_ratios_nonstd = [input_types['MIX_REMIX_nonstd'][i] * 100 for i in range(len(input_types['MIX_REMIX_nonstd']))]  # Nonstd remixes
+    remix_ratios_std = [remix_ratios_all[i] - remix_ratios_nonstd[i] for i in range(len(remix_ratios_all))]  # Only standard remixes
+    remix_ratios_avg = [np.average(remix_ratios_std[i:i+WINDOWS_SIZE]) for i in range(0, len(remix_ratios_std), WINDOWS_SIZE)]
+    ax2 = ax.twinx()
+    ax2.plot(range(0, len(remix_ratios_std), WINDOWS_SIZE), remix_ratios_avg, label=f'MIX_REMIX avg({WINDOWS_SIZE})', color='brown', linewidth=1, linestyle='--', alpha=0.4)
+    ax2.set_ylim(0, 100)  # Force whole range of yaxis
+    ax2.tick_params(axis='y', colors='brown', labelsize=6)
+    ax2.set_ylabel('Average remix rate %', color='brown', fontsize='6')
     return input_types
 
 
