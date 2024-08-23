@@ -228,14 +228,22 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     for item in input_types_nums.keys():
         input_types_nums_normalized[item] = np.array(input_types_nums[item]) / total_values
 
-    SM.print(f'  MIX_ENTER median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_ENTER.name]) * 100, 2)}%')
-    SM.print(f'  MIX_REMIX_nonstd median ratio: {round(np.median(input_types_nums_normalized['MIX_REMIX_nonstd']) * 100, 2)}%')
-    SM.print(f'  MIX_REMIX median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX.name]) * 100, 2)}%')
-    for range_val in BURN_TIME_RANGES:
-        remix_name = f'{event_type.name}_{range_val[0]}'
-        print(f'  {remix_name} median ratio: {round(np.median(input_types_nums_normalized[remix_name]) * 100, 2)}%')
-    SM.print(f'  MIX_REMIX_FRIENDS median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name]) * 100, 2)}%')
-    SM.print(f'  MIX_REMIX_FRIENDS_WW1 median ratio: {round(np.median(input_types_nums_normalized[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name]) * 100, 2)}%')
+    def print_inputs_stats(input_types: dict, start_offset: int = 0, end_offset: int = -1):
+        SM.print(f'  MIX_ENTER median ratio: {round(np.median(input_types[MIX_EVENT_TYPE.MIX_ENTER.name][start_offset: end_offset]) * 100, 2)}%')
+        SM.print(f'  MIX_REMIX_nonstd median ratio: {round(np.median(input_types['MIX_REMIX_nonstd'][start_offset: end_offset]) * 100, 2)}%')
+        SM.print(f'  MIX_REMIX median ratio: {round(np.median(input_types[MIX_EVENT_TYPE.MIX_REMIX.name][start_offset: end_offset]) * 100, 2)}%')
+        for range_val in BURN_TIME_RANGES:
+            remix_name = f'{event_type.name}_{range_val[0]}'
+            print(f'  {remix_name} median ratio: {round(np.median(input_types[remix_name][start_offset: end_offset]) * 100, 2)}%')
+        SM.print(f'  MIX_REMIX_FRIENDS median ratio: {round(np.median(input_types[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name][start_offset: end_offset]) * 100, 2)}%')
+        SM.print(f'  MIX_REMIX_FRIENDS_WW1 median ratio: {round(np.median(input_types[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name][start_offset: end_offset]) * 100, 2)}%')
+
+    SM.print(f' Inputs ratios [all]')
+    print_inputs_stats(input_types_nums_normalized)
+    SM.print(f' Inputs ratios [skip first two]')
+    print_inputs_stats(input_types_nums_normalized, 2, -1)
+    SM.print(f' Inputs ratios [skip first five]')
+    print_inputs_stats(input_types_nums_normalized, 5, -1)
 
     # Convert non-normalized values from sats to btc (for sats values only)
     if analyze_values:
