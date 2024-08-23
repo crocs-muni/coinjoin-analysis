@@ -1,10 +1,12 @@
 import copy
 import os
 import pickle
+import random
 import shutil
 from datetime import datetime, timedelta
 from collections import defaultdict, Counter
 from pathlib import Path
+
 import numpy as np
 import seaborn as sns
 from scipy import stats
@@ -973,6 +975,9 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
         current_stop_date = datetime(current_stop_date.year, current_stop_date.month, 1)
         current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M:%S")
 
+    # Backup corresponding log file
+    backup_log_files(target_path)
+
     return data
 
 
@@ -1865,6 +1870,8 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
 
     # save detected no transactions with no remixes (potentially false positives)
     als.save_json_to_file_pretty(os.path.join(target_path, 'no_remix_txs.json'), no_remix_all)
+    # Backup corresponding log file
+    backup_log_files(target_path)
 
 
 def wasabi_detect_false(target_path: Path, tx_file: str):
@@ -2316,7 +2323,25 @@ def whirlpool_extract_pool(full_data: dict, mix_id: str, target_path: Path, pool
         os.makedirs(target_save_path.replace('\\', '/'))
     als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': pool_txs, 'premix': pool_premix_txs})
 
+    # Backup corresponding log file
+    backup_log_files(target_path)
+
     return {'coinjoins': pool_txs, 'premix': pool_premix_txs}
+
+
+def backup_log_files(target_path: str):
+    """
+    This code runs before exiting
+    :return:
+    """
+    # Copy logs file into base
+    print(os.path.abspath(__file__))
+    log_file_path = f'{os.path.abspath(__file__)}.log'
+    if os.path.exists(log_file_path):
+        file_name = os.path.basename(log_file_path)
+        shutil.copy(os.path.join(log_file_path), os.path.join(target_path, f'{file_name}.{random.randint(10000, 99999)}.txt'))
+    else:
+        logging.warning(f'Log file {log_file_path} does not found, not copied.')
 
 
 if __name__ == "__main__":
