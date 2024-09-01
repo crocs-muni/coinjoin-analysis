@@ -1173,17 +1173,28 @@ def extract_coinjoin_interval(mix_id: str, target_path: Path, txs: dict, start_d
 
 def print_interval_data_stats(pool_stats: dict, client_stats: CoinMixInfo, results: dict):
     num_inputs = [len(pool_stats[txid]['inputs']) for txid in pool_stats.keys()]
+    num_freeremix_inputs = [1 for txid in pool_stats.keys() for index in pool_stats[txid]['inputs']
+                            if math.isclose(pool_stats[txid]['inputs'][index]['value'], client_stats.pool_size, rel_tol=1e-9, abs_tol=0.0)]
     assert max(num_inputs) < 9, 'Whirpool shall not have more than 9 inputs in mix tx'
     #print(num_inputs)
     num_inputs_pool = sum(num_inputs)
+    num_freeremix_inputs_pool = sum(num_freeremix_inputs)
     logging.info(
-        f'  {round(client_stats.pool_size / 100000000, 3)} pool total inputs={num_inputs_pool}, client mixes={client_stats.num_mixes}, '
+        f'  {round(client_stats.pool_size / SATS_IN_BTC, 3)} pool total inputs={num_inputs_pool}, pool free inputs={num_freeremix_inputs_pool}, client mixes={client_stats.num_mixes}, '
         f'client coins={client_stats.num_coins}')
     if client_stats.num_mixes > 0:
-        ratio = round((num_inputs_pool / client_stats.num_mixes) * client_stats.num_coins, 1)
-        logging.info(f'    {round(client_stats.pool_size / 100000000, 3)} pool participation rate= 1:{ratio}')
-        results[str(client_stats.pool_size)].append(ratio)
-        logging.info(f'    present in % of mixes (per single coin)= {round(client_stats.num_mixes / len(pool_stats.keys()) * 100 / client_stats.num_coins, 2)}%')
+        #ratio_all_inputs = round((num_inputs_pool / client_stats.num_mixes) * client_stats.num_coins, 1)
+        ratio_all_inputs = round(num_inputs_pool / client_stats.num_mixes, 1)
+        ratio_freeremix_inputs = round(num_freeremix_inputs_pool / client_stats.num_mixes, 1)
+        logging.info(f'    {round(client_stats.pool_size / SATS_IN_BTC, 3)} pool participation rate(based on all cjtxs)= 1:{ratio_all_inputs}')
+        logging.info(f'    {round(client_stats.pool_size / SATS_IN_BTC, 3)} pool participation rate(based on free remix inputs)= 1:{ratio_freeremix_inputs}')
+        #results[str(client_stats.pool_size)].append(ratio_all_inputs)
+        results[str(client_stats.pool_size)].append(ratio_freeremix_inputs)
+        present_probability = client_stats.num_mixes / len(pool_stats.keys()) * 100
+        logging.info(f'    present in % of mixes= {round(present_probability, 2)}%')
+        logging.info(f'    estimated queue length = {round(100 / present_probability)} coins')
+        logging.info(f'    present in % of mixes (per single coin)= {round(present_probability / client_stats.num_coins, 2)}%')
+        logging.info(f'    estimated queue length (per single coin)= {round(100 / (present_probability / client_stats.num_coins))} coins')
 
 
 def analyze_interval_data(interval_data, stats: CoinJoinStats, results: dict):
