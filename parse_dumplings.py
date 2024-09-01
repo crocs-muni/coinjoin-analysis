@@ -1,4 +1,5 @@
 import copy
+import math
 import os
 import pickle
 import random
@@ -6,7 +7,7 @@ import shutil
 from datetime import datetime, timedelta
 from collections import defaultdict, Counter
 from pathlib import Path
-
+import pandas as pd
 import numpy as np
 import seaborn as sns
 from scipy import stats
@@ -1881,12 +1882,13 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
         WINDOWS_SIZE = 1 if WINDOWS_SIZE < 1 else WINDOWS_SIZE
         remix_ratios_avg = [np.average(remix_ratios_std[i:i + WINDOWS_SIZE]) for i in
                             range(0, len(remix_ratios_std), WINDOWS_SIZE)]
+
         ax2 = ax.twinx()
         ax2.plot(range(0, len(remix_ratios_std), WINDOWS_SIZE), remix_ratios_avg, label=f'MIX_REMIX avg({WINDOWS_SIZE})',
                  color='brown', linewidth=1, linestyle='--', alpha=0.5)
         ax2.set_ylim(0, 100)  # Force whole range of yaxis
         ax2.tick_params(axis='y', colors='brown', labelsize=6)
-        ax2.set_ylabel('Median remix rate %', color='brown', fontsize='6')
+        ax2.set_ylabel('Average remix rate %', color='brown', fontsize='6')
         ax2.spines['right'].set_position(('outward', -30))  # Adjust position of the third axis
 
         # Save computed remixes to file
@@ -2392,7 +2394,6 @@ def analyze_extramix_flows(experiment_id: str, target_path: Path, mix1_precomp_v
     return flow_sizes
 
 
-
 def whirlpool_extract_pool(full_data: dict, mix_id: str, target_path: Path, pool_id: str, pool_size: int):
     # Start from initial tx for specific pool size
     # Add iteratively additional transactions if connected to already included ones
@@ -2801,6 +2802,7 @@ if __name__ == "__main__":
     if PLOT_REMIXES:
         if CONSIDER_WW1:
             wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False)
+            wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, False)
             wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True)
             wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, True)
 
@@ -2837,6 +2839,18 @@ if __name__ == "__main__":
                              'coinjoin_tx_info.json', False, True)
         exit(42)
 
+    if ANALYSIS_CLUSTERS:
+        if CONSIDER_WASABI1:
+            target_load_path = os.path.join(target_path, 'wasabi1')
+        if CONSIDER_WASABI2:
+            target_load_path = os.path.join(target_path, 'wasabi2')
+        if CONSIDER_WHIRLPOOL:
+            target_load_path = os.path.join(target_path, 'whirlpool')
+
+        all_data = als.load_coinjoins_from_file(target_load_path, None, True)
+        all_data = analyze_postmix_spends(all_data)
+        als.save_json_to_file(os.path.join(target_load_path, 'coinjoin_tx_info_clusters.json'), {'postmix': all_data['postmix'], 'coinjoins': all_data['coinjoins']})
+
     if ANALYSIS_BURN_TIME:
         if CONSIDER_WW1:
             wasabi1_analyse_remixes('Wasabi1', target_path)
@@ -2853,9 +2867,10 @@ if __name__ == "__main__":
             process_inputs_distribution('Wasabi1', MIX_PROTOCOL.WASABI1,  target_path, 'WasabiCoinJoins.txt', True)
         if CONSIDER_WHIRLPOOL:
             #process_inputs_distribution('whirlpool_tx0_test', MIX_PROTOCOL.WHIRLPOOL, target_path, 'sam_premix_test.txt', True)
-            process_inputs_distribution('whirlpool_tx0', MIX_PROTOCOL.WHIRLPOOL,  target_path, 'SamouraiTx0s.txt', True)
+            process_inputs_distribution_whirlpool('whirlpool', MIX_PROTOCOL.WHIRLPOOL,  target_path, 'SamouraiTx0s.txt', True)
         if CONSIDER_WW2:
-            process_inputs_distribution('Wasabi2', MIX_PROTOCOL.WASABI2,  target_path, 'Wasabi2CoinJoins.txt', True)
+            process_inputs_distribution('wasabi2', MIX_PROTOCOL.WASABI2,  target_path, 'Wasabi2CoinJoins.txt', True)
+            #process_inputs_distribution('Wasabi2', MIX_PROTOCOL.WASABI2,  target_path, 'Wasabi2CoinJoins.txt', True)
 
     #
     # Analyze address reuse in all mixes
