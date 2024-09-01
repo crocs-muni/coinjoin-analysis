@@ -2355,6 +2355,48 @@ def backup_log_files(target_path: str):
         logging.warning(f'Log file {log_file_path} does not found, not copied.')
 
 
+def compute_stats(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path):
+    data = als.load_coinjoins_from_file(target_path, None, True)
+
+    sorted_cjtxs = als.sort_coinjoins(data['coinjoins'], True)
+    num_cjtxs = [len(data['coinjoins'][cjtx['txid']]['inputs']) for cjtx in sorted_cjtxs]
+
+    def compute_corr(input_series: list, window_size: int):
+        input_series_windowed = [np.sum(input_series[i:i+window_size]) for i in range(0, len(input_series), window_size)]
+        data = pd.Series(input_series_windowed)
+        # Shift the series by one position
+        shifted_data = data.shift(1)
+        # Drop the NaN value
+        original_data = data[1:]
+        shifted_data = shifted_data[1:]
+        # Calculate the Pearson correlation
+        correlation = original_data.corr(shifted_data)
+        print(f'Correlation {window_size} = {correlation}')
+
+        data = np.array(input_series_windowed)
+        # Compute autocorrelation using numpy's correlate function
+        autocorr = np.correlate(data - np.mean(data), data - np.mean(data), mode='full')
+
+        # Normalize the result
+        autocorr = autocorr / (np.var(data) * len(data))
+
+        # We only need the second half of the result (non-negative lags)
+        autocorr = autocorr[len(autocorr) // 2:]
+
+        # Print the autocorrelation values
+        print("Autocorrelation values:", autocorr)
+
+        # Optionally, plot the autocorrelation
+        plt.plot(autocorr)
+        plt.title('Autocorrelation')
+        plt.xlabel('Lag')
+        plt.ylabel('Autocorrelation')
+        plt.show()
+
+    for i in range(1, 5):
+        compute_corr(num_cjtxs, i)
+
+
 if __name__ == "__main__":
     # Limit analysis only to specific coinjoin type
     CONSIDER_WW1 = False
