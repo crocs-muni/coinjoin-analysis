@@ -306,7 +306,7 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     return input_types
 
 
-def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudity: dict, initial_cj_index: int, ax):
+def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liquidity: dict, initial_cj_index: int, ax):
     coinjoins = data['coinjoins']
     sorted_cj_time = sort_coinjoins(coinjoins, SORT_COINJOINS_BY_RELATIVE_ORDER)
 
@@ -326,10 +326,24 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudit
     mix_leave = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
                                     if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_LEAVE.name])
                                for cjtx in sorted_cj_time]
+
     # Output staying in mix
     mix_stay = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
                                     if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_STAY.name])
                                for cjtx in sorted_cj_time]
+
+    INTERVAL_LENGTH = 3 * 30 * 24 * 3600  # 3 months == 3 * 30 * 24 * 3600
+    # Outputs leaving mix `fast` after its mixing (within 0-INTERVAL_LENGTH seconds)
+    mix_leave_timecutoff_before = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
+                                    if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_LEAVE.name and
+                                      coinjoins[cjtx['txid']]['outputs'][index]['burn_time'] < INTERVAL_LENGTH])
+                               for cjtx in sorted_cj_time]
+    # Outputs leaving mix `slow` after its mixing (at least after INTERVAL_LENGTH seconds)
+    mix_leave_timecutoff_after = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
+                                    if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_LEAVE.name and
+                                      coinjoins[cjtx['txid']]['outputs'][index]['burn_time'] >= INTERVAL_LENGTH])
+                               for cjtx in sorted_cj_time]
+
     # Output staying in mix MIX_EVENT_TYPE.MIX_REMIX
     mix_remix = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
                                     if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name])
@@ -342,7 +356,9 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudit
 
 
     cjtx_cummulative_liquidity = []
+    cjtx_cummulative_liquidity_timecutoff = []
     curr_liquidity = initial_liquidity[0]  # Take last cummulative liquidity (MIX_ENTERxxx - MIX_LEAVE) from previous interval
+    curr_liquidity_timecutoff = initial_liquidity[3]
     assert len(mix_enter) == len(mix_leave) == len(mix_remixfriend) == len(mix_remixfriend_ww1) == len(mix_stay), logging.error(f'Mismatch in length of input/out sum arrays: {len(mix_enter)} vs. {len(mix_leave)}')
     # Change in liquidity as observed by each coinjoin (increase directly when mix_enter, decrease directly even when mix_leave happens later)
     for index in range(0, len(mix_enter)):
@@ -355,33 +371,49 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liqiudit
         curr_liquidity = curr_liquidity + liquidity_step
         cjtx_cummulative_liquidity.append(curr_liquidity)
 
-    # Cummulative liquidity never remixed or leaving mix (MIX_STAY coins)
+        # time-limited value (< INTERVAL_LENGTH)
+        curr_liquidity_timecutoff = curr_liquidity_timecutoff + liquidity_step + mix_leave[index] - mix_leave_timecutoff_before[index]  # Same computation, but assume as leaving only mix_leave_timecutoff value
+        cjtx_cummulative_liquidity_timecutoff.append(curr_liquidity_timecutoff)
+
+    # Cumulative liquidity never remixed or leaving mix (MIX_STAY coins)
     stay_liquidity = []
-    curr_stay_liquidity = initial_liquidity[1]  # Take last cummulative liquidity (MIX_STAY) from previous interval
+    stay_liquidity_timecutoff = []
+    curr_stay_liquidity = initial_liquidity[1]  # Take last cumulative liquidity (MIX_STAY) from previous interval
+    curr_stay_liquidity_timecutoff = initial_liquidity[4]  # Take last cumulative liquidity (MIX_STAY) from previous interval
     for index in range(0, len(mix_stay)):
         curr_stay_liquidity = curr_stay_liquidity + mix_stay[index]
         stay_liquidity.append(curr_stay_liquidity)
+
+        # time-limited value (=> INTERVAL_LENGTH)
+        #curr_stay_liquidity_timecutoff = curr_stay_liquidity_timecutoff + mix_stay_timecutoff_before[index]
+        #stay_liquidity_timecutoff.append(curr_stay_liquidity_timecutoff)
 
     # Remixed liquidity levels
     remix_liquidity = []
     curr_remix_liquidity = initial_liquidity[2]  # Take last remix liquidity from previous interval
     for index in range(0, len(mix_stay)):
-        curr_remix_liquidity = curr_remix_liquidity + mix_enter[index] - mix_leave[index] - stay_liquidity[index]  # prev state + new input liquidity - output liqudity
+        remix_liquidity_step = mix_enter[index] + mix_remixfriend[index] + mix_remixfriend_ww1[index] - mix_leave[index] - stay_liquidity[index]  # prev state + new input liquidity - output liqudity
+        # BUGBUG: We must also consider exact evaluation of mining fee payed to get perfect match for the assert below
+        #assert mix_remix[index] == remix_liquidity_step, f'Inconsistent remix liquidity estimation for {index}th coinjoin ({sorted_cj_time[index]['txid']}); Expected {mix_remix[index]} got {remix_liquidity_step[index]}'
+        curr_remix_liquidity = curr_remix_liquidity + remix_liquidity_step
         remix_liquidity.append(curr_remix_liquidity)
 
     # Plot in btc
     liquidity_btc = [item / SATS_IN_BTC for item in cjtx_cummulative_liquidity]
+    liquidity_timecutoff_btc = [item / SATS_IN_BTC for item in cjtx_cummulative_liquidity_timecutoff]
     stay_liquidity_btc = [item / SATS_IN_BTC for item in stay_liquidity]
     remix_liquidity_btc = [item / SATS_IN_BTC for item in remix_liquidity]
 
     #x_ticks = range(initial_cj_index, initial_cj_index + len(liquidity_btc))
     ax.plot(liquidity_btc, color='royalblue', alpha=0.6)
     #ax.plot(stay_liquidity_btc, color='royalblue', alpha=0.6, linestyle='--')
-    #ax.plot(remix_liquidity_btc, color='royalblue', alpha=0.6, linestyle='--')
+    #ax.plot(remix_liquidity_btc, color='black', alpha=0.6, linestyle='--')
+    #ax.plot(liquidity_timecutoff_btc, color='black', alpha=0.6, linestyle='--')
+
     ax.set_ylabel('btc in mix', color='royalblue')
     ax.tick_params(axis='y', colors='royalblue')
 
-    return cjtx_cummulative_liquidity, stay_liquidity, remix_liquidity
+    return cjtx_cummulative_liquidity, stay_liquidity, remix_liquidity, cjtx_cummulative_liquidity_timecutoff, stay_liquidity_timecutoff
 
 
 def plot_mining_fee_rates(mix_id: str, data: dict, mining_fees: dict, ax):

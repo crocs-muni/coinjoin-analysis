@@ -1606,6 +1606,8 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
     stay_liquidity = [0]  # Absolute cummulative liquidity staying in the mix outputs (mixed, but untouched)
     mining_fee_rate = []  # Mining fee rate
     remix_liquidity = [0] # Liquidity that is remixed in time despite likely reaching target anonscore
+    changing_liquidity_timecutoff = [0]
+    stay_liquidity_timecutoff = [0]
     coord_fee_rate = []  # Coordinator fee payments
     input_types = {}
     num_wallets = []
@@ -1669,10 +1671,13 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
 
             # Add current total mix liquidity into the same graph
             ax2 = ax.twinx()
-            changing_liquidity_interval, stay_liquidity_interval, remix_liquidity_interval = als.plot_mix_liquidity(f'{mix_id} {dir_name}', data, (changing_liquidity[-1], stay_liquidity[-1], remix_liquidity[-1]), time_liquidity, initial_cj_index, ax2)
+            changing_liquidity_interval, stay_liquidity_interval, remix_liquidity_interval, changing_liquidity_timecutoff_interval, stay_liquidity_timecutoff_interval = (
+                als.plot_mix_liquidity(f'{mix_id} {dir_name}', data, (changing_liquidity[-1], stay_liquidity[-1], remix_liquidity[-1], changing_liquidity_timecutoff[-1], stay_liquidity_timecutoff[-1]), time_liquidity, initial_cj_index, ax2))
             changing_liquidity.extend(changing_liquidity_interval)
             stay_liquidity.extend(stay_liquidity_interval)
             remix_liquidity.extend(remix_liquidity_interval)
+            changing_liquidity_timecutoff.extend(changing_liquidity_timecutoff_interval)
+            stay_liquidity_timecutoff.extend(stay_liquidity_timecutoff_interval)
 
             # Add fee rate into the same graph
             PLOT_FEERATE = True
@@ -1717,7 +1722,7 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
 
         prev_year = current_year
 
-    def plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, stay_liquidity, mining_fee_rate, separators_to_plot: list):
+    def plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, changing_liquidity_timecutoff, stay_liquidity, remix_liquidity, mining_fee_rate, separators_to_plot: list):
         # Plot mining fee rate
         PLOT_FEERATE = False
         if PLOT_FEERATE:
@@ -1794,10 +1799,16 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
         # Plot changing liquidity in time
         ax2 = ax.twinx()
         changing_liquidity_btc = [item / SATS_IN_BTC for item in changing_liquidity]
+        remix_liquidity_btc = [item / SATS_IN_BTC for item in remix_liquidity]
         stay_liquidity_btc = [item / SATS_IN_BTC for item in stay_liquidity]
         ax2.plot(changing_liquidity_btc, color='royalblue', alpha=0.6, label='Changing liquidity (cjtx centric, MIX_ENTER - MIX_LEAVE)')
-        ax2.plot(stay_liquidity_btc, color='darkgreen', alpha=0.6, linestyle='--', label='Unmoved outputs (HODL coins, MIX_STAY)')
-        ax2.plot([a - b for a, b in zip(changing_liquidity_btc, stay_liquidity_btc)], color='red', alpha=0.6, linestyle='-.', label='Actively remixed liquidity (Changing - Unmoved)')
+        ax2.plot(stay_liquidity_btc, color='darkgreen', alpha=0.6, linestyle='--', label='Unmoved outputs (MIX_STAY)')
+        #ax2.plot(remix_liquidity_btc, color='black', alpha=0.6, linestyle='--', label='Cummulative remix liquidity, MIX_ENTER - MIX_LEAVE - MIX_STAY')
+        PLOT_CHAINANALYSIS_TIMECUTOFF = False
+        if PLOT_CHAINANALYSIS_TIMECUTOFF:
+            ax2.plot([a - b for a, b in zip([item / SATS_IN_BTC for item in changing_liquidity_timecutoff], [item / SATS_IN_BTC for item in stay_liquidity_timecutoff])], color='red', alpha=0.6, linestyle='-.', label='Actively remixed liquidity (Changing - Unmoved)')
+        else:
+            ax2.plot([a - b for a, b in zip(changing_liquidity_btc, stay_liquidity_btc)], color='red', alpha=0.6, linestyle='-.', label='Actively remixed liquidity (Changing - Unmoved)')
         ax2.set_ylabel('btc in mix', color='royalblue')
         ax2.tick_params(axis='y', colors='royalblue')
 
@@ -1848,7 +1859,7 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
     # Add additional cummulative plots for all coinjoin in one
     ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
     ax_index += 1
-    plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, stay_liquidity, mining_fee_rate, ['month', 'year'])
+    plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, stay_liquidity, stay_liquidity_timecutoff, remix_liquidity, mining_fee_rate, ['month', 'year'])
 
     # Finalize multigraph graph
     if plot_multigraph:
@@ -1861,7 +1872,7 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
     # Save generate and save cummulative results separately
     fig = plt.figure(figsize=(10, 3))
     ax = fig.add_subplot(1, 1, 1, axes_class=AA.Axes)  # Get next subplot
-    plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, stay_liquidity, mining_fee_rate, ['month', 'year'])
+    plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, changing_liquidity_timecutoff, stay_liquidity, remix_liquidity, mining_fee_rate, ['month', 'year'])
     plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
     save_file = os.path.join(target_path, f'{mix_id}_cummul_{'values' if analyze_values else 'nums'}_{'norm' if normalize_values else 'notnorm'}{'' if restrict_to_in_size is None else f'{round(restrict_to_in_size[1]/SATS_IN_BTC, 2)}btc'}')
     plt.savefig(f'{save_file}.png', dpi=300)

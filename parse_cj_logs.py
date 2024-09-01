@@ -1555,12 +1555,12 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
         time_liquidity = {}
         als.plot_inputs_type_ratio(f'{experiment_name}', cjtx_stats, 0, cjplt.ax_inputs_type_value_ratio,True, False)
         ax2 = cjplt.ax_inputs_type_value_ratio.twinx()
-        als.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, (0, 0, 0), time_liquidity, 0, ax2)
+        als.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, (0, 0, 0, 0, 0), time_liquidity, 0, ax2)
 
     if cjplt.ax_inputs_type_num_ratio:
         als.plot_inputs_type_ratio(f'{experiment_name}', cjtx_stats, 0, cjplt.ax_inputs_type_num_ratio, False, True)
         ax2 = cjplt.ax_inputs_type_num_ratio.twinx()
-        als.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, (0, 0, 0), time_liquidity, 0, ax2)
+        als.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, (0, 0, 0, 0, 0), time_liquidity, 0, ax2)
 
     return analysis_stats
 
