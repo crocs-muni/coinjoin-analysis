@@ -394,6 +394,7 @@ def analyze_postmix_spends(tx_dict: dict) -> dict:
     """
     postmix_txs = tx_dict['postmix']
     mix_txs = tx_dict['coinjoins']
+    print(f'Analyzing analyze_postmix_spends for {len(postmix_txs)} postmixes and {len(mix_txs)} coinjoins')
 
     # N:1 Merge (many inputs, one output), including # 1:1 Resend (one input, one output)
     cluster_name = 'unassigned'  # Index to use
@@ -421,6 +422,47 @@ def analyze_postmix_spends(tx_dict: dict) -> dict:
              f'N:1 postmix merges detected (merged inputs / all inputs)')
     SM.print(f'  {als.get_ratio_string(CLUSTER_INDEX.get_current_index() - offset, len(postmix_txs))} '
              f'N:1 unique postmix clusters detected (clusters / all postmix txs)')
+
+    return tx_dict
+
+
+def clear_clusters(tx_dict: dict) -> dict:
+    for txid in tx_dict['coinjoins'].keys():
+        for index in tx_dict['coinjoins'][txid]['outputs']:
+            tx_dict['coinjoins'][txid]['outputs'][index].pop('cluster_id', None)
+    return tx_dict
+
+
+def assign_merge_cluster(tx_dict: dict) -> dict:
+    """
+    Simple chain analysis for outputs based on common input ownership
+    If cjtx output(s) are used in non-coinjoin transaction, assign them same cluster id
+    :param tx_dict: input dict with transactions
+    :return: updated dict with transactions
+    """
+    mix_txs = tx_dict['coinjoins']
+    print(f'Analyzing assign_merge_cluster for {len(mix_txs)} coinjoins')
+
+    offset = CLUSTER_INDEX.get_current_index()   # starting offset of cluster index used to compute number of assigned indexes
+    total_outputs_merged = 0
+    spent_txs = {}  # Construct all postmix spending trasaction with inputs used by it
+    for txid in mix_txs.keys():
+        for index in mix_txs[txid]['outputs'].keys():
+            if mix_txs[txid]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_LEAVE.name:
+                spent_txid, vin = als.extract_txid_from_inout_string(mix_txs[txid]['outputs'][index]['spend_by_tx'])
+                spent_txs.setdefault(spent_txid, []).append(als.get_input_name_string(txid, index))
+
+    for item in spent_txs.keys():
+        cluster_name = f'c_{CLUSTER_INDEX.get_new_index()}'
+        for output in spent_txs[item]:
+            txid, index = als.extract_txid_from_inout_string(output)
+            set_key_value_assert(mix_txs[txid]['outputs'][index], 'cluster_id', cluster_name, CLUSTER_ID_CHECK_HARD_ASSERT)
+            total_outputs_merged += 1
+
+    # Compute total number of inputs used in postmix spending
+    total_outputs = sum([len(mix_txs[txid]['outputs']) for txid in mix_txs.keys()])
+    SM.print(f'  {als.get_ratio_string(total_outputs_merged, total_outputs)} '
+             f'N:k postmix merges detected (merged outputs / all outputs)')
 
     return tx_dict
 
@@ -1164,14 +1206,46 @@ def analyze_interval_data(interval_data, stats: CoinJoinStats, results: dict):
         logging.info(f'  #cjs per one input coin= {round(stats.no_pool.num_mixes / stats.no_pool.num_coins, 2)}')
 
 
-def process_inputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_filename: str, save_outputs: bool= False):
+def process_inputs_distribution_whirlpool(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_filename: str, save_outputs: bool= False):
     logging.info(f'Processing {mix_id}')
     txs = load_coinjoin_stats_from_file(os.path.join(target_path, tx_filename))
-    als.analyze_input_out_liquidity(txs, [], [], mix_protocol)
-    # inputs_not_enter = [(txid, index) for txid in txs.keys() for index in txs[txid]['inputs'].keys()
-    #           if txs[txid]['inputs'][index]['mix_event_type'] != MIX_EVENT_TYPE.MIX_ENTER.name]
 
-    inputs_info, inputs = extract_inputs_distribution(mix_id, target_path, tx_filename, txs, save_outputs)
+    # Process TX0 transactions, try to find ones with many pool outputs and long time to mix them (possible chain analysis input)
+    tx0_by_outputs_dict = {}
+    for txid in txs.keys():
+        if not is_whirlpool_coinjoin_tx(txs[txid]):
+            num_outputs = len(txs[txid]['outputs'])
+            tx0_by_outputs_dict.setdefault(num_outputs, []).append(txid)
+
+    tx0_results = {}
+    for num_outputs in sorted(tx0_by_outputs_dict.keys()):
+        print(f'#outputs {num_outputs}: {len(tx0_by_outputs_dict[num_outputs])}x')
+        for item in tx0_by_outputs_dict[num_outputs]:
+            if num_outputs not in tx0_results.keys():
+                tx0_results[num_outputs] = {}
+            in_values = [txs[item]['inputs'][index]['value'] for index in txs[item]['inputs'].keys()]
+            out_values = [txs[item]['outputs'][index]['value'] for index in txs[item]['outputs'].keys()]
+            pool_size_out_sats = np.median(out_values)
+            pool_size = round(pool_size_out_sats / SATS_IN_BTC, 3)
+            pool_size_sats = pool_size * SATS_IN_BTC
+            out_values_pool = [value for value in out_values if math.isclose(value, pool_size_sats, rel_tol=1e-1, abs_tol=0.0)]
+            out_mfees = [value - pool_size_sats for value in out_values_pool]
+            tx0_results[num_outputs][item] = {'pool': pool_size, 'pool_total_inflow': round(sum(out_values_pool) / SATS_IN_BTC, 2),
+                                              'num_pool_inputs': len(out_values_pool), 'tx0_input_size': round(sum(in_values) / SATS_IN_BTC, 2),
+                                              'sum_mfee': round(sum(out_mfees) / SATS_IN_BTC, 4)}
+            if num_outputs > 50:
+                print(f'{item}, pool: {pool_size}: pool_total_inflow: {round(sum(out_values_pool) / SATS_IN_BTC, 2)} btc in {len(out_values_pool)} inputs '
+                      f'(sum TXO inputs: {round(sum(in_values) / SATS_IN_BTC, 2)} btc), sum mfee in post-txo outputs = {round(sum(out_mfees) / SATS_IN_BTC, 4)}')
+    if save_outputs:
+        als.save_json_to_file_pretty(os.path.join(target_path, mix_id, f'{mix_id}_tx0_analysis.json'), tx0_results)
+
+    inputs = [txs[txid]['inputs'][index]['value'] for txid in txs.keys() for index in txs[txid]['inputs'].keys() if not is_whirlpool_coinjoin_tx(txs[txid])]
+    inputs_distrib = Counter(inputs)
+    inputs_distrib = dict(sorted(inputs_distrib.items(), key=lambda item: (-item[1], item[0])))
+    inputs_info = {'mix_id': mix_id, 'path': tx_filename, 'distrib': inputs_distrib}
+    logging.info(f'  Distribution extracted, total {len(inputs_info['distrib'])} different input values found')
+    if save_outputs:
+        als.save_json_to_file_pretty(os.path.join(target_path, mix_id, f'{mix_id}_inputs_distribution.json'), inputs_info)
 
     log_data = np.log(inputs)
     hist, bins = np.histogram(log_data, bins=100)
@@ -1218,27 +1292,40 @@ def process_estimated_wallets_distribution(mix_id: str, target_path: Path, input
         plt.close()
 
 
-def process_inputs_distribution2(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_filename: str, save_outputs: bool= True):
+def process_inputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_filename: str, save_outputs: bool= True):
     logging.info(f'Processing {mix_id} process_inputs_distribution2()')
     # Load txs for all pools
     target_load_path = os.path.join(target_path, mix_id)
-
     data = als.load_coinjoins_from_file(target_load_path, None, True)
-    inputs_info, inputs = extract_inputs_distribution(mix_id, target_path, tx_filename, data['coinjoins'], save_outputs)
 
-    log_data = np.log(inputs)
-    hist, bins = np.histogram(log_data, bins=100)
-    plt.bar(bins[:-1], hist, width=np.diff(bins))
-    xticks = np.linspace(min(log_data), max(log_data), num=10)
-    plt.xscale('log')
-    plt.xticks(xticks, np.round(np.exp(xticks), decimals=0), rotation=45, fontsize=6)
-    plt.title(f'{mix_id} inputs histogram (x axis is log)')
-    plt.xlabel(f'Size of input')
-    plt.ylabel(f'Number of inputs')
-    plt.show()
+    def plot_distribution(inputs):
+        log_data = np.log(inputs)
+        hist, bins = np.histogram(log_data, bins=100)
+        plt.bar(bins[:-1], hist, width=np.diff(bins))
+        xticks = np.linspace(min(log_data), max(log_data), num=10)
+        plt.xscale('log')
+        plt.xticks(xticks, np.round(np.exp(xticks), decimals=0), rotation=45, fontsize=6)
+        plt.title(f'{mix_id} inputs histogram (x axis is log)')
+        plt.xlabel(f'Size of input')
+        plt.ylabel(f'Number of inputs')
+        plt.show()
+
+    if mix_protocol == MIX_PROTOCOL.WASABI2:
+        # zksnacks coordinator
+        zksnacks_cjtxs = {key: value for key, value in data['coinjoins'].items() if data['coinjoins'][key]['broadcast_time'] < '2024-06-02 00:00:07.000'}
+        inputs_info, inputs = extract_inputs_distribution(mix_id, target_path, tx_filename, zksnacks_cjtxs, save_outputs, '_zksnacks')
+        plot_distribution(inputs)
+        # Other coordinators
+        # BUGBUG: We othesr slightly overlap with zksnacks
+        other_cjtxs = {key: value for key, value in data['coinjoins'].items() if data['coinjoins'][key]['broadcast_time'] > '2024-06-01 00:00:07.000'}
+        inputs_info, inputs = extract_inputs_distribution(mix_id, target_path, tx_filename, other_cjtxs, save_outputs, '_others')
+        plot_distribution(inputs)
+    else:
+        inputs_info, inputs = extract_inputs_distribution(mix_id, target_path, tx_filename, data['coinjoins'], save_outputs, '')
+        plot_distribution(inputs)
 
 
-def extract_inputs_distribution(mix_id: str, target_path: Path, tx_filename: str, txs: dict, save_outputs = False):
+def extract_inputs_distribution(mix_id: str, target_path: Path, tx_filename: str, txs: dict, save_outputs = False, file_spec: str = ''):
     inputs = [txs[txid]['inputs'][index]['value'] for txid in txs.keys() for index in txs[txid]['inputs'].keys()
               if 'mix_event_type' in txs[txid]['inputs'][index].keys() and
               txs[txid]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name]
@@ -1247,7 +1334,7 @@ def extract_inputs_distribution(mix_id: str, target_path: Path, tx_filename: str
     inputs_info = {'mix_id': mix_id, 'path': tx_filename, 'distrib': inputs_distrib}
     logging.info(f'  Distribution extracted, total {len(inputs_info['distrib'])} different input values found')
     if save_outputs:
-        als.save_json_to_file_pretty(os.path.join(target_path, mix_id, f'{mix_id}_inputs_distribution.json'), inputs_info)
+        als.save_json_to_file_pretty(os.path.join(target_path, mix_id, f'{mix_id}_inputs_distribution{file_spec}.json'), inputs_info)
 
     return inputs_info, inputs
 
@@ -1447,7 +1534,7 @@ def analyze_mining_fees(mix_id: str, data: dict):
         outputs_val = sum([cjtxs[cjtx]['outputs'][index]['value'] for index in cjtxs[cjtx]['outputs'].keys()])
         cjtxs_mining_fee.append(inputs_val - outputs_val)
 
-    print(f'Total mining fee: {sum(cjtxs_mining_fee) / 100000000} btc ({sum(cjtxs_mining_fee)} sats)')
+    print(f'Total mining fee: {sum(cjtxs_mining_fee) / SATS_IN_BTC} btc ({sum(cjtxs_mining_fee)} sats)')
 
     plt.figure()
     plt.plot(cjtxs_mining_fee)
@@ -1501,7 +1588,7 @@ def wasabi_analyze_coordinator_fees(mix_id: str, cjtxs: dict):
 
     # TODO: analyze plebs-do-not-pay frequency
 
-    print(f'Total coordination fee: {sum(cjtxs_coordinator_fee) / 100000000} btc ({sum(cjtxs_coordinator_fee)} sats)')
+    print(f'Total coordination fee: {sum(cjtxs_coordinator_fee) / SATS_IN_BTC} btc ({sum(cjtxs_coordinator_fee)} sats)')
 
     plt.figure()
     plt.plot(cjtxs_coordinator_fee)
@@ -1549,7 +1636,7 @@ def whirlpool_analyze_coordinator_fees(mix_id: str, data: dict):
             cjtxs_coordinator_fees[pool].append(coord_fee)
         else:
             logging.debug(f'No whirlpool poolsize identified for TX0: {tx0}')
-    print(f'Total coordination fee: {sum(cjtxs_coordinator_fees) / 100000000} btc ({sum(cjtxs_coordinator_fees)} sats)')
+    print(f'Total coordination fee: {sum(cjtxs_coordinator_fees) / SATS_IN_BTC} btc ({sum(cjtxs_coordinator_fees)} sats)')
 
     plt.figure()
     for pool in cjtxs_coordinator_fees.keys():
@@ -1632,9 +1719,9 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
             if restrict_to_out_size is not None:
                 before_len = len(data['coinjoins'])
                 data['coinjoins'] = {cjtx: item for cjtx, item in data['coinjoins'].items() if item['outputs']['0']['value'] == restrict_to_out_size}
-                print(f'Length after / before filtering {len(data['coinjoins'])} / {before_len} ({restrict_to_out_size/100000000})')
+                print(f'Length after / before filtering {len(data['coinjoins'])} / {before_len} ({restrict_to_out_size/SATS_IN_BTC})')
                 if len(data['coinjoins']) == 0:
-                    print(f'No coinjoins of specified value {restrict_to_out_size/100000000} found in given interval, skipping')
+                    print(f'No coinjoins of specified value {restrict_to_out_size/SATS_IN_BTC} found in given interval, skipping')
                     continue
 
             ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
