@@ -2496,6 +2496,87 @@ def compute_stats(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path):
         compute_corr(num_cjtxs, i)
 
 
+def analyze_zksnacks_output_clusters(mix_id, target_path):
+    target_load_path = os.path.join(target_path, mix_id)
+    # all_data = als.load_coinjoins_from_file(target_load_path, None, True)
+    # all_data = clear_clusters(all_data)
+    # all_data = assign_merge_cluster(all_data)
+    # als.save_json_to_file(os.path.join(target_load_path, 'coinjoin_tx_info_clusters.json'), {'postmix': all_data['postmix'], 'coinjoins': all_data['coinjoins']})
+    data = als.load_json_from_file(os.path.join(target_load_path, 'coinjoin_tx_info_clusters.json'))
+
+    # Initialize the counter
+    counter = 1
+
+    def get_counter():
+        global counter
+        value = counter
+        counter += 1
+        return f'u_{value}'
+
+    cjtx_zksnacks = [cjtx for cjtx in data['coinjoins'].keys() if data['coinjoins'][cjtx][
+        'broadcast_time'] < "2024-05-27 00:00:00.000"]  # Get only cjtx till May
+    # if len(cjtx_zksnacks) > 5000:
+    #     cjtx_zksnacks = cjtx_zksnacks[5000:]  # Drop initial 5000 coinjoins which may be
+    # cjtx_range = data['coinjoins'].keys()  # All coinjoins in interval
+
+    cjtx_range = cjtx_zksnacks
+    # Compute distribution fo different clusters of outputs
+    number_output_clusters = [len(set(
+        [data['coinjoins'][cjtx]['outputs'][index].get('cluster_id', get_counter()) for index in
+         data['coinjoins'][cjtx]['outputs'].keys()])) for cjtx in cjtx_range]
+    number_input_clusters = [len(set(
+        [data['coinjoins'][cjtx]['inputs'][index].get('cluster_id', get_counter()) for index in
+         data['coinjoins'][cjtx]['inputs'].keys()])) for cjtx in cjtx_range]
+
+    number_of_outputs = [len(data['coinjoins'][cjtx]['outputs']) for cjtx in cjtx_range]
+    cluster_ratio = [number_output_clusters[index] / number_of_outputs[index] for index in
+                     range(0, len(number_of_outputs))]
+    CUTOFF_RATIO = 0.8
+    indexes = [index for index, value in enumerate(cluster_ratio) if value < CUTOFF_RATIO]
+    high_merge_txids = {cjtx_range[index]: number_output_clusters[index] for index in indexes}
+    print(
+        f'txids with high merge ratio under {CUTOFF_RATIO}, total {len(high_merge_txids)}: {high_merge_txids}')
+
+    cjtx_range = high_merge_txids
+    # Compute distribution fo different clusters of outputs
+    number_output_clusters = [len(set(
+        [data['coinjoins'][cjtx]['outputs'][index].get('cluster_id', get_counter()) for index in
+         data['coinjoins'][cjtx]['outputs'].keys()])) for cjtx in cjtx_range]
+    number_input_clusters = [len(set(
+        [data['coinjoins'][cjtx]['inputs'][index].get('cluster_id', get_counter()) for index in
+         data['coinjoins'][cjtx]['inputs'].keys()])) for cjtx in cjtx_range]
+
+    input_clusters_distrib = Counter(number_input_clusters)
+    sorted_input_distrib = dict(sorted(input_clusters_distrib.items(), reverse=False))
+    print(f'Input distribution: {sorted_input_distrib}')
+    output_clusters_distrib = Counter(number_output_clusters)
+    sorted_output_distrib = dict(sorted(output_clusters_distrib.items(), reverse=False))
+    print(f'Output distribution: {sorted_output_distrib}')
+
+    sorted_input_nums = dict(
+        sorted(Counter([len(data['coinjoins'][cjtx]['inputs']) for cjtx in cjtx_range]).items(), reverse=False))
+    sorted_output_nums = dict(
+        sorted(Counter([len(data['coinjoins'][cjtx]['outputs']) for cjtx in cjtx_range]).items(),
+               reverse=False))
+
+    plt.figure(figsize=(10, 3))
+    # plt.bar(list(sorted_input_distrib.keys()), list(sorted_input_distrib.values()), color='red', alpha=0.4, label='Input wallet clusters')
+    # plt.plot(list(sorted_input_nums.keys()), list(sorted_input_nums.values()), color='red', alpha=1, label='Number of inputs')
+    plt.plot(list(sorted_output_nums.keys()), list(sorted_output_nums.values()), color='royalblue', alpha=0.8,
+             label='Number of outputs')
+    plt.bar(list(sorted_output_distrib.keys()), list(sorted_output_distrib.values()), color='royalblue',
+            alpha=0.6, label='Output wallet clusters')
+    plt.title(f'{mix_id}: distribution of number of distinct output clusters per each coinjoin')
+    plt.xlabel(f'Number of clusters / inputs / outputs')
+    plt.ylabel(f'Number of occurences')
+    plt.legend()
+    save_file = os.path.join(target_path, mix_id, f'{mix_id}_distinct_wallets_output_zksnacks')
+    plt.subplots_adjust(bottom=0.17)
+    plt.savefig(f'{save_file}.png', dpi=300)
+    plt.savefig(f'{save_file}.pdf', dpi=300)
+    plt.close()
+
+
 if __name__ == "__main__":
     # Limit analysis only to specific coinjoin type
     CONSIDER_WW1 = False
@@ -2542,6 +2623,8 @@ if __name__ == "__main__":
 
     DEBUG = True
     if DEBUG:
+        analyze_zksnacks_output_clusters('wasabi2', target_path)
+        exit(42)
         wasabi_plot_remixes('whirlpool_5M_test', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_5M_test'), 'coinjoin_tx_info.json',
                             True, False, None, None, False)
         exit(42)
