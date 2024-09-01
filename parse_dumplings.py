@@ -2562,6 +2562,13 @@ if __name__ == "__main__":
             # Two inflows, subsequent remixing
             process_joint_interval('wasabi1', 'wasabi1__2022_04-05', all_data, MIX_PROTOCOL.WASABI1, target_path, '2022-04-23 00:00:07.000', '2022-05-06 23:59:59.000')
 
+        if CONSIDER_WW2:
+            target_load_path = os.path.join(target_path, 'wasabi2')
+            all_data = als.load_coinjoins_from_file(os.path.join(target_load_path), None, True)
+
+            # Large inflow, in 2023-12, slightly mixed, send out, received as friend, then remixed
+            process_joint_interval('wasabi2', 'wasabi2__2023_12-01', all_data, MIX_PROTOCOL.WASABI2, target_path, '2023-12-20 00:00:07.000', '2024-01-30 23:59:59.000')
+
 
     #
     #
