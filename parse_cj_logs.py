@@ -1,7 +1,9 @@
 import copy
 import csv
 import math
+import random
 import re
+import shutil
 import subprocess
 import json
 import sys
@@ -2440,7 +2442,7 @@ def load_anonscore_data(cjtx_stats, base_path):
                     cjtx_stats['coinjoins'][txid]['outputs'][str(out_index)]['anon_score'] = anon_score
             else:
                 if isinstance(txid, str):
-                    print(f'WARNING: Processing anon scores - tx {txid} not found in coinjoin list')
+                    logging.debug(f'Processing anon scores - tx {txid} not found in coinjoin list')
                 else:
                     print('Strange, isinstance(txid, str) is false')
 
@@ -2545,7 +2547,7 @@ def process_experiment(args):
     base_path = args[0]
     save_figs = args[1]
     WASABIWALLET_DATA_DIR = base_path
-    print(f'INPUT PATH: {base_path}')
+    SM.print(f'INPUT PATH: {base_path}')
     save_file = os.path.join(WASABIWALLET_DATA_DIR, "coinjoin_tx_info.json")
     save_file_stats = os.path.join(WASABIWALLET_DATA_DIR, "coinjoin_tx_info_stats.json")
     if LOAD_TXINFO_FROM_FILE:
@@ -3129,6 +3131,21 @@ def analyze_wallet_usage_frequency(base_path: str, paths_to_process: list):
         plt.close()
 
 
+def backup_log_files(target_path: str):
+    """
+    This code runs before exiting
+    :return:
+    """
+    # Copy logs file into base
+    print(os.path.abspath(__file__))
+    log_file_path = f'{os.path.abspath(__file__)}.log'
+    if os.path.exists(log_file_path):
+        file_name = os.path.basename(log_file_path)
+        shutil.copy(os.path.join(log_file_path), os.path.join(target_path, f'{file_name}.{random.randint(10000, 99999)}.txt'))
+    else:
+        logging.warning(f'Log file {log_file_path} does not found, not copied.')
+
+
 class AnalysisType(Enum):
     COLLECT_COINJOIN_DATA_LOCAL = 1
     COMPUTE_COINJOIN_TXINFO_REMOTE = 2
@@ -3477,6 +3494,7 @@ if __name__ == "__main__":
     print('### SUMMARY #############################')
     SM.print_summary()
     print('### END SUMMARY #########################')
+    backup_log_files(target_base_paths[0])
     exit(42)
 
     # Analyze usage frequency of all wallets
