@@ -3336,7 +3336,7 @@ if __name__ == "__main__":
 
     # 500 wallets simulation, 500 inputs, kubernetes
     #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-05_08-40_pareto-static-500\\'
-    target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-05_14-04_paretosum-dynamic-50-30utxo-special\\')
+    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-05_14-04_paretosum-dynamic-50-30utxo-special\\')
     #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-07_01-39_pareto-dynamic-500\\')
     #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-07_13-21_pareto-dynamic-500\\')
     #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-07_16-20_paretosum-dynamic-500-5utxo\\')
@@ -3359,7 +3359,6 @@ if __name__ == "__main__":
     #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\grid_uniform_test2\\2024-01-25_11-43_paretosum-static-10-30utxo')
     #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\grid_paretosum-static-30utxo\\2024-01-26_19-35_paretosum-static-500-30utxo')
     target_base_path = None
-    #
     if target_base_path is not None:
         if PROFILE_PERFORMANCE:
             with Profile() as profile:
@@ -3378,22 +3377,22 @@ if __name__ == "__main__":
     # super_base_path is path where aggregated results from all
 
     # super_base_path = ''
-    super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    target_base_paths = [os.path.join(super_base_path, 'grid_paretosum-static-5utxo'),
-                         os.path.join(super_base_path, 'grid_paretosum-static-30utxo'),
-                         os.path.join(super_base_path, 'grid_uniformsum-static-1utxo'),
-                         os.path.join(super_base_path, 'grid_uniformsum-static-5utxo'),
-                         os.path.join(super_base_path, 'grid_uniformsum-static-30utxo'),
-                         os.path.join(super_base_path, 'grid_uniform-static-1utxo'),
-                         os.path.join(super_base_path, 'grid_uniform-static-5utxo'),
-                         os.path.join(super_base_path, 'grid_uniform-static-30utxo'),
-                         os.path.join(super_base_path, 'grid_pareto-static-1utxo'),
-                         os.path.join(super_base_path, 'grid_pareto-static-5utxo'),
-                         os.path.join(super_base_path, 'grid_pareto-static-30utxo'),
-                         os.path.join(super_base_path, 'grid_pareto-static-1utxo'),
-                         os.path.join(super_base_path, 'grid_lognorm-static-1utxo'),
-                         os.path.join(super_base_path, 'grid_lognorm-static-5utxo'),
-                         os.path.join(super_base_path, 'grid_lognorm-static-30utxo')]
+    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
+    # target_base_paths = [os.path.join(super_base_path, 'grid_paretosum-static-5utxo'),
+    #                      os.path.join(super_base_path, 'grid_paretosum-static-30utxo'),
+    #                      os.path.join(super_base_path, 'grid_uniformsum-static-1utxo'),
+    #                      os.path.join(super_base_path, 'grid_uniformsum-static-5utxo'),
+    #                      os.path.join(super_base_path, 'grid_uniformsum-static-30utxo'),
+    #                      os.path.join(super_base_path, 'grid_uniform-static-1utxo'),
+    #                      os.path.join(super_base_path, 'grid_uniform-static-5utxo'),
+    #                      os.path.join(super_base_path, 'grid_uniform-static-30utxo'),
+    #                      os.path.join(super_base_path, 'grid_pareto-static-1utxo'),
+    #                      os.path.join(super_base_path, 'grid_pareto-static-5utxo'),
+    #                      os.path.join(super_base_path, 'grid_pareto-static-30utxo'),
+    #                      os.path.join(super_base_path, 'grid_pareto-static-1utxo'),
+    #                      os.path.join(super_base_path, 'grid_lognorm-static-1utxo'),
+    #                      os.path.join(super_base_path, 'grid_lognorm-static-5utxo'),
+    #                      os.path.join(super_base_path, 'grid_lognorm-static-30utxo')]
 
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
@@ -3408,9 +3407,6 @@ if __name__ == "__main__":
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2'),
     #                      os.path.join(super_base_path, 'grid_uniform_test3')]
-
-    super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\'
-    target_base_paths = [os.path.join(super_base_path, '!unproccesed')]
 
     # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
     # target_base_paths = [os.path.join(super_base_path, 'long_runs')]
@@ -3469,17 +3465,9 @@ if __name__ == "__main__":
     #target_base_paths = [os.path.join(super_base_path, '300blocks-lognorm-as50')]
     #target_base_paths = [os.path.join(super_base_path, 'emu_validation')]
 
-    #
-    ##Generate aggregated visualizations
-    # generate_aggregated_visualization(target_base_paths)
-    # exit(42)
 
-
-    # extract_wallets_inouts(os.path.join(super_base_path, '!wallet_num_model'), target_base_paths)
-    # exit(42)
-    #
-    # analyze_wallet_usage_frequency(super_base_path, target_base_paths)
-    # exit(42)
+    super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\'
+    target_base_paths = [os.path.join(super_base_path, '!unproccesed')]
 
     NUM_THREADS = 1  # if -1, then every experiment has own thread
     SAVE_BASE_FIGS = True if NUM_THREADS == 1 else False
@@ -3496,6 +3484,18 @@ if __name__ == "__main__":
     print('### END SUMMARY #########################')
     backup_log_files(target_base_paths[0])
     exit(42)
+
+    #
+    ##Generate aggregated visualizations
+    # generate_aggregated_visualization(target_base_paths)
+    # exit(42)
+
+
+    # extract_wallets_inouts(os.path.join(super_base_path, '!wallet_num_model'), target_base_paths)
+    # exit(42)
+    #
+    # analyze_wallet_usage_frequency(super_base_path, target_base_paths)
+    # exit(42)
 
     # Analyze usage frequency of all wallets
     analyze_wallet_usage_frequency(super_base_path, target_base_paths)
