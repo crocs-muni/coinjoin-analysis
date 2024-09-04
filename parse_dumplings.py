@@ -2579,6 +2579,64 @@ def analyze_zksnacks_output_clusters(mix_id, target_path):
     plt.close()
 
 
+
+def print_liquidity_summary_all(target_path: str):
+    #
+    # WW1
+    #
+    data = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi1'), None, True)
+    cjtx_ww1 = {cjtx: data['coinjoins'][cjtx] for cjtx in data['coinjoins'].keys() if data['coinjoins'][cjtx][
+        'broadcast_time'] < "2024-06-02 00:00:00.000"}
+    SM.print(f'WW1 zkSNACKs:')
+    als.print_liquidity_summary(cjtx_ww1)
+
+    #
+    # WHIRLPOOL
+    #
+    data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_100k'), None, True)
+    SM.print(f'whirlpool_100k:')
+    als.print_liquidity_summary(data['coinjoins'])
+    data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_1M'), None, True)
+    SM.print(f'whirlpool_1M:')
+    als.print_liquidity_summary(data['coinjoins'])
+    data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_5M'), None, True)
+    SM.print(f'whirlpool_5M:')
+    als.print_liquidity_summary(data['coinjoins'])
+    data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_50M'), None, True)
+    SM.print(f'whirlpool_50M:')
+    als.print_liquidity_summary(data['coinjoins'])
+    data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool'), None, True)
+    SM.print(f'whirlpool:')
+    als.print_liquidity_summary(data['coinjoins'])
+
+    #
+    # WW2
+    #
+    # data = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi2'), None, True)
+    #
+    # cjtx_others = {cjtx: data['coinjoins'][cjtx] for cjtx in data['coinjoins'].keys() if data['coinjoins'][cjtx][
+    #     'broadcast_time'] > "2024-06-02 00:00:00.000"}
+    # cjtx_others_overlap = {cjtx:data['coinjoins'][cjtx] for cjtx in data['coinjoins'].keys() if data['coinjoins'][cjtx][
+    #     'broadcast_time'] > "2024-05-20 00:00:00.000" and data['coinjoins'][cjtx][
+    #     'broadcast_time'] < "2024-06-02 00:00:00.000" and len(data['coinjoins'][cjtx]['inputs']) < 150}
+    # cjtx_others.update(cjtx_others_overlap)
+    # als.save_json_to_file(os.path.join(target_path, 'wasabi2_others', 'coinjoin_tx_info.json'), {'coinjoins': cjtx_others})
+    cjtx_others = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi2_others'), None, True)
+    #
+    # cjtx_zksnacks = {cjtx: data['coinjoins'][cjtx] for cjtx in data['coinjoins'].keys() if data['coinjoins'][cjtx][
+    #     'broadcast_time'] < "2024-05-20 00:00:00.000"}
+    # cjtx_zksnacks_overlap = {cjtx:data['coinjoins'][cjtx] for cjtx in data['coinjoins'].keys() if data['coinjoins'][cjtx][
+    #     'broadcast_time'] > "2024-05-20 00:00:00.000" and data['coinjoins'][cjtx]['broadcast_time'] < "2024-06-02 00:00:00.000" and len(data['coinjoins'][cjtx]['inputs']) >= 150}
+    # cjtx_zksnacks.update(cjtx_zksnacks_overlap)
+    #als.save_json_to_file(os.path.join(target_path, 'wasabi2_zksnacks', 'coinjoin_tx_info.json'), {'coinjoins': cjtx_zksnacks})
+    cjtx_zksnacks = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi2_zksnacks'), None, True)
+
+    SM.print(f'WW2 others:')
+    als.print_liquidity_summary(cjtx_others['coinjoins'])
+    SM.print(f'WW2 zkSNACKs:')
+    als.print_liquidity_summary(cjtx_zksnacks['coinjoins'])
+
+
 if __name__ == "__main__":
     # Limit analysis only to specific coinjoin type
     CONSIDER_WW1 = False
@@ -2611,6 +2669,7 @@ if __name__ == "__main__":
     ANALYSIS_BURN_TIME = False
     PLOT_INTERMIX_FLOWS = False
     VISUALIZE_ALL_COINJOINS_INTERVALS = False
+    ANALYSIS_LIQUIDITY = True
 
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240215\\'
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240417\\'
@@ -2962,6 +3021,9 @@ if __name__ == "__main__":
     #
     if ANALYSIS_ADDRESS_REUSE:
         analyze_address_reuse(target_path)
+
+    if ANALYSIS_LIQUIDITY:
+        print_liquidity_summary_all(target_path)
 
     # if ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS_DEBUG:
     #     process_and_save_intervals_filter('wasabi2_feb24', target_path, '2024-02-11 01:38:07.000', '2024-02-11 23:38:07.000',
