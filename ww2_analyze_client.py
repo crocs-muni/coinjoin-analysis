@@ -43,11 +43,15 @@ def plot_cj_anonscores(mfig: Multifig, data: dict, title: str, y_label: str, sho
         if cj_session.find('0.1btc') != -1:
             line_style = 'solid'
         if cj_session.find('0.2btc') != -1:
-            line_style = '-.'
+            line_style = ':'
         cj_label = cj_session
         if not show_txid and cj_session.find('txid:'):
             cj_label = cj_label[0:cj_session.find('txid:')]
-        ax.plot(range(1, len(data[cj_session]) + 1), data[cj_session], label=cj_label, linestyle=line_style, alpha=0.7)
+        x_range = range(1, len(data[cj_session]) + 1)
+        ax.plot(x_range, data[cj_session], color='gray', linestyle=line_style, alpha=0.5)
+    ax.plot([1], [1], color='gray', label='Input size 0.1 btc', linestyle='solid', alpha=0.5)
+    ax.plot([1], [1], color='gray', label='Input size 0.2 btc', linestyle=':', alpha=0.5)
+    ax.set_xticks(np.arange(1, 15, 2))
 
     def compute_average_at_index(lists, index):
         values = [lists[lst][index] for lst in lists.keys() if index < len(lists[lst])]
@@ -58,28 +62,30 @@ def plot_cj_anonscores(mfig: Multifig, data: dict, title: str, y_label: str, sho
     max_index = max([len(data[cj_session]) for cj_session in data.keys()])
     avg_data = [compute_average_at_index(data, index) for index in range(0, max_index)]
     ax.plot(range(1, len(avg_data) + 1), avg_data, label='Average', linestyle='solid',
-            linewidth=7, alpha=0.5, color='gray')
+            linewidth=7, alpha=0.7, color='royalblue')
 
-    ax.legend(loc="best", fontsize='6')
+    ax.legend(loc="best", fontsize='8')
     ax.set_title(title)
     ax.set_xlabel('Number of coinjoins executed')
     ax.set_ylabel(y_label)
     #plt.show()
 
-    # Same data, but boxplot
-    max_index = max([len(data[cj_session]) for cj_session in data.keys()])
-    data_cj = [[] for index in range(0, max_index)]
-    for cj_session in data.keys():
-        for index in range(0, max_index):
-            if index < len(data[cj_session]):
-                data_cj[index].append(data[cj_session][index])
-    #fig, ax_boxplot = plt.subplots(figsize=(10, 5))
-    ax_boxplot = mfig.add_subplot()  # Get next subplot
-    ax_boxplot.boxplot(data_cj)
-    ax_boxplot.set_title(title)
-    ax_boxplot.set_xlabel('Number of coinjoins executed')
-    ax_boxplot.set_ylabel(y_label)
-    #plt.show()
+    PLOT_BOXPLOT = False
+    if PLOT_BOXPLOT:
+        # Same data, but boxplot
+        max_index = max([len(data[cj_session]) for cj_session in data.keys()])
+        data_cj = [[] for index in range(0, max_index)]
+        for cj_session in data.keys():
+            for index in range(0, max_index):
+                if index < len(data[cj_session]):
+                    data_cj[index].append(data[cj_session][index])
+        #fig, ax_boxplot = plt.subplots(figsize=(10, 5))
+        ax_boxplot = mfig.add_subplot()  # Get next subplot
+        ax_boxplot.boxplot(data_cj)
+        ax_boxplot.set_title(title)
+        ax_boxplot.set_xlabel('Number of coinjoins executed')
+        ax_boxplot.set_ylabel(y_label)
+        #plt.show()
 
 
 def get_session_label(mix_name: str, session_size_inputs: int, segment: list, session_funding_tx: dict) -> str:
@@ -475,7 +481,7 @@ if __name__ == "__main__":
 
     NUM_COLUMNS = 4
     NUM_ROWS = 5
-    fig = plt.figure(figsize=(40, NUM_ROWS * 5))
+    fig = plt.figure(figsize=(20, NUM_ROWS * 2.5))
     mfig = Multifig(plt, fig, NUM_ROWS, NUM_COLUMNS)
 
     cjs, wallet_stats = analyze_mix(target_path, 'mix1', experiment_target_anonscore, experiment_start_cut_date, problematic_sessions)
@@ -498,14 +504,14 @@ if __name__ == "__main__":
     # Extract complete coinjoins info
 
 
-    plot_cj_anonscores(mfig, all_stats['anon_percentage_status'], f'All wallets, progress towards fully anonymized liquidity (AS={experiment_target_anonscore}); total sessions={len(all_stats['anon_percentage_status'])}',
-                       'privacy progress (%)')
+    plot_cj_anonscores(mfig, all_stats['anon_percentage_status'], f'Progress towards fully anonymized liquidity (AS={experiment_target_anonscore}); total sessions={len(all_stats['anon_percentage_status'])}',
+                       'Privacy progress (%)')
     plot_cj_anonscores(mfig, all_stats['anon_gain'], f'All wallets, change in anonscore weighted (AS={experiment_target_anonscore}); total sessions={len(all_stats['anon_gain'])}',
-                       'anonscore gain (weighted)')
+                       'Anonscore gain')
     plot_cj_anonscores(mfig, all_stats['anon_gain_ratio'], f'All wallets, change in anonscore weighted ratio out/in (AS={experiment_target_anonscore}); total sessions={len(all_stats['anon_gain'])}',
-                       'anonscore gain (weighted, ratio)')
+                       'Anonscore gain (weighted, ratio)')
     plot_cj_anonscores(mfig, all_stats['observed_remix_liquidity_ratio_cumul'], f'All wallets, cumullative remix liquidity ratio (AS={experiment_target_anonscore}); total sessions={len(all_stats['observed_remix_liquidity_ratio_cumul'])}',
-                       'cummulative remix ratio')
+                       'Cummulative remix ratio')
     plot_cj_anonscores(mfig, all_stats['skipped_cjtxs'],
                        f'All wallets, skipped cjtxs;total sessions={len(all_stats['skipped_cjtxs'])}',
                        'num cjtxs skipped')
