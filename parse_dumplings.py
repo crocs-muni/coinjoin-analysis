@@ -2591,6 +2591,41 @@ def analyze_zksnacks_output_clusters(mix_id, target_path):
     plt.close()
 
 
+def print_remix_stats(target_base_path):
+    def print_base_remix_info(mix_id: str, remix_stats: dict):
+        SM.print(f'Remix {mix_id}')
+        SM.print(f'  remix_ratios_all remix ratio (num inputs)')
+        SM.print(f'    median={np.median(remix_stats['remix_ratios_all'])}')
+        SM.print(f'    average={np.average(remix_stats['remix_ratios_all'])}')
+        SM.print(f'  remix_ratios_std remix ratio (num inputs)')
+        SM.print(f'    median={np.median(remix_stats['remix_ratios_std'])}')
+        SM.print(f'    average={np.average(remix_stats['remix_ratios_std'])}')
+
+    remix_ww1 = als.load_json_from_file(os.path.join(target_base_path, 'wasabi1_remixrate_nums_norm.json'))
+    print_base_remix_info('WW1', remix_ww1)
+
+    remix_ww2 = als.load_json_from_file(os.path.join(target_base_path, 'wasabi2_remixrate_nums_norm.json'))
+    remix_ww2_zksnacks = als.load_json_from_file(os.path.join(target_base_path, 'wasabi2_zksnacks_remixrate_nums_norm.json'))
+    remix_ww2_others = als.load_json_from_file(os.path.join(target_base_path, 'wasabi2_others_remixrate_nums_norm.json'))
+    print_base_remix_info('WW2 all', remix_ww2)
+    print_base_remix_info('WW2 zksnacks', remix_ww2_zksnacks)
+    print_base_remix_info('WW2 others', remix_ww2_others)
+
+    remix_whirlpool = als.load_json_from_file(os.path.join(target_base_path, 'whirlpool_remixrate_nums_norm.json'))
+    print_base_remix_info('Whirlpool all', remix_whirlpool)
+
+    remix_whirlpool_100k = als.load_json_from_file(os.path.join(target_base_path, 'whirlpool_100k_remixrate_nums_norm.json'))
+    print_base_remix_info('Whirlpool 100k', remix_whirlpool_100k)
+
+    remix_whirlpool_1M = als.load_json_from_file(os.path.join(target_base_path, 'whirlpool_1M_remixrate_nums_norm.json'))
+    print_base_remix_info('Whirlpool 1M', remix_whirlpool_1M)
+
+    remix_whirlpool_5M = als.load_json_from_file(os.path.join(target_base_path, 'whirlpool_5M_remixrate_nums_norm.json'))
+    print_base_remix_info('Whirlpool 5M', remix_whirlpool_5M)
+
+    remix_whirlpool_50M = als.load_json_from_file(os.path.join(target_base_path, 'whirlpool_50M_remixrate_nums_norm.json'))
+    print_base_remix_info('Whirlpool 50M', remix_whirlpool_50M)
+
 
 def print_liquidity_summary_all(target_path: str):
     #
@@ -2681,6 +2716,7 @@ if __name__ == "__main__":
     ANALYSIS_BURN_TIME = False
     PLOT_INTERMIX_FLOWS = False
     VISUALIZE_ALL_COINJOINS_INTERVALS = False
+    ANALYSIS_REMIXRATE = False
     ANALYSIS_LIQUIDITY = True
 
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240215\\'
@@ -3033,6 +3069,9 @@ if __name__ == "__main__":
     #
     if ANALYSIS_ADDRESS_REUSE:
         analyze_address_reuse(target_path)
+
+    if ANALYSIS_REMIXRATE:
+        print_remix_stats(target_base_path)
 
     if ANALYSIS_LIQUIDITY:
         print_liquidity_summary_all(target_path)
