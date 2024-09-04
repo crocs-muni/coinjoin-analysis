@@ -271,38 +271,40 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
     bars.append((input_types[MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name], 'MIX_REMIX_FRIENDS_WW1', 'green', 0.9))
 
     # Draw all inserted bars atop each other
-    bar_bottom = None
-    for bar_item in bars:
-        if bar_bottom is None:
-            ax.bar(categories, bar_item[0], bar_width, label=f'{bar_item[1]} {short_exp_name}', alpha=bar_item[3],
-                   color=bar_item[2], linewidth=0)
-            bar_bottom = np.array(bar_item[0])
-        else:
-            ax.bar(categories, bar_item[0], bar_width, label=f'{bar_item[1]} {short_exp_name}', alpha=bar_item[3], color=bar_item[2],
-                    bottom=bar_bottom, linewidth=0)
-            bar_bottom = bar_bottom + np.array(bar_item[0])
+    if ax:
+        bar_bottom = None
+        for bar_item in bars:
+            if bar_bottom is None:
+                ax.bar(categories, bar_item[0], bar_width, label=f'{bar_item[1]} {short_exp_name}', alpha=bar_item[3],
+                       color=bar_item[2], linewidth=0)
+                bar_bottom = np.array(bar_item[0])
+            else:
+                ax.bar(categories, bar_item[0], bar_width, label=f'{bar_item[1]} {short_exp_name}', alpha=bar_item[3], color=bar_item[2],
+                        bottom=bar_bottom, linewidth=0)
+                bar_bottom = bar_bottom + np.array(bar_item[0])
 
-    ax.set_title(f'Type of inputs for given cjtx ({'values' if analyze_values else 'number'})\n{short_exp_name}')
-    ax.set_xlabel('Coinjoin in time')
-    if analyze_values and normalize_values:
-        ax.set_ylabel('Fraction of inputs sizes')
-    if analyze_values and not normalize_values:
-        ax.set_ylabel('Inputs sizes (btc)')
-    if not analyze_values and normalize_values:
-        ax.set_ylabel('Fraction of input numbers')
-    if not analyze_values and not normalize_values:
-        ax.set_ylabel('Number of inputs')
+        ax.set_title(f'Type of inputs for given cjtx ({'values' if analyze_values else 'number'})\n{short_exp_name}')
+        ax.set_xlabel('Coinjoin in time')
+        if analyze_values and normalize_values:
+            ax.set_ylabel('Fraction of inputs sizes')
+        if analyze_values and not normalize_values:
+            ax.set_ylabel('Inputs sizes (btc)')
+        if not analyze_values and normalize_values:
+            ax.set_ylabel('Fraction of input numbers')
+        if not analyze_values and not normalize_values:
+            ax.set_ylabel('Number of inputs')
 
     WINDOWS_SIZE = 5
     remix_ratios_all = [input_types[MIX_EVENT_TYPE.MIX_REMIX.name][i] * 100 for i in range(len(input_types[MIX_EVENT_TYPE.MIX_REMIX.name]))]  # All remix including nonstandard
     remix_ratios_nonstd = [input_types['MIX_REMIX_nonstd'][i] * 100 for i in range(len(input_types['MIX_REMIX_nonstd']))]  # Nonstd remixes
     remix_ratios_std = [remix_ratios_all[i] - remix_ratios_nonstd[i] for i in range(len(remix_ratios_all))]  # Only standard remixes
     remix_ratios_avg = [np.average(remix_ratios_std[i:i+WINDOWS_SIZE]) for i in range(0, len(remix_ratios_std), WINDOWS_SIZE)]
-    ax2 = ax.twinx()
-    ax2.plot(range(0, len(remix_ratios_std), WINDOWS_SIZE), remix_ratios_avg, label=f'MIX_REMIX avg({WINDOWS_SIZE})', color='brown', linewidth=1, linestyle='--', alpha=0.4)
-    ax2.set_ylim(0, 100)  # Force whole range of yaxis
-    ax2.tick_params(axis='y', colors='brown', labelsize=6)
-    ax2.set_ylabel('Average remix rate %', color='brown', fontsize='6')
+    if ax:
+        ax2 = ax.twinx()
+        ax2.plot(range(0, len(remix_ratios_avg), WINDOWS_SIZE), remix_ratios_avg, label=f'MIX_REMIX avg({WINDOWS_SIZE})', color='brown', linewidth=1, linestyle='--', alpha=0.4)
+        ax2.set_ylim(0, 100)  # Force whole range of yaxis
+        ax2.tick_params(axis='y', colors='brown', labelsize=6)
+        ax2.set_ylabel('Average remix rate %', color='brown', fontsize='6')
     return input_types
 
 
@@ -338,21 +340,23 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liquidit
                                     if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_LEAVE.name and
                                       coinjoins[cjtx['txid']]['outputs'][index]['burn_time'] < INTERVAL_LENGTH])
                                for cjtx in sorted_cj_time]
-    # Outputs leaving mix `slow` after its mixing (at least after INTERVAL_LENGTH seconds)
-    mix_leave_timecutoff_after = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
-                                    if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_LEAVE.name and
-                                      coinjoins[cjtx['txid']]['outputs'][index]['burn_time'] >= INTERVAL_LENGTH])
-                               for cjtx in sorted_cj_time]
+    COMPUTE_UNUSED = False
+    if COMPUTE_UNUSED:
+        # Outputs leaving mix `slow` after its mixing (at least after INTERVAL_LENGTH seconds)
+        mix_leave_timecutoff_after = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
+                                        if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_LEAVE.name and
+                                          coinjoins[cjtx['txid']]['outputs'][index]['burn_time'] >= INTERVAL_LENGTH])
+                                   for cjtx in sorted_cj_time]
 
-    # Output staying in mix MIX_EVENT_TYPE.MIX_REMIX
-    mix_remix = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
-                                    if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name])
-                               for cjtx in sorted_cj_time]
-    # Output staying in mix MIX_EVENT_TYPE.MIX_REMIX with non-standard values
-    mix_remix_nonstandard = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
-                                    if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name and
-                                       coinjoins[cjtx['txid']]['outputs'][index].get('is_standard_denom') == False])
-                               for cjtx in sorted_cj_time]
+        # Output staying in mix MIX_EVENT_TYPE.MIX_REMIX
+        mix_remix = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
+                                        if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name])
+                                   for cjtx in sorted_cj_time]
+        # Output staying in mix MIX_EVENT_TYPE.MIX_REMIX with non-standard values
+        mix_remix_nonstandard = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
+                                        if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name and
+                                           coinjoins[cjtx['txid']]['outputs'][index].get('is_standard_denom') == False])
+                                   for cjtx in sorted_cj_time]
 
 
     cjtx_cummulative_liquidity = []
@@ -403,15 +407,15 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liquidit
     liquidity_timecutoff_btc = [item / SATS_IN_BTC for item in cjtx_cummulative_liquidity_timecutoff]
     stay_liquidity_btc = [item / SATS_IN_BTC for item in stay_liquidity]
     remix_liquidity_btc = [item / SATS_IN_BTC for item in remix_liquidity]
+    if ax:
+        #x_ticks = range(initial_cj_index, initial_cj_index + len(liquidity_btc))
+        ax.plot(liquidity_btc, color='royalblue', alpha=0.6)
+        #ax.plot(stay_liquidity_btc, color='royalblue', alpha=0.6, linestyle='--')
+        #ax.plot(remix_liquidity_btc, color='black', alpha=0.6, linestyle='--')
+        #ax.plot(liquidity_timecutoff_btc, color='black', alpha=0.6, linestyle='--')
 
-    #x_ticks = range(initial_cj_index, initial_cj_index + len(liquidity_btc))
-    ax.plot(liquidity_btc, color='royalblue', alpha=0.6)
-    #ax.plot(stay_liquidity_btc, color='royalblue', alpha=0.6, linestyle='--')
-    #ax.plot(remix_liquidity_btc, color='black', alpha=0.6, linestyle='--')
-    #ax.plot(liquidity_timecutoff_btc, color='black', alpha=0.6, linestyle='--')
-
-    ax.set_ylabel('btc in mix', color='royalblue')
-    ax.tick_params(axis='y', colors='royalblue')
+        ax.set_ylabel('btc in mix', color='royalblue')
+        ax.tick_params(axis='y', colors='royalblue')
 
     return cjtx_cummulative_liquidity, stay_liquidity, remix_liquidity, cjtx_cummulative_liquidity_timecutoff, stay_liquidity_timecutoff
 

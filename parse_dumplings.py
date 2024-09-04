@@ -1762,7 +1762,8 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
                 no_remix_all[key].extend(no_remix[key])
 
             # Plot bars corresponding to different input types
-            input_types_interval = als.plot_inputs_type_ratio(f'{mix_id} {dir_name}', data, initial_cj_index, ax, analyze_values, normalize_values, restrict_to_in_size)
+            plot_ax = ax if plot_multigraph else None
+            input_types_interval = als.plot_inputs_type_ratio(f'{mix_id} {dir_name}', data, initial_cj_index, plot_ax, analyze_values, normalize_values, restrict_to_in_size)
             for input_type in input_types_interval:
                 if input_type not in input_types.keys():
                     input_types[input_type] = []
@@ -1770,8 +1771,9 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
 
             # Add current total mix liquidity into the same graph
             ax2 = ax.twinx()
+            plot_ax = ax2 if plot_multigraph else None
             changing_liquidity_interval, stay_liquidity_interval, remix_liquidity_interval, changing_liquidity_timecutoff_interval, stay_liquidity_timecutoff_interval = (
-                als.plot_mix_liquidity(f'{mix_id} {dir_name}', data, (changing_liquidity[-1], stay_liquidity[-1], remix_liquidity[-1], changing_liquidity_timecutoff[-1], stay_liquidity_timecutoff[-1]), time_liquidity, initial_cj_index, ax2))
+                als.plot_mix_liquidity(f'{mix_id} {dir_name}', data, (changing_liquidity[-1], stay_liquidity[-1], remix_liquidity[-1], changing_liquidity_timecutoff[-1], stay_liquidity_timecutoff[-1]), time_liquidity, initial_cj_index, plot_ax))
             changing_liquidity.extend(changing_liquidity_interval)
             stay_liquidity.extend(stay_liquidity_interval)
             remix_liquidity.extend(remix_liquidity_interval)
