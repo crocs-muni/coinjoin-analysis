@@ -1865,7 +1865,8 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
         assert len(new_liquidity) == len(changing_liquidity), f'Incorrect enter_liquidity length: expected: {len(changing_liquidity)}, got {len(new_liquidity)}'
         plot_bars_downscaled(new_liquidity, 1, 'gray', ax)
         ax.set_title(f'{mix_id}: Liquidity dynamics in time')
-        label = f'{'Fresh liquidity (btc)' if analyze_values else 'Number of inputs'} {'normalized' if normalize_values else ''}'
+        #label = f'{'Fresh liquidity (btc)' if analyze_values else 'Number of inputs'} {'normalized' if normalize_values else ''}'
+        label = f'Fresh liquidity (btc)'
         ax.set_ylabel(label, color='gray', fontsize='6')
         ax.tick_params(axis='y', colors='gray')
 
@@ -1891,7 +1892,7 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
         ax2.set_ylim(0, 100)  # Force whole range of yaxis
         ax2.tick_params(axis='y', colors='brown', labelsize=6)
         ax2.set_ylabel('Average remix rate %', color='brown', fontsize='6')
-        ax2.spines['right'].set_position(('outward', -30))  # Adjust position of the third axis
+        ax2.spines['right'].set_position(('outward', -27))  # Adjust position of the third axis
 
         # Save computed remixes to file
         save_file = os.path.join(target_path,
@@ -1906,6 +1907,9 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
         ax2.plot(changing_liquidity_btc, color='royalblue', alpha=0.6, label='Changing liquidity (cjtx centric, MIX_ENTER - MIX_LEAVE)')
         ax2.plot(stay_liquidity_btc, color='darkgreen', alpha=0.6, linestyle='--', label='Unmoved outputs (MIX_STAY)')
         #ax2.plot(remix_liquidity_btc, color='black', alpha=0.6, linestyle='--', label='Cummulative remix liquidity, MIX_ENTER - MIX_LEAVE - MIX_STAY')
+        ax2.plot([0], [0], label=f'Average remix rate', color='brown', linewidth=1, linestyle='--', alpha=0.5)  # Fake plot to have correct legend record from other twinx
+
+
         PLOT_CHAINANALYSIS_TIMECUTOFF = False
         if PLOT_CHAINANALYSIS_TIMECUTOFF:
             ax2.plot([a - b for a, b in zip([item / SATS_IN_BTC for item in changing_liquidity_timecutoff], [item / SATS_IN_BTC for item in stay_liquidity_timecutoff])], color='red', alpha=0.6, linestyle='-.', label='Actively remixed liquidity (Changing - Unmoved)')
@@ -1954,7 +1958,10 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
         # if ax:
         #     ax.legend(loc='center left')
         if ax2:
-            ax2.legend(loc='upper left', fontsize='small', bbox_to_anchor=(0.01, 0.85), borderaxespad=0)
+            if mix_protocol in [MIX_PROTOCOL.WASABI1, MIX_PROTOCOL.WASABI2]:
+                ax2.legend(loc='upper left', fontsize='small', bbox_to_anchor=(0.01, 0.85), borderaxespad=0)
+            else:
+                ax2.legend(loc='upper left', fontsize='small')
         if ax3:
             ax3.legend()
 
