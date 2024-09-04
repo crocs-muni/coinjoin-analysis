@@ -2546,6 +2546,7 @@ def analyze_zksnacks_output_clusters(mix_id, target_path):
     cluster_ratio = [number_output_clusters[index] / number_of_outputs[index] for index in
                      range(0, len(number_of_outputs))]
     CUTOFF_RATIO = 0.8
+    CUTOFF_RATIO = 1.1
     indexes = [index for index, value in enumerate(cluster_ratio) if value < CUTOFF_RATIO]
     high_merge_txids = {cjtx_range[index]: number_output_clusters[index] for index in indexes}
     print(
