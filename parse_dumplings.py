@@ -1976,6 +1976,8 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
         save_file = os.path.join(target_path, f'{mix_id}_input_types_{'values' if analyze_values else 'nums'}_{'norm' if normalize_values else 'notnorm'}{'' if restrict_to_in_size is None else f'{round(restrict_to_in_size[1]/SATS_IN_BTC, 2)}btc'}')
         plt.savefig(f'{save_file}.png', dpi=300)
         plt.savefig(f'{save_file}.pdf', dpi=300)
+        # with open(f'{save_file}.html', "w") as f:
+        #     f.write(mpld3.fig_to_html(plt.gcf()))
     plt.close()
 
     # Save generate and save cummulative results separately
@@ -1986,6 +1988,8 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
     save_file = os.path.join(target_path, f'{mix_id}_cummul_{'values' if analyze_values else 'nums'}_{'norm' if normalize_values else 'notnorm'}{'' if restrict_to_in_size is None else f'{round(restrict_to_in_size[1]/SATS_IN_BTC, 2)}btc'}')
     plt.savefig(f'{save_file}.png', dpi=300)
     plt.savefig(f'{save_file}.pdf', dpi=300)
+    # with open(f'{save_file}.html', "w") as f:
+    #     f.write(mpld3.fig_to_html(plt.gcf()))
     plt.close()
 
     # save detected no transactions with no remixes (potentially false positives)
