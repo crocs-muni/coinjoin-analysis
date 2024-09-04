@@ -2498,6 +2498,9 @@ def compute_stats(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path):
         compute_corr(num_cjtxs, i)
 
 
+# Initialize the counter
+cluster_counter = 1
+
 def analyze_zksnacks_output_clusters(mix_id, target_path):
     target_load_path = os.path.join(target_path, mix_id)
     # all_data = als.load_coinjoins_from_file(target_load_path, None, True)
@@ -2506,22 +2509,24 @@ def analyze_zksnacks_output_clusters(mix_id, target_path):
     # als.save_json_to_file(os.path.join(target_load_path, 'coinjoin_tx_info_clusters.json'), {'postmix': all_data['postmix'], 'coinjoins': all_data['coinjoins']})
     data = als.load_json_from_file(os.path.join(target_load_path, 'coinjoin_tx_info_clusters.json'))
 
-    # Initialize the counter
-    counter = 1
-
     def get_counter():
-        global counter
-        value = counter
-        counter += 1
+        global cluster_counter
+        value = cluster_counter
+        cluster_counter += 1
         return f'u_{value}'
 
-    cjtx_zksnacks = [cjtx for cjtx in data['coinjoins'].keys() if data['coinjoins'][cjtx][
-        'broadcast_time'] < "2024-05-27 00:00:00.000"]  # Get only cjtx till May
-    # if len(cjtx_zksnacks) > 5000:
-    #     cjtx_zksnacks = cjtx_zksnacks[5000:]  # Drop initial 5000 coinjoins which may be
-    # cjtx_range = data['coinjoins'].keys()  # All coinjoins in interval
+    ONLY_ZKSNACKS = True
+    if ONLY_ZKSNACKS:
+        cjtx_zksnacks = [cjtx for cjtx in data['coinjoins'].keys() if data['coinjoins'][cjtx][
+            'broadcast_time'] < "2024-05-27 00:00:00.000"]  # Get only cjtx till May
+        # if len(cjtx_zksnacks) > 5000:
+        #     cjtx_zksnacks = cjtx_zksnacks[5000:]  # Drop initial 5000 coinjoins which may be
+        # cjtx_range = data['coinjoins'].keys()  # All coinjoins in interval
+        cjtx_all = [cjtx for cjtx in data['coinjoins'].keys()]
+        cjtx_range = cjtx_zksnacks
+    else:
+        cjtx_range = list(data['coinjoins'].keys())
 
-    cjtx_range = cjtx_zksnacks
     # Compute distribution fo different clusters of outputs
     number_output_clusters = [len(set(
         [data['coinjoins'][cjtx]['outputs'][index].get('cluster_id', get_counter()) for index in
