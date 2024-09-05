@@ -1883,8 +1883,16 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
                             range(len(remix_ratios_all))]  # Only standard remixes
         WINDOWS_SIZE = round(len(remix_ratios_all) / 1000)  # Set windows size to get 1000 points total (unless short, then only 5)
         WINDOWS_SIZE = 1 if WINDOWS_SIZE < 1 else WINDOWS_SIZE
-        remix_ratios_avg = [np.average(remix_ratios_all[i:i + WINDOWS_SIZE]) for i in
-                            range(0, len(remix_ratios_all), WINDOWS_SIZE)]
+        if mix_protocol == MIX_PROTOCOL.WASABI1:
+            # Wasabi 1 ix only single output per denonimation, putting automatically (potentially large) change into next remix
+            # Compute remix rate only from standard denomination inputs as large remix fraction are these change remixes which are
+            # easily distinguishable from standard denomination inputs
+            remix_ratios_avg = [np.average(remix_ratios_std[i:i + WINDOWS_SIZE]) for i in
+                                range(0, len(remix_ratios_std), WINDOWS_SIZE)]
+        else:
+            # Consider all inputs from non-wasabi1 pools
+            remix_ratios_avg = [np.average(remix_ratios_all[i:i + WINDOWS_SIZE]) for i in
+                                range(0, len(remix_ratios_all), WINDOWS_SIZE)]
 
         ax2 = ax.twinx()
         ax2.plot(range(0, len(remix_ratios_std), WINDOWS_SIZE), remix_ratios_avg, label=f'MIX_REMIX avg({WINDOWS_SIZE})',
