@@ -477,7 +477,8 @@ def compute_cjtxs_relative_ordering(coinjoins):
     for i in range(0, len(sorted_cj_times)):
         coinjoins_relative_distance[sorted_cj_times[i]['txid']] = 0
 
-    # Process from very first coinjoin, update relative distance to be higher (+1) than the distance of maximal distance of any of the inputs
+    # Process from very first coinjoin, update relative distance to be higher (+1)
+    # than the distance of maximal distance of any of the inputs
     for i in range(1, len(sorted_cj_times)):  # skip the very first transaction
         txid = sorted_cj_times[i]['txid']
         prev_distances = []

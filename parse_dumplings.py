@@ -1966,7 +1966,7 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
         # if ax:
         #     ax.legend(loc='center left')
         if ax2:
-            if mix_protocol in [MIX_PROTOCOL.WASABI1, MIX_PROTOCOL.WASABI2]:
+            if mix_protocol in [MIX_PROTOCOL.WASABI2]:
                 ax2.legend(loc='upper left', fontsize='small', bbox_to_anchor=(0.01, 0.85), borderaxespad=0)
             else:
                 ax2.legend(loc='upper left', fontsize='small')
@@ -1976,7 +1976,7 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
     # Add additional cummulative plots for all coinjoin in one
     ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
     ax_index += 1
-    plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, stay_liquidity, stay_liquidity_timecutoff, remix_liquidity, mining_fee_rate, ['month', 'year'])
+    plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, changing_liquidity_timecutoff, stay_liquidity, remix_liquidity, mining_fee_rate, ['month', 'year'])
 
     # Finalize multigraph graph
     if plot_multigraph:
