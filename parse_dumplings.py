@@ -303,7 +303,7 @@ def update_all_spend_by_reference(data: dict):
 
 
 def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: str, postmix_filename: str, premix_filename: str,
-                   start_date: str, stop_date: str) -> dict:
+                   start_date: str, stop_date: str) -> (dict, dict, dict):
     # All mixes are having mixing coinjoins and postmix spends
     data = {'rounds': {}, 'filename': os.path.join(target_path, mix_filename),
             'coinjoins': load_coinjoin_stats_from_file(os.path.join(target_path, mix_filename), start_date, stop_date),
@@ -344,10 +344,11 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
     # Set spending transactions also between mix and postmix
     data = compute_mix_postmix_link(data)
 
-    data['wallets_info'], data['wallets_coins'] = als.extract_wallets_info(data)
-    data['rounds'] = extract_rounds_info(data)
+    data_extended = {}
+    data_extended['wallets_info'], data_extended['wallets_coins'] = als.extract_wallets_info(data)
+    data_extended['rounds'] = extract_rounds_info(data)
 
-    return data, false_cjtxs
+    return data, data_extended, false_cjtxs
 
 
 def propagate_cluster_name_for_all_inputs(cluster_name, postmix_txs, txid, mix_txs):
@@ -812,7 +813,7 @@ def visualize_coinjoins(data, events, base_path, experiment_name):
 
 
 def process_coinjoins(target_path, mix_protocol: MIX_PROTOCOL, mix_filename, postmix_filename, premix_filename, start_date: str, stop_date: str):
-    data, false_cjtxs = load_coinjoins(target_path, mix_protocol, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
+    data, data_extended, false_cjtxs = load_coinjoins(target_path, mix_protocol, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
     if len(data['coinjoins']) == 0:
         return data
 
@@ -834,7 +835,7 @@ def process_coinjoins(target_path, mix_protocol: MIX_PROTOCOL, mix_filename, pos
     analyze_coordinator_fees(mix_filename, data, mix_protocol)
     analyze_mining_fees(mix_filename, data)
 
-    return data, cj_relative_order
+    return data, data_extended, cj_relative_order
 
 
 def filter_liquidity_events(data):
@@ -874,19 +875,16 @@ def process_and_save_coinjoins(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
     if not target_save_path:
         target_save_path = target_path
     # Process and save full conjoin information
-    data, cj_relative_order = process_coinjoins(target_path, mix_protocol, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
+    data, data_extended, cj_relative_order = process_coinjoins(target_path, mix_protocol, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
     als.save_json_to_file_pretty(os.path.join(target_save_path, f'cj_relative_order.json'), cj_relative_order)
 
     if SAVE_BASE_FILES_JSON:
         als.save_json_to_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'), data)
+        als.save_json_to_file(os.path.join(target_save_path, f'coinjoin_tx_info_extended.json'), data_extended)
 
     # Filter only liquidity-relevant events to maintain smaller file
     events = filter_liquidity_events(data)
     als.save_json_to_file_pretty(os.path.join(target_save_path, f'{mix_id}_events.json'), events)
-
-    # # Visualize coinjoins
-    # if len(data['coinjoins']) > 0:
-    #     visualize_coinjoins(data, events, target_save_path, mix_filename)
 
     return data
 
