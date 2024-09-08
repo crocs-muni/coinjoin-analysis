@@ -562,7 +562,6 @@ def print_liquidity_summary(coinjoins: dict):
     SM.print(f'  {(total_mix_entering_value - total_mix_leaving_nonstd_value) / SATS_IN_BTC} btc, total fresh entering mix without non-standard leaving')
 
 
-
 def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins={}, ww1_postmix_spend={}):
     """
     Requires performance speedup, will not finish (after 8 hours) for Whirlpool with very large number of coins
@@ -600,6 +599,7 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
     #   1. At least one input is from freshest previous coinjoin (given large number of wallets and remixes, that is expected case)
     #   2. Output from previous coinjoin X can be registered to next coinjoin as input only after X is mined to block (enforced by coordinator)
     coinjoins_relative_order = compute_cjtxs_relative_ordering(coinjoins)
+    # TODO: (optional) 3. If WW2, we need to split zkSNACKs and post-zkSNACKs, otherwise newly started
 
     for cjtx in coinjoins:
         coinjoins[cjtx]['relative_order'] = coinjoins_relative_order[cjtx]  # Save computed relative order
@@ -688,6 +688,14 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
     cj_ordering = [{'txid': cjtxid, 'relative_order': coinjoins[cjtxid]['relative_order'], 'broadcast_time': precomp_datetime.strptime(coinjoins[cjtxid]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")} for cjtxid in coinjoins.keys()]
     sorted_cj_ordering = sorted(cj_ordering, key=lambda item: (item['relative_order'], item['broadcast_time']), reverse=False)
 
+    # Print all transactions with 0 relative order (the "first" transaction(s))
+    print('Transactions with relative order 0 ("first"):')
+    for index in range(0, len(sorted_cj_ordering)):
+        if sorted_cj_ordering[index]['relative_order'] == 0:
+            print(f'  {sorted_cj_ordering[index]['broadcast_time']}:{sorted_cj_ordering[index]['txid']}')
+        else:
+            break
+
     min_broadcast_time = sorted_cj_ordering[0]['broadcast_time']
     min_broadcast_time_order = sorted_cj_ordering[0]['relative_order']
     broadcast_times_observed = [min_broadcast_time]
@@ -699,9 +707,9 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
             sorted_datetimes = sorted(broadcast_times_observed)
             time_difference = sorted_datetimes[-1] - sorted_datetimes[0]
             if time_difference > timedelta(days=1):
-                print(f'WARNING: Coinjoins with same relative ordering \'{min_broadcast_time_order}\' differ too much \'{time_difference}\'. ')
+                print(f'WARNING: Coinjoins with same relative ordering \'{min_broadcast_time_order}\' differ too much \'{time_difference}\'. {tx['txid']} ')
 
-            # Set min_broadcast_time as a boradcsat_time of first from this chunk
+            # Set min_broadcast_time as a broadcast_time of first from this chunk
             min_broadcast_time = tx['broadcast_time']
             min_broadcast_time_order = tx['relative_order']
             broadcast_times_observed = [min_broadcast_time]  # Start new broadcast_times_observed for this chunk
