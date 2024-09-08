@@ -717,9 +717,10 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
             broadcast_times_observed.append(tx['broadcast_time'])  # Save broadcast_time of this cjtx
 
         # Set virtual time as minimum from the chunk if distance is more than 30 minutes
+        # (do not correct cases where difference is too big and is not caused by delay in mining, but start of new pool instead)
         # (do not correct cases where difference is small and no delay in mining was introduced)
         time_difference = abs(precomp_datetime.strptime(coinjoins[tx['txid']]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") - min_broadcast_time)
-        if time_difference < timedelta(minutes=120):
+        if time_difference > timedelta(days=14) or time_difference < timedelta(minutes=120):
             coinjoins[tx['txid']]['broadcast_time_virtual'] = coinjoins[tx['txid']]['broadcast_time']  # Use original time
         else:
             coinjoins[tx['txid']]['broadcast_time_virtual'] = precomp_datetime.strftime(min_broadcast_time)[:-3]  # Use corrected time
