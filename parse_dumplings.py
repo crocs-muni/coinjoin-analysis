@@ -2461,6 +2461,61 @@ def whirlpool_extract_pool(full_data: dict, mix_id: str, target_path: Path, pool
     return {'coinjoins': pool_txs, 'premix': pool_premix_txs}
 
 
+def wasabi2_extract_pools(data: dict, target_path: str, interval_stop_date: str):
+    # Extract post-zksnacks coordinator(s)
+    # Rule: only after 2024-06-02, with few transactions from 2024-05-30 but with lower than 150 inputs (which is minimum for zkSNACKs)
+    interval_start_date_others = '2024-05-20 00:00:00.000'
+    cjtx_others = {cjtx: data['coinjoins'][cjtx] for cjtx in data['coinjoins'].keys() if data['coinjoins'][cjtx][
+        'broadcast_time'] > "2024-06-02 00:00:00.000"}
+    print(f'cjtx_others len={len(cjtx_others)}')
+    cjtx_others_overlap = {cjtx:data['coinjoins'][cjtx] for cjtx in data['coinjoins'].keys() if data['coinjoins'][cjtx][
+        'broadcast_time'] > interval_start_date_others and data['coinjoins'][cjtx][
+        'broadcast_time'] < "2024-06-02 00:00:00.000" and len(data['coinjoins'][cjtx]['inputs']) < 150}
+    print(f'cjtx_others_overlap len={len(cjtx_others_overlap)}')
+    cjtx_others.update(cjtx_others_overlap)
+    print(f'cjtx_others joined len={len(cjtx_others)}')
+    target_save_path = os.path.join(target_path, 'wasabi2_others')
+    if not os.path.exists(target_save_path):
+        os.makedirs(target_save_path.replace('\\', '/'))
+    als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_others})
+    logging.info(f'Total cjtxs extracted for pool WW2-others: {len(cjtx_others)}')
+
+    process_and_save_intervals_filter('wasabi2_others', MIX_PROTOCOL.WASABI2, target_path, interval_start_date_others,
+                                      interval_stop_date, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+                                      True)
+
+    # Extract zksnacks coordinator
+    # Rule: All till 2024-06-02 00:00:00.000, in final 10 days must have >= 150 inputs
+    interval_stop_date_zksnacks = "2024-06-03 00:00:00.000"
+    cjtx_zksnacks = {cjtx: data['coinjoins'][cjtx] for cjtx in data['coinjoins'].keys() if data['coinjoins'][cjtx][
+        'broadcast_time'] < "2024-05-20 00:00:00.000"}
+    print(f'cjtx_zksnacks len={len(cjtx_zksnacks)}')
+    cjtx_zksnacks_overlap = {cjtx:data['coinjoins'][cjtx] for cjtx in data['coinjoins'].keys() if data['coinjoins'][cjtx][
+        'broadcast_time'] > "2024-05-20 00:00:00.000" and data['coinjoins'][cjtx]['broadcast_time'] < interval_stop_date_zksnacks
+                             and len(data['coinjoins'][cjtx]['inputs']) >= 150}
+    print(f'cjtx_zksnacks_overlap len={len(cjtx_zksnacks_overlap)}')
+    cjtx_zksnacks.update(cjtx_zksnacks_overlap)
+    print(f'cjtx_zksnacks joined len={len(cjtx_zksnacks)}')
+    target_save_path = os.path.join(target_path, 'wasabi2_zksnacks')
+    if not os.path.exists(target_save_path):
+        os.makedirs(target_save_path.replace('\\', '/'))
+    als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_zksnacks})
+    logging.info(f'Total cjtxs extracted for pool WW2-zkSNACKs: {len(cjtx_zksnacks)}')
+    process_and_save_intervals_filter('wasabi2_zksnacks', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000',
+                                      interval_stop_date_zksnacks,'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+                                      True)
+
+    # Detect transactions which were not assigned to any pool
+    missed_cjtxs = list(
+        set(data['coinjoins'].keys()) - set(cjtx_zksnacks.keys()) - set(cjtx_others.keys()))
+    als.save_json_to_file_pretty(os.path.join(target_path, f'coinjoin_tx_info__missed.json'), missed_cjtxs)
+    print(f'Total transactions not separated into pools: {len(missed_cjtxs)}')
+    print(missed_cjtxs)
+
+    # Backup corresponding log file
+    backup_log_files(target_path)
+
+
 def backup_log_files(target_path: str):
     """
     This code runs before exiting
@@ -2700,8 +2755,8 @@ def print_liquidity_summary_all(target_path: str):
 
 if __name__ == "__main__":
     # Limit analysis only to specific coinjoin type
-    CONSIDER_WW1 = True
-    CONSIDER_WW2 = False
+    CONSIDER_WW1 = False
+    CONSIDER_WW2 = True
     CONSIDER_WHIRLPOOL = False
 
     # Sorting strategy for coinjoins in time.
@@ -2720,7 +2775,8 @@ if __name__ == "__main__":
     PROCESS_NOTABLE_INTERVALS = False
     DETECT_FALSE_POSITIVES = False
     SPLIT_WHIRLPOOL_POOLS = False
-    PLOT_REMIXES = False
+    SPLIT_WASABI2_POOLS = False
+    PLOT_REMIXES = True
     PLOT_REMIXES_FLOWS = False
     ANALYSIS_ADDRESS_REUSE = False
     ANALYSIS_PROCESS_ALL_COINJOINS = False
@@ -2731,8 +2787,8 @@ if __name__ == "__main__":
     ANALYSIS_CLUSTERS = False
     PLOT_INTERMIX_FLOWS = False
     VISUALIZE_ALL_COINJOINS_INTERVALS = False
-    ANALYSIS_REMIXRATE = False
-    ANALYSIS_LIQUIDITY = True
+    ANALYSIS_REMIXRATE = True
+    ANALYSIS_LIQUIDITY = False
 
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240215\\'
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240417\\'
@@ -3074,7 +3130,9 @@ if __name__ == "__main__":
             process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', interval_stop_date,
                                        'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
             # WW2 needs additional treatment - detect and fix origin of WW1 inflows as friends
-            fix_ww2_for_fdnp_ww1('wasabi2', target_path)
+            data = fix_ww2_for_fdnp_ww1('wasabi2', target_path)
+            # Split zkSNACKs and post-zkSNACKs pools
+            wasabi2_extract_pools(data, target_path, interval_stop_date)
 
     if VISUALIZE_ALL_COINJOINS_INTERVALS:
         if CONSIDER_WHIRLPOOL:
@@ -3118,6 +3176,17 @@ if __name__ == "__main__":
             print(f'Total transactions not separated into pools: {len(missed_cjtxs)}')
             print(missed_cjtxs)
 
+    if SPLIT_WASABI2_POOLS:
+        if CONSIDER_WW2:
+            # Load txs for all pools
+            target_load_path = os.path.join(target_path, 'wasabi2')
+            logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
+            data = als.load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
+
+            # Separate per coordinator
+            wasabi2_extract_pools(data, target_path, interval_stop_date)
+
+
     if PLOT_INTERMIX_FLOWS:
         analyze_mixes_flows(target_path)
         exit(42)
@@ -3130,10 +3199,11 @@ if __name__ == "__main__":
             wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, True)
 
         if CONSIDER_WW2:
-            wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, False)
-            wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', True, True)
-            wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, True)
-            wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json', False, False)
+            for mix_id in ['wasabi2_others', 'wasabi2_zksnacks', 'wasabi2']:
+                wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, False)
+                wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, True)
+                wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, True)
+                wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, False)
 
         if CONSIDER_WHIRLPOOL:
             PLOT_OPTIONS = []  # (analyze_values, normalize_values, plot_multigraph)
