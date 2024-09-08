@@ -1915,7 +1915,6 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
         #ax2.plot(remix_liquidity_btc, color='black', alpha=0.6, linestyle='--', label='Cummulative remix liquidity, MIX_ENTER - MIX_LEAVE - MIX_STAY')
         ax2.plot([0], [0], label=f'Average remix rate', color='brown', linewidth=1, linestyle='--', alpha=0.5)  # Fake plot to have correct legend record from other twinx
 
-
         PLOT_CHAINANALYSIS_TIMECUTOFF = False
         if PLOT_CHAINANALYSIS_TIMECUTOFF:
             ax2.plot([a - b for a, b in zip([item / SATS_IN_BTC for item in changing_liquidity_timecutoff], [item / SATS_IN_BTC for item in stay_liquidity_timecutoff])], color='red', alpha=0.6, linestyle='-.', label='Actively remixed liquidity (Changing - Unmoved)')
@@ -2044,7 +2043,7 @@ def wasabi1_analyse_remixes(mix_id: str, target_path: str):
     burntime_histogram(mix_id, data)
 
 
-def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: Path):
+def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: str):
     """
     Detects and corrects all information of WW2 extracted from coinjoin_tx_info.json based on WW1 inflows.
     Process also subfolders with monthly intervals
@@ -2059,8 +2058,7 @@ def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: Path):
 
     target_path = os.path.join(target_path, mix_id)  # Go into target ww2 folder
 
-    paths_to_process = [target_path]  # Always process 'coinjoin_tx_info.json' with all transactions
-    # paths_to_process = []  # Do not process large .json with all txs
+    paths_to_process = []
     # Add subpaths for months if present
     files = os.listdir(target_path)
     for file_name in files:
@@ -2068,8 +2066,11 @@ def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: Path):
         tx_json_file = os.path.join(target_base_path, f'coinjoin_tx_info.json')
         if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
             paths_to_process.append(target_base_path)
+    # Always process 'coinjoin_tx_info.json' with all transactions
+    paths_to_process.append(target_path)
 
     # Now fix all prepared paths
+    ww2_data = {}
     for path in paths_to_process:
         logging.info(f'Processing {path}...')
         ww2_data = als.load_json_from_file(os.path.join(path, f'coinjoin_tx_info.json'))
@@ -2092,6 +2093,8 @@ def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: Path):
         print(f'Total WW1 inputs with friends-do-not-pay rule: {total_ww1_inputs}')
 
         als.save_json_to_file(os.path.join(path, f'coinjoin_tx_info.json'), ww2_data)
+
+    return ww2_data
 
 
 def extract_flows_blocksci(flows: dict):
