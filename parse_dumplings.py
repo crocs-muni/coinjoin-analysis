@@ -2803,8 +2803,70 @@ if __name__ == "__main__":
     target_path = os.path.join(target_base_path, 'Scanner')
     SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
 
-    DEBUG = True
+    # BUGBUG: Very recent WW2 coinjoins are not connected previous ones, having relative dist 0 => got into first month of WW2.
+    #   Fixed by not setting virtual block time too far away
+    # WARNING: SW 100k pool does not match exactly mix_stay and active liqudity at the end - likely reason are neglected mining fees
+
+    DEBUG = False
     if DEBUG:
+        wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'),
+                    'coinjoin_tx_info.json', True, False, None, None, True)
+        # wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'),
+        #             'coinjoin_tx_info.json', False, True, None, None, True)
+
+        exit(42)
+        process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000',
+                                          interval_stop_date,
+                                          'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+                                          True)
+        exit(42)
+        target_load_path = os.path.join(target_path, 'wasabi2')
+        logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
+        load_path = os.path.join(target_load_path, f'coinjoin_tx_info.json')
+        data = als.load_json_from_file(load_path)
+        cj_relative_order = als.analyze_input_out_liquidity(data['coinjoins'], data['postmix'], data.get('premix', {}),
+                                                            MIX_PROTOCOL.WASABI2)
+        shutil.move(load_path, load_path + '.orig')
+        als.save_json_to_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'), data)
+
+        exit(42)
+        wasabi_plot_remixes('wasabi2_others', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_others'),
+                            'coinjoin_tx_info.json', True, False, None, None, True)
+        wasabi_plot_remixes('wasabi2_others', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_others'),
+                            'coinjoin_tx_info.json', False, True, None, None, True)
+
+        wasabi_plot_remixes('wasabi2_zksnacks', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_zksnacks'),
+                            'coinjoin_tx_info.json', False, True, None, None, True)
+        wasabi_plot_remixes('wasabi2_zksnacks', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_zksnacks'),
+                            'coinjoin_tx_info.json', True, False, None, None, True)
+        exit(42)
+
+        # Load txs for all pools
+        target_load_path = os.path.join(target_path, 'wasabi2')
+        logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
+        data = als.load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
+
+        # Separate per coordinator
+        wasabi2_extract_pools(data, target_path, interval_stop_date)
+        exit(42)
+
+        process_and_save_intervals_filter('wasabi2_zksnacks', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000',
+                                  '2024-06-03 00:00:07.000',
+                                  'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+                                  True)
+        exit(42)
+
+        wasabi_plot_remixes('wasabi2_zksnacks', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_zksnacks'),
+                            'coinjoin_tx_info.json', True, False, None, None, True)
+        exit(42)
+
+        wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'),
+                            'coinjoin_tx_info.json', False, True, None, None, False)
+        exit(42)
+        wasabi_plot_remixes('wasabi2_others', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_others'),
+                            'coinjoin_tx_info.json',
+                            False, True, None, None, False)
+        exit(42)
         # wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json',
         #                     False, True, None, None, False)
         # exit(42)
@@ -3186,10 +3248,8 @@ if __name__ == "__main__":
             # Separate per coordinator
             wasabi2_extract_pools(data, target_path, interval_stop_date)
 
-
     if PLOT_INTERMIX_FLOWS:
         analyze_mixes_flows(target_path)
-        exit(42)
 
     if PLOT_REMIXES:
         if CONSIDER_WW1:
@@ -3277,16 +3337,6 @@ if __name__ == "__main__":
     if ANALYSIS_LIQUIDITY:
         print_liquidity_summary_all(target_path)
 
-    # if ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS_DEBUG:
-    #     process_and_save_intervals_filter('wasabi2_feb24', target_path, '2024-02-11 01:38:07.000', '2024-02-11 23:38:07.000',
-    #                            'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt')
-    #
-    #     process_and_save_intervals_filter('wasabi2_test', target_path, '2023-12-01 01:38:07.000', '2024-02-15 01:38:07.000',
-    #                                'wasabi2_mix_test.txt', 'wasabi2_postmix_test.txt', None, SAVE_BASE_FILES_JSON)
-    #
-    #     process_and_save_intervals_filter('wasabi2false', target_path, '2022-06-18 01:38:07.000', '2024-02-15 01:38:07.000',
-    #                                'Wasabi2CoinJoins_false.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON)
-
     # TODO: Analyze difference of unmoved and dynamic liquidity for Whirlpool between 2024-04-24 and 2024-08-24 (impact of knowledge of whirlpool seizure). Show last 1 year.
 
     print('### SUMMARY #############################')
@@ -3300,12 +3350,6 @@ if __name__ == "__main__":
     #   (two coinjoins broadcasted close to each other, sum of inputs is close or higher than 400)
     # TODO: Compute miner and coordinator fee rate per participant / byte of tx
     # TODO: Detect if multiple rounds were happening in parallel (coinjoin time close to each other)
-    # TODO: Filter false positives for hits coinjoin detection (Standa?)
-    # BUGBUG: Finish detection of friends do not pay
-
-    # TODO; Analyze Whirlpool consolidations. e.g. https://mempool.space/tx/890fb564ce500739a1566b29de9d53a8a0e545e8d1243224dfbed336219d8889
-    #  is huge consolidation of whirlpool coins then resend 4 times, likely to confuse filters detecting whirlpool
-    #  Consolidation https://mempool.space/tx/52e36136c4b45eb6b9effcdf7fa79997e4b5efb611675356702bcbb6ce9d5e8c#flow=&vin=6
 
     # TODO: Huge consolidation of Whirlpool coins: https://mempool.space/tx/d463b35b3d18dda4e59f432728c7a365eaefd50b24a6596ab42a077868e9d7e5
     #  (>60btc total, payjoin (possibly fake) attempted, 140+ inputs from various )
@@ -3331,5 +3375,6 @@ if __name__ == "__main__":
 
     # TODO: Plot graph of remix rates (values, num_inputs) as line plot for all months into single graph
 
-    # TODO: add splitting of WW2-zksnacks and WW2-others similar to whirlpool pools
-
+# b71981909c440bcb29e9a2d1cde9992cc97d3ca338c925c4b0547566bdc62f4d
+# ec9d5c2c678a70e304fa6e06a6430c9aff49e75107ac33f10165b14f0fa9a1f4
+# f872a419a48578389994323e6ee565ba15f4b9f71e72fceabc6a866505d13a6f
