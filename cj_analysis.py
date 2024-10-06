@@ -437,6 +437,12 @@ def plot_mining_fee_rates(mix_id: str, data: dict, mining_fees: dict, ax):
         timestamp = sorted_cj_fee_time_dict[cj['txid']]['broadcast_time'].timestamp()
         while timestamp > mining_fees[fee_start_index]['timestamp']:
             fee_start_index = fee_start_index + 1
+            if fee_start_index >= len(mining_fees):
+                logging.error(f'Missing mining_fees entry for timestamp {sorted_cj_fee_time_dict[cj['txid']]['broadcast_time']} if {cj['txid']}.')
+                # Use the latest one and stop searching
+                fee_start_index = fee_start_index - 1
+                break
+
         closest_fee = mining_fees[fee_start_index - 1]['avgFee_90']
         fee_rates.append(closest_fee)
 
