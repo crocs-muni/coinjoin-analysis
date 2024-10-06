@@ -1897,8 +1897,8 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
                  color='brown', linewidth=1, linestyle='--', alpha=0.5)
         ax2.set_ylim(0, 100)  # Force whole range of yaxis
         ax2.tick_params(axis='y', colors='brown', labelsize=6)
-        ax2.set_ylabel('Average remix rate %', color='brown', fontsize='6')
-        ax2.spines['right'].set_position(('outward', -27))  # Adjust position of the third axis
+        ax2.set_ylabel('Average remix rate %', color='brown', fontsize='6', labelpad=-3)
+        ax2.spines['right'].set_position(('outward', -25))  # Adjust position of the third axis
 
         # Save computed remixes to file
         save_file = os.path.join(target_path,
