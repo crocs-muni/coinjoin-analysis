@@ -2778,11 +2778,11 @@ if __name__ == "__main__":
     FULL_TX_SET = False
 
     ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
-    PROCESS_NOTABLE_INTERVALS = False
     DETECT_FALSE_POSITIVES = False
+    PLOT_REMIXES = True
+    PROCESS_NOTABLE_INTERVALS = False
     SPLIT_WHIRLPOOL_POOLS = False
     SPLIT_WASABI2_POOLS = False
-    PLOT_REMIXES = True
     PLOT_REMIXES_FLOWS = False
     ANALYSIS_ADDRESS_REUSE = False
     ANALYSIS_PROCESS_ALL_COINJOINS = False
@@ -2793,7 +2793,7 @@ if __name__ == "__main__":
     ANALYSIS_CLUSTERS = False
     PLOT_INTERMIX_FLOWS = False
     VISUALIZE_ALL_COINJOINS_INTERVALS = False
-    ANALYSIS_REMIXRATE = True
+    ANALYSIS_REMIXRATE = False
     ANALYSIS_LIQUIDITY = False
 
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240215\\'
@@ -2805,6 +2805,8 @@ if __name__ == "__main__":
     interval_stop_date = '2024-08-03 00:00:07.000'
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240830\\'
     interval_stop_date = '2024-08-30 00:00:07.000'
+    target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20241004\\'
+    interval_stop_date = '2024-10-05 00:00:07.000'
 
     target_path = os.path.join(target_base_path, 'Scanner')
     SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
@@ -2813,8 +2815,22 @@ if __name__ == "__main__":
     #   Fixed by not setting virtual block time too far away
     # WARNING: SW 100k pool does not match exactly mix_stay and active liqudity at the end - likely reason are neglected mining fees
 
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
+        wasabi_plot_remixes('wasabi2_test', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_test'),
+                    'coinjoin_tx_info.json', True, False, None, None, False)
+
+        exit(42)
+        for mix_id in ['wasabi2']:
+            wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+                                'coinjoin_tx_info.json', True, False)
+            wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+                                'coinjoin_tx_info.json', True, True)
+            wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+                                'coinjoin_tx_info.json', False, True)
+            wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+                                'coinjoin_tx_info.json', False, False)
+        exit(42)
         wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'),
                     'coinjoin_tx_info.json', True, False, None, None, True)
         # wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'),
