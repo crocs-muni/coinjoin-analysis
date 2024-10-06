@@ -2004,9 +2004,17 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
 
 
 def wasabi_detect_false(target_path: Path, tx_file: str):
-    files = os.listdir(target_path) if os.path.exists(target_path) else print(
-        f'Path {target_path} does not exist')
+    PROCESS_SUBFOLDERS = False
+    if PROCESS_SUBFOLDERS:
+        # Process all subfolders
+        files = os.listdir(target_path) if os.path.exists(target_path) else print(
+            f'Path {target_path} does not exist')
+    else:
+        # Process only single root directory
+        files = [""] if os.path.exists(target_path) else print(
+            f'Path {target_path} does not exist')
 
+    print(f'Going to process the following subfolders of {target_path}: {files}')
     # Load false positives
     fp_file = os.path.join(target_path, 'false_cjtxs.json')
     false_cjtxs = als.load_json_from_file(fp_file)
