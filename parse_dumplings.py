@@ -2018,7 +2018,7 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
         if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
             data = als.load_json_from_file(tx_json_file)
 
-            # Filter false positives
+            # Filter already known false positives
             for false_tx in false_cjtxs:
                 if false_tx in data['coinjoins'].keys():
                     data['coinjoins'].pop(false_tx)
@@ -2030,8 +2030,6 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
 
     # save detected no transactions with no remixes (potentially false positives)
     als.save_json_to_file_pretty(os.path.join(target_path, 'no_remix_txs.json'), no_remix_all)
-
-    #
 
 
 def wasabi1_analyse_remixes(mix_id: str, target_path: str):
@@ -3150,7 +3148,6 @@ if __name__ == "__main__":
 
             # Large inflow, in 2023-12, slightly mixed, send out, received as friend, then remixed
             process_joint_interval('wasabi2', 'wasabi2__2023_12-01', all_data, MIX_PROTOCOL.WASABI2, target_path, '2023-12-20 00:00:07.000', '2024-01-30 23:59:59.000')
-
 
     #
     #

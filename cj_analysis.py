@@ -605,7 +605,6 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
     #   1. At least one input is from freshest previous coinjoin (given large number of wallets and remixes, that is expected case)
     #   2. Output from previous coinjoin X can be registered to next coinjoin as input only after X is mined to block (enforced by coordinator)
     coinjoins_relative_order = compute_cjtxs_relative_ordering(coinjoins)
-    # TODO: (optional) 3. If WW2, we need to split zkSNACKs and post-zkSNACKs, otherwise newly started
 
     for cjtx in coinjoins:
         coinjoins[cjtx]['relative_order'] = coinjoins_relative_order[cjtx]  # Save computed relative order

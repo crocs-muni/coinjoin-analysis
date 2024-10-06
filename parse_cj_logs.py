@@ -3514,3 +3514,4 @@ if __name__ == "__main__":
     # TODO: Analyze if number of fresh/remixed inputs changes over the time
     # TODO: Add computation of time required to finish given analysis => summary for easy identification of analyses to skip
     # TODO: Sort distributions as x, xsum, lognormal (coinjoin_tx_info_stats.json.pdf)
+    # TODO: Catch exceptions, move folder with crash into !bad folder and continue
