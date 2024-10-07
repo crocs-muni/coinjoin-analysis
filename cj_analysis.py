@@ -449,7 +449,7 @@ def plot_mining_fee_rates(mix_id: str, data: dict, mining_fees: dict, ax):
     if ax:
         ax.plot(fee_rates, color='gray', alpha=0.4, linewidth=1, linestyle='--')
         ax.tick_params(axis='y', colors='gray', labelsize=6)
-        ax.set_ylabel('Mining fee rate sats/vB (90th percentil)', color='gray', fontsize='6')
+        ax.set_ylabel('Mining fee rate sats/vB (90th percentil)', color='gray', fontsize='6', labelpad=-2)
 
     return fee_rates
 

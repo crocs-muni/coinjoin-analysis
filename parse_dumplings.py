@@ -1827,7 +1827,7 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
         if PLOT_FEERATE:
             ax.plot(mining_fee_rate, color='gray', alpha=0.3, linewidth=1, linestyle=':', label='Mining fee (90th percentil)')
             ax.tick_params(axis='y', colors='gray', labelsize=6)
-            ax.set_ylabel('Mining fee rate sats/vB (90th percentil)', color='gray', fontsize='6')
+            ax.set_ylabel('Mining fee rate sats/vB (90th percentil)', color='gray', fontsize='6', labelpad=-2)
 
         def plot_bars_downscaled(values, downscalefactor, color, ax):
             downscaled_values = [sum(values[i:i + downscalefactor]) for i in range(0, len(values), downscalefactor)]
