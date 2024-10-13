@@ -102,6 +102,31 @@ def detect_no_inout_remix_txs(coinjoins):
     return no_remix
 
 
+def detect_address_reuse_txs(coinjoins, reuse_threshold: float):
+    '''
+    Detect addresses reusing.
+    :param coinjoins: structire with all coinjoins
+    :param reuse_threshold: value between 0 and 1. Higher the threshold, more addresses needs to be reused (=> less size of set())
+    :return: detected txs with addresses reusing
+    '''
+    addr_reuse = {'inputs_address_reuse': [], 'outputs_address_reuse': []}
+    for cjtx in coinjoins.keys():
+        in_addressses = set([coinjoins[cjtx]['inputs'][index]['script'] for index in coinjoins[cjtx]['inputs'].keys()])
+        ratio = len(in_addressses) / len(coinjoins[cjtx]['inputs'])
+        if ratio < (1 - reuse_threshold):
+            logging.warning(f'Input address reuse above threshold {ratio} detected for {cjtx}')
+            addr_reuse['inputs_address_reuse'].append(cjtx)
+        out_addressses = set([coinjoins[cjtx]['outputs'][index]['script'] for index in coinjoins[cjtx]['outputs'].keys()])
+        ratio = len(out_addressses) / len(coinjoins[cjtx]['outputs'])
+        if ratio < (1 - reuse_threshold):
+            logging.warning(f'Output address reuse above threshold {ratio} detected for {cjtx}')
+            addr_reuse['outputs_address_reuse'].append(cjtx)
+
+    addr_reuse['both_reuse'] = set(addr_reuse['inputs_address_reuse']).intersection(set(addr_reuse['outputs_address_reuse']))
+    logging.warning(f'Txs with no input&output remix: {addr_reuse['both_reuse']}')
+    return addr_reuse
+
+
 class MIX_EVENT_TYPE(Enum):
     MIX_ENTER = 'MIX_ENTER'  # New liquidity coming to mix
     MIX_LEAVE = 'MIX_LEAVE'  # Liquidity leaving mix (postmix spend)
