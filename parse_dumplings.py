@@ -171,7 +171,7 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                     this_input['script'] = segments[3]
                     this_input['script_type'] = segments[4]
                     # TODO: generate proper address from script, now replaced by synthetic
-                    this_input['address'] = get_synthetic_address(segments[0], segments[1])
+                    this_input['address'] = get_synthetic_address(segments[3], segments[1])
 
                     record['inputs'][f'{index}'] = this_input
                     index += 1
