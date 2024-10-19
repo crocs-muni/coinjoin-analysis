@@ -2452,8 +2452,8 @@ def load_anonscore_data(cjtx_stats, base_path):
     return cjtx_stats
 
 
-def list_files(folder_path, suffix):
-    json_files = [os.path.join(root, file) for root, dirs, files in os.walk(folder_path) for file in files if file.endswith(suffix)]
+def list_files(folder_path, suffix, prefix = ''):
+    json_files = [os.path.join(root, file) for root, dirs, files in os.walk(folder_path) for file in files if file.endswith(suffix) and file.startswith(prefix)]
     return json_files
 
 
@@ -2477,8 +2477,9 @@ def load_rawtx_database(base_tx_path):
 
 def load_tx_database_from_btccore(base_tx_path):
     tx_db = {}
-    files = list_files(base_tx_path, '.json')
+    files = list_files(base_tx_path, '.json', 'block_')
     for tx_file in files:  # Each file corresponds to whole block - may be multiple transactions
+        print(f'Loading from block file {tx_file}')
         with (open(tx_file, "r") as file):
             block_txs = json.load(file)
             for tx_info in block_txs['tx']:
