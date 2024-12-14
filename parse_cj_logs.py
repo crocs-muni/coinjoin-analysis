@@ -1832,6 +1832,56 @@ def build_address_wallet_mapping(cjtx_stats):
     return address_wallet_mapping
 
 
+def joinmarket_parse_coinjoin_logs(base_path: str, raw_tx_db: dict = {}):
+    """
+    Obtain information about coinjoins from collated logs from all separate clients
+    :param base_path: base path where docker client images are stored
+    :param raw_tx_db: database of all transaction loaded from btc-node
+    :return: cjtx_stats structure with information about all detected coinjoins
+    """
+    print('Parsing coinjoin-relevant data from joinmarket client logs {}...'.format(base_path), end='')
+    # 1. Parse logs for each client separately
+    # 2. Collate client logs into complete view
+
+    clients_paths = []
+    exp_base_path = os.path.join(base_path, 'data')
+    files = os.listdir(exp_base_path) if os.path.exists(exp_base_path) else logging.error(f'Path {exp_base_path} does not exist')
+    for file in files:
+        target_exp_base_path = os.path.join(exp_base_path, file)
+        if os.path.isdir(target_exp_base_path):
+            if os.path.exists(os.path.join(target_exp_base_path, 'joinmarket')):
+                clients_paths.append(target_exp_base_path)
+
+    success_coinjoins = {}
+    for client_path in clients_paths:
+        success_coinjoins[client_path] = als.joinmarket_find_coinjoins(os.path.join(client_path, 'joinmarket', 'jmwalletd.log'))
+
+    all_coinjoins_duplicities = [success_coinjoins[path][txid] for path in success_coinjoins.keys() for txid in success_coinjoins[path].keys()]
+    all_coinjoins = {txid: success_coinjoins[path][txid] for path in success_coinjoins.keys() for txid in success_coinjoins[path].keys()}
+
+    SM.print('Total joinmarket coinjoins detected (with duplicities: {}'.format(len(all_coinjoins_duplicities)))
+    SM.print('Total fully finished joinmarket coinjoins found: {}'.format(len(all_coinjoins)))
+    print('Parsing separate coinjoin transactions ', end='')
+    cjtx_stats = {}
+    for cjtxid in all_coinjoins.keys():
+        # extract input and output addresses
+        tx_record = extract_tx_info(cjtxid, raw_tx_db)
+        if tx_record is not None:
+            tx_record['round_id'] = cjtxid
+            tx_record['round_start_time'] = all_coinjoins[cjtxid]['timestamp']  # BUGBUG: bad round start time, needs to be extracted from logs better
+            tx_record['broadcast_time'] = all_coinjoins[cjtxid]['timestamp']
+            tx_record['is_blame_round'] = False
+            cjtx_stats[cjtxid] = tx_record
+        else:
+            print('ERROR: decoding transaction for tx={}'.format(cjtxid))
+        print('.', end='')
+    print('done')
+
+    SM.print('Total fully finished coinjoins processed: {}'.format(len(cjtx_stats.keys())))
+
+    return cjtx_stats
+
+
 def parse_backend_coinjoin_logs(coord_input_file, raw_tx_db: dict = {}):
     print('Parsing coinjoin-relevant data from coordinator logs {}...'.format(coord_input_file), end='')
     if PRE_2_0_4_VERSION:
@@ -2256,27 +2306,34 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
         for file in files:
             target_base_path = os.path.join(base_path_wasabi, file)
             # processs wallets one by one
-            if os.path.isdir(target_base_path) and file.startswith('wasabi-client-'):
+            if os.path.isdir(target_base_path) and (file.startswith('wasabi-client-') or file.startswith('jcs-')):
                 print(f'Processing {target_base_path}')
-                wallet_name = 'wallet-' + file[len('wasabi-client-'):]
+                if file.startswith('wasabi-client-'):
+                    wallet_name = 'wallet-' + file[len('wasabi-client-'):]
+                elif file.startswith('jcs-'):
+                    wallet_name = 'wallet-' + file[len('jcs-'):]
+                else:
+                    logging.error(f'Unexpected folder name for {file}')
 
                 # Wallet coins (as obtained by 'listcoins' RPC)
                 with open(os.path.join(target_base_path, 'coins.json'), "r") as file:
                     wallet_coins = json.load(file)
-                    if isinstance(wallet_coins, str) and wallet_coins.lower() == 'timeout':
-                        print(f'Loading wallet keys failed with {wallet_coins} for {target_base_path}')
+                    if isinstance(wallet_coins, str) and (wallet_coins.lower() == 'timeout' or wallet_coins.lower() == 'this method is not available in joinmarket'):
+                        logging.error(f'Loading wallet keys failed with \"{wallet_coins}\" for \"{target_base_path}\"')
+                        wallets_coins_all[wallet_name] = {}
                     else:
                         parsed_coins = anonymity_score.parse_wallet_coins(wallet_name, wallet_coins)
                         for coin in parsed_coins:
                             anonymity_by_address[coin.address] = coin
 
-                    wallets_coins_all[wallet_name] = wallet_coins
+                        wallets_coins_all[wallet_name] = wallet_coins
 
                 # Wallet addresses (as obtained by 'listkeys' RPC) - now extracted from 'keys.json' file
                 with open(os.path.join(target_base_path, 'keys.json'), "r") as file:
                     wallet_keys = json.load(file)
-                    if isinstance(wallet_keys, str) and wallet_keys.lower() == 'timeout':
-                        print(f'Loading wallet keys failed with {wallet_keys} for {target_base_path}')
+                    if isinstance(wallet_keys, str) and (wallet_coins.lower() == 'timeout' or wallet_coins.lower() == 'this method is not available in joinmarket'):
+                        logging.error(f'Loading wallet keys failed with \"{wallet_keys}\" for \"{target_base_path}\"')
+                        wallets_info[wallet_name] = {}
                     else:
                         wallets_info[wallet_name] = {addr_data['address']: addr_data for addr_data in wallet_keys}
 
@@ -2580,10 +2637,18 @@ def process_experiment(args):
             obtain_wallets_info(WASABIWALLET_DATA_DIR, LOAD_WALLETS_INFO_VIA_RPC, LOAD_TXINFO_FROM_DOCKER_FILES, RAW_TXS_DB))
 
         # Parse conjoins from logs
+        # Case 1: Local WalletWasabi folder
         coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'WalletWasabi/Backend/Logs.txt')
-        if not os.path.exists(coord_input_file):  # if not found, try dockerized path
-            coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'data', 'wasabi-backend', 'backend', 'Logs.txt')
-        cjtx_stats['coinjoins'] = parse_backend_coinjoin_logs(coord_input_file, RAW_TXS_DB)
+        if os.path.exists(coord_input_file):
+            cjtx_stats['coinjoins'] = parse_backend_coinjoin_logs(coord_input_file, RAW_TXS_DB)
+        # Case 2: Docker with wasabi client
+        coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'data', 'wasabi-backend', 'backend', 'Logs.txt')
+        if os.path.exists(coord_input_file):
+            cjtx_stats['coinjoins'] = parse_backend_coinjoin_logs(coord_input_file, RAW_TXS_DB)
+        # Case 3: Docker with joinmarket client
+        coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'data', 'jcs-000', 'joinmarket')
+        if os.path.exists(coord_input_file):
+            cjtx_stats['coinjoins'] = joinmarket_parse_coinjoin_logs(WASABIWALLET_DATA_DIR, RAW_TXS_DB)
 
         # Build mapping between address and controlling wallet
         cjtx_stats['address_wallet_mapping'] = build_address_wallet_mapping(cjtx_stats)

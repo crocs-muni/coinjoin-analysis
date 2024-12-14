@@ -935,6 +935,61 @@ def merge_dicts(source: dict, dest: dict):
     return dest
 
 
+def joinmarket_find_coinjoins(filename):
+    """
+    Extracts all coinjoin transactions stored as json fragment in logs.
+    :param filename: name of file with logs
+    :return: list of dictionaries for all specified group_names
+    """
+    hits = {}
+    try:
+        with (open(filename, 'r') as file):
+            lines = file.readlines()
+            line_index = 0
+            while line_index < len(lines):
+                regex_pattern = "(?P<timestamp>.*) \[INFO\]  obtained tx"
+                match = re.search(regex_pattern, lines[line_index])
+                line_index = line_index + 1
+                if match is None:
+                    continue
+                else:
+                    cjtx_lines = []
+                    # After 'obtained tx', json is pasted in logs. Find its end by '}'
+                    while lines[line_index] != '}\n':
+                        cjtx_lines.append(lines[line_index])
+                        line_index = line_index + 1
+                    cjtx_lines.append(lines[line_index])
+                    # Reconstruct json
+                    cjtx_json = json.loads("".join(cjtx_lines))
+                    # read next line to extract timestamp
+                    line_index = line_index + 1
+                    regex_pattern = "(?P<timestamp>.*) \[INFO\]"
+                    match = re.search(regex_pattern, lines[line_index])
+                    # Extract timestamp, replace , by . before fraction of seconds
+                    cjtx_json['timestamp'] = match.group('timestamp').strip().replace(',', '.')
+
+                    # # Extract cjtx json
+                    # cjtx_lines = []
+                    # regex_pattern = "(?P<timestamp>.*) \[INFO\]  INFO:Built tx, sending to counterparties."
+                    # match = None
+                    # while match is None:
+                    #     match = re.search(regex_pattern, lines[line_index])
+                    #     if match is None:
+                    #         cjtx_lines.append(lines[line_index])
+                    #     line_index = line_index + 1
+                    # cjtx_json = json.loads("".join(cjtx_lines))
+                    # cjtx_json['timestamp'] = match.group('timestamp').strip()
+
+                    hits[cjtx_json['txid']] = cjtx_json
+
+    except FileNotFoundError:
+        print(f"File '{filename}' not found.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+    return hits
+
+
 def find_round_ids(filename, regex_pattern, group_names):
     """
     Extracts all round_ids which from provided file which match regexec pattern and its specified part given by group_name.
