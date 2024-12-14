@@ -41,6 +41,8 @@ SAVE_BASE_FILES_JSON = True
 #SLOT_WIDTH_SECONDS = 3600 * 24  # day
 SLOT_WIDTH_SECONDS = 3600   # hour
 
+#LEGEND_FONT_SIZE = 'small'
+LEGEND_FONT_SIZE = 'medium'
 
 class ClusterIndex:
     NEW_CLUSTER_INDEX = 0
@@ -1964,11 +1966,21 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
         #     ax.legend(loc='center left')
         if ax2:
             if mix_protocol in [MIX_PROTOCOL.WASABI2]:
-                ax2.legend(loc='upper left', fontsize='small', bbox_to_anchor=(0.01, 0.85), borderaxespad=0)
+                ax2.legend(loc='upper left', fontsize=LEGEND_FONT_SIZE, bbox_to_anchor=(0.01, 0.85), borderaxespad=0)
             else:
-                ax2.legend(loc='upper left', fontsize='small')
+                ax2.legend(loc='upper left', fontsize=LEGEND_FONT_SIZE)
         if ax3:
             ax3.legend()
+
+    # Save input_types into json
+    PLOT_PLOTLY = False
+    if PLOT_PLOTLY:
+        plotly_data = {'time': list(range(0, len(input_types[MIX_EVENT_TYPE.MIX_REMIX.name])))}
+        for input_type in input_types.keys():
+            if input_type in [MIX_EVENT_TYPE.MIX_ENTER.name, MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name, MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name, 'MIX_REMIX_1', 'MIX_REMIX_2', 'MIX_REMIX_3-5', 'MIX_REMIX_6-19', 'MIX_REMIX_20+', 'MIX_REMIX_1000-1999', 'MIX_REMIX_2000+', 'MIX_REMIX_nonstd']:
+                plotly_data[input_type] = [value.item() for value in input_types[input_type]]
+        save_file = os.path.join(target_path, 'plotly_data.json')
+        als.save_json_to_file(save_file, plotly_data)
 
     # Add additional cummulative plots for all coinjoin in one
     ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
@@ -2476,7 +2488,7 @@ def whirlpool_extract_pool(full_data: dict, mix_id: str, target_path: Path, pool
 def wasabi2_extract_pools(data: dict, target_path: str, interval_stop_date: str):
     # Extract post-zksnacks coordinator(s)
     # Rule: only after 2024-06-02, with few transactions from 2024-05-30 but with lower than 150 inputs (which is minimum for zkSNACKs)
-    interval_start_date_others = '2024-05-20 00:00:00.000'
+    interval_start_date_others = '2024-05-01 00:00:00.000'
     cjtx_others = {cjtx: data['coinjoins'][cjtx] for cjtx in data['coinjoins'].keys() if data['coinjoins'][cjtx][
         'broadcast_time'] > "2024-06-02 00:00:00.000"}
     print(f'cjtx_others len={len(cjtx_others)}')
@@ -2678,34 +2690,51 @@ def print_remix_stats(target_base_path):
         SM.print(f'  remix_ratios_all remix ratio (num inputs)')
         SM.print(f'    median={np.median(remix_stats['remix_ratios_all'])}')
         SM.print(f'    average={np.average(remix_stats['remix_ratios_all'])}')
+        SM.print(f'    min={min(remix_stats['remix_ratios_all'])}')
+        SM.print(f'    max={max(remix_stats['remix_ratios_all'])}')
         SM.print(f'  remix_ratios_std remix ratio (num inputs)')
         SM.print(f'    median={np.median(remix_stats['remix_ratios_std'])}')
         SM.print(f'    average={np.average(remix_stats['remix_ratios_std'])}')
+        SM.print(f'    min={min(remix_stats['remix_ratios_std'])}')
+        SM.print(f'    max={max(remix_stats['remix_ratios_std'])}')
 
-    remix_ww1 = als.load_json_from_file(os.path.join(target_base_path, 'wasabi1_remixrate_nums_norm.json'))
-    print_base_remix_info('WW1', remix_ww1)
+    cfg_options = ['nums_norm', 'nums_notnorm', 'values_norm', 'values_notnorm']
+    for option in cfg_options:
+        SM.print(f'## Processing option {option}')
+        try:
+            remix_ww1 = als.load_json_from_file(os.path.join(target_base_path, f'wasabi1_remixrate_{option}.json'))
+            print_base_remix_info('WW1', remix_ww1)
+        except FileNotFoundError as e:
+            print(e)
 
-    remix_ww2 = als.load_json_from_file(os.path.join(target_base_path, 'wasabi2_remixrate_nums_norm.json'))
-    remix_ww2_zksnacks = als.load_json_from_file(os.path.join(target_base_path, 'wasabi2_zksnacks_remixrate_nums_norm.json'))
-    remix_ww2_others = als.load_json_from_file(os.path.join(target_base_path, 'wasabi2_others_remixrate_nums_norm.json'))
-    print_base_remix_info('WW2 all', remix_ww2)
-    print_base_remix_info('WW2 zksnacks', remix_ww2_zksnacks)
-    print_base_remix_info('WW2 others', remix_ww2_others)
+        try:
+            remix_ww2 = als.load_json_from_file(os.path.join(target_base_path, f'wasabi2_remixrate_{option}.json'))
+            remix_ww2_zksnacks = als.load_json_from_file(os.path.join(target_base_path, f'wasabi2_zksnacks_remixrate_{option}.json'))
+            remix_ww2_others = als.load_json_from_file(os.path.join(target_base_path, f'wasabi2_others_remixrate_{option}.json'))
+            print_base_remix_info('WW2 all', remix_ww2)
+            print_base_remix_info('WW2 zksnacks', remix_ww2_zksnacks)
+            print_base_remix_info('WW2 others', remix_ww2_others)
+        except FileNotFoundError as e:
+            print(e)
 
-    remix_whirlpool = als.load_json_from_file(os.path.join(target_base_path, 'whirlpool_remixrate_nums_norm.json'))
-    print_base_remix_info('Whirlpool all', remix_whirlpool)
+        try:
+            remix_whirlpool = als.load_json_from_file(os.path.join(target_base_path, f'whirlpool_remixrate_{option}.json'))
+            print_base_remix_info('Whirlpool all', remix_whirlpool)
 
-    remix_whirlpool_100k = als.load_json_from_file(os.path.join(target_base_path, 'whirlpool_100k_remixrate_nums_norm.json'))
-    print_base_remix_info('Whirlpool 100k', remix_whirlpool_100k)
+            remix_whirlpool_100k = als.load_json_from_file(os.path.join(target_base_path, f'whirlpool_100k_remixrate_{option}.json'))
+            print_base_remix_info('Whirlpool 100k', remix_whirlpool_100k)
 
-    remix_whirlpool_1M = als.load_json_from_file(os.path.join(target_base_path, 'whirlpool_1M_remixrate_nums_norm.json'))
-    print_base_remix_info('Whirlpool 1M', remix_whirlpool_1M)
+            remix_whirlpool_1M = als.load_json_from_file(os.path.join(target_base_path, f'whirlpool_1M_remixrate_{option}.json'))
+            print_base_remix_info('Whirlpool 1M', remix_whirlpool_1M)
 
-    remix_whirlpool_5M = als.load_json_from_file(os.path.join(target_base_path, 'whirlpool_5M_remixrate_nums_norm.json'))
-    print_base_remix_info('Whirlpool 5M', remix_whirlpool_5M)
+            remix_whirlpool_5M = als.load_json_from_file(os.path.join(target_base_path, f'whirlpool_5M_remixrate_{option}.json'))
+            print_base_remix_info('Whirlpool 5M', remix_whirlpool_5M)
 
-    remix_whirlpool_50M = als.load_json_from_file(os.path.join(target_base_path, 'whirlpool_50M_remixrate_nums_norm.json'))
-    print_base_remix_info('Whirlpool 50M', remix_whirlpool_50M)
+            remix_whirlpool_50M = als.load_json_from_file(os.path.join(target_base_path, f'whirlpool_50M_remixrate_{option}.json'))
+            print_base_remix_info('Whirlpool 50M', remix_whirlpool_50M)
+
+        except FileNotFoundError as e:
+            print(e)
 
 
 def print_liquidity_summary_all(target_path: str):
@@ -3060,10 +3089,12 @@ if __name__ == "__main__":
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240701\\'
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240802\\'
     interval_stop_date = '2024-08-03 00:00:07.000'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240830\\'
-    interval_stop_date = '2024-08-30 00:00:07.000'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20241004\\'
-    interval_stop_date = '2024-10-05 00:00:07.000'
+    # target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240830\\'
+    # interval_stop_date = '2024-08-30 00:00:07.000'
+    # target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20241004\\'
+    # interval_stop_date = '2024-10-05 00:00:07.000'
+    # target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20241009\\'
+    # interval_stop_date = '2024-10-10 00:00:07.000'
 
     target_path = os.path.join(target_base_path, 'Scanner')
     SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
