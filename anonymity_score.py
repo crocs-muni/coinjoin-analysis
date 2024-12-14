@@ -141,20 +141,21 @@ def deserialize_to_list(path = "serialized_annonymity.json") -> List[CoinWithAno
         read_list = f.read()
     
     decoded_coin_list = jsonpickle.decode(read_list)
-    print(type(decoded_coin_list[0]))
-    if len(decoded_coin_list) > 0 and isinstance(decoded_coin_list[0], dict):
-        decoded_coin_list = list(map(
-            lambda coin_dict: CoinWithAnonymity(
-                coin_dict["address"],
-                coin_dict["txid"],
-                coin_dict["index"],
-                coin_dict["wallet"],
-                coin_dict["annon_score"],
-                coin_dict["amount"],
-                coin_dict["spent_in_tx"]        
-                                            ),
-            decoded_coin_list
-        ))
+    if len(decoded_coin_list) > 0:
+        print(type(decoded_coin_list[0]))
+        if len(decoded_coin_list) > 0 and isinstance(decoded_coin_list[0], dict):
+            decoded_coin_list = list(map(
+                lambda coin_dict: CoinWithAnonymity(
+                    coin_dict["address"],
+                    coin_dict["txid"],
+                    coin_dict["index"],
+                    coin_dict["wallet"],
+                    coin_dict["annon_score"],
+                    coin_dict["amount"],
+                    coin_dict["spent_in_tx"]
+                                                ),
+                decoded_coin_list
+            ))
 
     return decoded_coin_list
 
