@@ -593,6 +593,18 @@ def print_liquidity_summary(coinjoins: dict):
     SM.print(f'  {(total_mix_entering_value - total_mix_leaving_nonstd_value) / SATS_IN_BTC} btc, total fresh entering mix without non-standard leaving')
 
 
+def print_coordinators_counts(coord_txs: dict, min_print_txs: int):
+    coord_tx_counts = {id: len(coord_txs[id]) for id in coord_txs.keys()}
+    sorted_counts = sorted(coord_tx_counts, key=coord_tx_counts.get, reverse=True)
+    # sorted_counts = coord_tx_counts.keys()
+    for id in sorted_counts:
+        if len(coord_txs[id]) >= min_print_txs:
+            #print(f"Coordinator {id} has {coord_tx_counts[id]} txs")
+            print(f'  coord. {id}: {len(coord_txs[id])} txs')
+    print(f'Total non-small coordinators (min={min_print_txs}): {len([1 for x in coord_txs.keys() if len(coord_txs[x]) >= min_print_txs])}')
+    print(f'Theoretical total coordinators (incl. very small ones) detected: {len(coord_txs)}')
+
+
 def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins={}, ww1_postmix_spend={}):
     """
     Requires performance speedup, will not finish (after 8 hours) for Whirlpool with very large number of coins
