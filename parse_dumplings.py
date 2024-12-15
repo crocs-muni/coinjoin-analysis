@@ -3065,7 +3065,7 @@ if __name__ == "__main__":
 
     ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
     DETECT_FALSE_POSITIVES = False
-    PLOT_REMIXES = True
+    PLOT_REMIXES = False
     PROCESS_NOTABLE_INTERVALS = False
     SPLIT_WHIRLPOOL_POOLS = False
     SPLIT_WASABI2_POOLS = False
@@ -3079,7 +3079,7 @@ if __name__ == "__main__":
     ANALYSIS_CLUSTERS = False
     PLOT_INTERMIX_FLOWS = False
     VISUALIZE_ALL_COINJOINS_INTERVALS = False
-    ANALYSIS_REMIXRATE = False
+    ANALYSIS_REMIXRATE = True
     ANALYSIS_LIQUIDITY = False
 
     target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240215\\'
@@ -3103,11 +3103,19 @@ if __name__ == "__main__":
     #   Fixed by not setting virtual block time too far away
     # WARNING: SW 100k pool does not match exactly mix_stay and active liqudity at the end - likely reason are neglected mining fees
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
-        wasabi_plot_remixes('wasabi2_test', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_test'),
-                    'coinjoin_tx_info.json', True, False, None, None, False)
+        wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'),
+                    'coinjoin_tx_info.json', False, True, None, None, False)
+        exit(42)
+        wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'),
+                    'coinjoin_tx_info.json', False, True, None, None, False)
+        exit(42)
+        wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'),
+                    'coinjoin_tx_info.json', False, True, None, None, False)
 
+        exit(42)
+        wasabi_detect_coordinators('wasabi2_others', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_others'))
         exit(42)
         for mix_id in ['wasabi2']:
             wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
@@ -3687,3 +3695,18 @@ if __name__ == "__main__":
 # b71981909c440bcb29e9a2d1cde9992cc97d3ca338c925c4b0547566bdc62f4d
 # ec9d5c2c678a70e304fa6e06a6430c9aff49e75107ac33f10165b14f0fa9a1f4
 # f872a419a48578389994323e6ee565ba15f4b9f71e72fceabc6a866505d13a6f
+
+# Initial transaction for some new wasabi2 pool (inputs are non-cjtx): cdb245e4981d140f0a3a56431c374f593782aa3bef0cfb3abe733cbc5849a243
+# Search for previous cjtxs inputs for small pools:
+#   db65f85f4ddb2feb4ffaa1d8eb1485b46329bdc291bc965b5c6b3e4ab5edf2ff
+#   d6b7798869f4eb147e524d75d204a9476576465695bdca070711f47ebe838c82
+#   3106e3766f95cb4964c36bdf3802dbd68bdc3fe82851ccd8f1a273db2f7fa84d
+
+# Search for subsequent cjtxs for small pools:
+#   607bc2b8e8cf3498885d0e908e134f3900d49e97efb96ea2ef65b5c676b6d49a
+#   7f31565b9da80406d9994d9b35e71d921d19d3d5bebb9f0802d00908b9620408
+#   b9857ec5dc86ed867f0329fd6982767fdc0f5d188df896c85ec9dcf2e3202952
+#   ...
+#   3106e3766f95cb4964c36bdf3802dbd68bdc3fe82851ccd8f1a273db2f7fa84d
+
+#   Clever consolidation: 349f27c3104984f2668f981283695b81ce96a4ee5d984f8df26ee92c52dc6fe4
