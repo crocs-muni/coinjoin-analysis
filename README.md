@@ -1,41 +1,48 @@
-# Scenarios
+# Wallet Wasabi 1.x, Wallet Wasabi 2.x and JoinMarket coinjoin analysis 
 
-## Types of scenarios
-1. SimplePassive - Everything is set before scenario starts. All wallets have same settings, but can have different starting funds.
-1. ComplexPassive - Everything is set before scenario starts. Wallets can have different settings and can join or leave coinjoin in different rounds.
-1. SimpleActive - Settings for backend can change each round.
+Set of scripts for processing and analysis of datasets created by Wallet Wasabi 1.x, Wallet Wasabi 2.x and JoinMarket clients and coordinators. Allows for processing of files extracted by [Dumplings](https://github.com/nopara73/dumplings) tool.  
 
-## How to run scenario
-1. Fill file scenario.json with desired options and their values.
-1. Run your btc core.
-1. Check if the constants are correctly set in files Helpers/global_constants.py and Helpers/regtest_control.py
-1. If you have not done it already, run init_regtest.py
-1. Run scenario.py script. It should be in the same folder as other .py files and also scenario.json file.
-1. Wait until scenario is finished
+## Setup
+```
+git clone https://github.com/crocs-muni/coinjoin-analysis.git
+```
 
+## Usage: Parsing Wallet Wasabi 2.x emulations
+The scenario assumes previous execution of Wasabi 2.x coinjoins (containerized coordinator and clients) using [EmuCoinJoin](https://github.com/crocs-muni/coinjoin-emulator) orchestration tool. After execution, relevant files from containers are serialized as subfolders into ```/path_to_experiments/experiment_1/data/``` folder with the following structure. 
+```
+  ..
+  btc-node           (bitcoin core, regtest blocks)
+  wasabi-backend     (wasabi 2.x coordinator container)
+  wasabi-client-000  (wasabi 2.x client logs)
+  wasabi-client-001
+  ...  
+  wasabi-client-499
+```
+Note, that multiple experiments can be stored inside ```/path_to_experiments/``` path. All found folders are checked for ```/data/``` subfolder and if found, the experiment is processed.
 
-## Simple Passive scenario
-Allowed options in scenario.json:
-- type - must contain value "SimplePassive"
-- freshWallets - true/false, indicates that new wallets should be created for the scenario
-- startingFunds - list of integers, if option *freshWallets* is set to *true*, allows to better control starting state of the wallets. Coordinator will send Coins with these values to newly created wallets, that have no specific option in *walletsInfo*. If *freshWallets* is set to *false* this option will be ignored
-- rounds - integer, number of rounds for this scenario (rounds that are tracked and finished, not the number of actual coinjoins)
-- walletsCounts - integer, number of wallets to be part of the scenario. If *freshWallets* is set to *true*, this number of wallets is created, otherwise, already existing wallets will be used, creating only the missing ones.
-- walletsInfo - array of objects, each containing *walletIndex* and *walletFunds*. WalletIndex parameter represents index of the wallet, for which are the starting funds set. WalletFunds parameter is array of integers and represents starting funds for the specified wallet.
-- walletsConfig - json, confiuration for wallets. Allowed options and allowed type of values can be seen in **parameters.json**
-- backendConfig - json, configuration for backend. Allowed options and allowed type of values can be seen in **parameters.json**
+### Extraction of coinjoin informaton from original raw files 
+To extract all executed coinjoins into unified json format and perform analysis, run:
+```
+parse_cj_logs.py --action collect_docker --target-path path_to_experiments
+```
 
-## Complex Passive scenario
-- type must be changed to "ComplexPassive"
+The extraction process creates the following files: 
+  * ```coinjoin_tx_info.json``` ... basic information about all detected coinjoins, mapping of all wallets to their coins, started rounds, etc.. Used for subsequent analysis.
+  * ```wallets_coins.json``` ... information about every output created during execution, mapped to its coinjoin.
+  * ```wallets_info.json``` ... information about every address controlled by a given wallet. 
 
-Adds more options for walletsInfo:
-- walletConfig - same possibilities as walletsConfig, apply only to specified wallet. Set before scenario is started.
+### Re-running analysis from alreday extracted coinjoins 
+The coinjoin extraction part is time consuming. If new analysis methods are added or uodated, only the anlaysis part can be re-run. To execute again only analysis (extraction must be already done with files like ```coinjoin_tx_info.json``` already created), run:
+```
+parse_cj_logs.py --action collect_docker --target-path path_to_experiments
+```
 
-Adds option of stopping and starting coinjoin in different rounds:
-- roundsConfigs - array of objects each containing *index* (identifier for round) and possibly *startWallets* (array of indices of wallets to start mixing in the ruond) or *stopWallets* (array of indices of wallets to stop mixing in the round)
+If the analysis finishes successfully, the following files are created:
+  * ```coinjoin_stats.3.pdf, coinjoin_stats.3.pdf``` ... multiple graphs capturing various analysis results obtained from coinjoin data. 
+  * ```coinjoin_tx_info_stats.json``` ... captures information about participation of every wallet in given coinjoin transaction.
+  
+### Example results
+![image](https://github.com/user-attachments/assets/2e5406bc-b8f8-4725-8ff9-6484e805f682)
 
-## Simple Active scenario
-- type must be changed to "SimpleActive"
+![image](https://github.com/user-attachments/assets/5325a4ae-468b-4b52-b58f-95d521c15b1c)
 
-Allows changes of backend configuration:
-- each object in the roundsConfig array can now have parameter *backendConfig* (configuration to be changed)
