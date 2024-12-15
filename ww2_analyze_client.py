@@ -117,13 +117,11 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
             cjtx['outputs'] = {}
         if 'inputs' not in cjtx.keys():
             cjtx['inputs'] = {}
-        input_index = 0
         for coin in coins:
             if coin['txid'] == cjtx['tx']:
                 cjtx['outputs'][str(coin['index'])] = coin
             if coin['spentBy'] == cjtx['tx']:
-                cjtx['inputs'][str(input_index)] = coin  # BUGBUG: We do not know correct vin index
-                input_index += 1
+                cjtx['inputs'][str(coin['index'])] = coin  # BUGBUG: We do not know correct vin index
 
     # If last tx is coinjoin, add one artificial non-coinjoin one
     if history[-1]['islikelycoinjoin'] is True:
@@ -191,12 +189,14 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
     stats['all_cjs_weight_anonscore'] = {}
     stats['anon_percentage_status'] = {}
     stats['observed_remix_liquidity_ratio'] = {}
-    stats['observed_remix_liquidity_ratio_cumul'] = {}
+    stats['observed_remix_liquidity_ratio_cumul'] = {}  # Remix liquidity based on value of inputs
+    stats['observed_remix_inputs_ratio_cumul'] = {}     # unused now, remix liquidity based on number of inputs
     for session_label in cjtxs['sessions'].keys():
         session_coins = {}
         anon_percentage_status_list = []
         observed_remix_liquidity_ratio_list = []
         observed_remix_liquidity_ratio_cumul_list = []
+        observed_remix_inputs_ratio_cumul_list = []
         session_size_inputs = cjtxs['sessions'][session_label]['funding_tx']['value']
         assert session_size_inputs > 0, f'Unexpected negative funding tx size of {session_size_inputs}'
         for cjtxid in cjtxs['sessions'][session_label]['coinjoins'].keys():
@@ -541,11 +541,11 @@ if __name__ == "__main__":
     print(f'Total overmixed input coins: {sum(total_overmixed_coins)}')
 
 
-    num_skipped = list(chain.from_iterable(all_stats['skipped_cjtxs'][session] for session in all_stats['skipped_cjtxs']))
-    print(f'Skipped txs stats: median={np.median(num_skipped)}, average={round(np.average(num_skipped), 2)}, min={min(num_skipped)}, max={max(num_skipped)}')
-
-    num_skipped_corrected = list(chain.from_iterable(all_stats['skipped_cjtxs_corrected'][session] for session in all_stats['skipped_cjtxs_corrected']))
-    print(f'Skipped corrected txs stats: median={np.median(num_skipped_corrected)}, average={round(np.average(num_skipped_corrected), 2)}, min={min(num_skipped_corrected)}, max={max(num_skipped_corrected)}')
+    # num_skipped = list(chain.from_iterable(all_stats['skipped_cjtxs'][session] for session in all_stats['skipped_cjtxs']))
+    # print(f'Skipped txs stats: median={np.median(num_skipped)}, average={round(np.average(num_skipped), 2)}, min={min(num_skipped)}, max={max(num_skipped)}')
+    #
+    # num_skipped_corrected = list(chain.from_iterable(all_stats['skipped_cjtxs_corrected'][session] for session in all_stats['skipped_cjtxs_corrected']))
+    # print(f'Skipped corrected txs stats: median={np.median(num_skipped_corrected)}, average={round(np.average(num_skipped_corrected), 2)}, min={min(num_skipped_corrected)}, max={max(num_skipped_corrected)}')
 
     remix_ratios = [max(all_stats['observed_remix_liquidity_ratio_cumul'][session]) for session in all_stats['observed_remix_liquidity_ratio_cumul'].keys()]
     print(f'Remix ratios: median={round(np.median(remix_ratios), 2)}, average={round(np.average(remix_ratios), 2)}, min={round(min(remix_ratios), 2)}, max={round(max(remix_ratios), 2)}')
