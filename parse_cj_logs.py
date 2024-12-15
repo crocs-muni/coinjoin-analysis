@@ -3340,89 +3340,9 @@ if __name__ == "__main__":
     #READ_ONLY_COINJOIN_TX_INFO = True
     SAVE_ANALYTICS_TO_FILE = False
 
-    #target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
-    #target_base_path = '/home/xsvenda/coinjoin/'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230930_1000Round_1parallel_max7inputs_10wallets_1Msats\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230930_148Round_1parallel_max10inputs_10wallets_1Msats\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230930_460Round_1parallel_max10inputs_10wallets_1Msats\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230929_2000Round_1parallel_max4inputs_10wallets_100ksats\\second_part\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230929_2000Round_1parallel_max4inputs_10wallets_100ksats\\first_part\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20230928_2000Round_1parallel_max4inputs_10wallets_0.2btc\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20231001_1000Round_1parallel_max5inputs_5ans5wallets_10M_1Msats\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20231002_1000Round_1parallel_max20inputs_5and5wallets_10M_1Msats\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20231003_500Round_1parallel_max100inputs_30wallets_10Msats\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol4\\20231004_500Round_1parallel_max100inputs_30wallets_10Msats\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_2000Rounds_1parallel_max4inputs_10wallets\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231007_147Rounds_1parallel_max4inputs_10wallets_inJailForFailures\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231008_2000Rounds_1parallel_max5inputs_10wallets\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231013_500Rounds_1parallel_max20inputs_10wallets_5x10Msats\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231014_1000Rounds_1parallel_max10inputs_10wallets_5x10Msats\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231015_1000Rounds_1parallel_max15inputs_10wallets_5x10Msats\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231016_1000Rounds_1parallel_max25inputs_10wallets_5x10Msats\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231017_1000Rounds_1parallel_max30inputs_10wallets_5x10Msats\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231019_1000Rounds_1parallel_max10inputs_10wallets_5x10Msats_noPrison\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231020_1000Rounds_1parallel_max40inputs_10wallets_5x10Msats_noPrison\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231017_1000Rounds_1parallel_max30inputs_10wallets_5x10Msats\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231018_1000Rounds_1parallel_max30inputs_10wallets_5x10Msats_noPrison\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol6\\test\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol6\\two-party_2023-11-21_16-30\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\20231023_11Rounds_1parallel_max6inputs_10wallets_5x10Msats\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\disbalanced-delayed-20_2023-11-23_14-47\\'
-
-    # Two experiments with exactly same settings
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\pareto-delayed-50_2023-11-23_22-28\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\pareto-delayed-50_2023-11-24_15-19\\'
-
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-11-24_17-09_normal-static-150\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-11-25_09-35_pareto-delayed-150\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-11-25_18-34_normal-delayed-150\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-12-01_14-50_pareto-static-200-5utxo\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-11-28_14-56_pareto-delayed-250\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-12-04_13-32_paretosum-static-30-30utxo\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-12-04_16-55_paretosum-static-100-30utxo\\'
-
-
-    # 50 wallets, max 100 inputs cjtx
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max100inputs\\2023-12-04_15-14_paretosum-static-50-30utxo\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max100inputs\\2023-12-05_10-11_paretosum-static-50-30utxo\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max100inputs\\2023-12-05_11-40_paretosum-static-50-30utxo\\'
-
-    # 50 wallets, max 500 inputs cjtx
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max500inputs\\2023-12-19_15-16_paretosum-dynamic-50-30utxo-special_5wallets1utxo_max500inputs\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max500inputs\\2024-01-03_20-31_paretosum-dynamic-50-30utxo-special\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\max500inputs\\2023-12-19_15-19_paretosum-dynamic-50-30utxo-special\\'
-
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol5\\debug\\20231023_11Rounds_1parallel_max6inputs_10wallets_5x10Msats\\'
-
-    # real coinjoins imported
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\whirlpool\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\wasabi\\'
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol9\\wasabi2\\'
     #
-
-    # 500 wallets simulation, 500 inputs, kubernetes
-    #target_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-05_08-40_pareto-static-500\\'
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-05_14-04_paretosum-dynamic-50-30utxo-special\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-07_01-39_pareto-dynamic-500\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-07_13-21_pareto-dynamic-500\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-07_16-20_paretosum-dynamic-500-5utxo\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-07_19-20_paretosum-dynamic-500-5utxo\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-08_01-23_paretosum-dynamic-500-5utxo\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-08_15-52_paretosum-dynamic-500-5utxo\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-09_01-03_paretosum-dynamic-500-5utxo\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol10\\2024-01-09_19-02_paretosum-dynamic-200-5utxo\\')
-
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-09_22-06_paretosum-dynamic-500-5utxo\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-10_01-00_paretosum-dynamic-500-5utxo\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-11_00-02_paretosum-dynamic-500-30utxo-special\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-10_17-46_paretosum-dynamic-500-30utxo-special\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-12_12-03_uniform-static-500-30utxo\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-12_20-47_uniform-static-500-30utxo\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-17_11-55_uniform-static-500-30utxo\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-17_15-38_paretosum-dynamic-500-30utxo-special\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol11\\2024-01-18_11-48_uniform-static-500-30utxo\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol8\\2023-12-04_13-32_paretosum-static-30-30utxo\\')
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\grid_uniform_test2\\2024-01-25_11-43_paretosum-static-10-30utxo')
+    # Analysis of single experiment
+    #
     #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\grid_paretosum-static-30utxo\\2024-01-26_19-35_paretosum-static-500-30utxo')
     target_base_path = None
     if target_base_path is not None:
@@ -3439,98 +3359,40 @@ if __name__ == "__main__":
                 print(f'ERROR: Path {target_base_path} does not exist')
 
     # Aggregated analysis of multiple folders with experiments
-    # Assumption: given base path contains one or more subfolders (experiments for related settings) with each containing 'data' subfolder (one experiment)
-    # super_base_path is path where aggregated results from all
-
-    # super_base_path = ''
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_paretosum-static-5utxo'),
-    #                      os.path.join(super_base_path, 'grid_paretosum-static-30utxo'),
-    #                      os.path.join(super_base_path, 'grid_uniformsum-static-1utxo'),
-    #                      os.path.join(super_base_path, 'grid_uniformsum-static-5utxo'),
-    #                      os.path.join(super_base_path, 'grid_uniformsum-static-30utxo'),
-    #                      os.path.join(super_base_path, 'grid_uniform-static-1utxo'),
-    #                      os.path.join(super_base_path, 'grid_uniform-static-5utxo'),
-    #                      os.path.join(super_base_path, 'grid_uniform-static-30utxo'),
-    #                      os.path.join(super_base_path, 'grid_pareto-static-1utxo'),
-    #                      os.path.join(super_base_path, 'grid_pareto-static-5utxo'),
-    #                      os.path.join(super_base_path, 'grid_pareto-static-30utxo'),
-    #                      os.path.join(super_base_path, 'grid_pareto-static-1utxo'),
-    #                      os.path.join(super_base_path, 'grid_lognorm-static-1utxo'),
-    #                      os.path.join(super_base_path, 'grid_lognorm-static-5utxo'),
-    #                      os.path.join(super_base_path, 'grid_lognorm-static-30utxo')]
-
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_pareto-static-30utxo')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_uniform-static-30utxo')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_uniform-static-5utxo')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test2'),
-    #                      os.path.join(super_base_path, 'grid_uniform_test3')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'long_runs')]
-
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_lognorm-static-1utxo'),
-    #                      os.path.join(super_base_path, 'grid_lognorm-static-5utxo'),
-    #                      os.path.join(super_base_path, 'grid_lognorm-static-30utxo')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'random_skips_uniform-static_30utxo')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'uniform-500-30utxo')]
-
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'wasabi2_feb')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test3')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_uniform_test4')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_100w')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_2500-3000utxo')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'Wasabi2_rest')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_100w_30utxo'),
-    #                      os.path.join(super_base_path, 'grid_250w_30utxo'),
-    #                      os.path.join(super_base_path, 'grid_250w_5utxo')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'wasabi2_test')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'wallet_analysis_test', 'grid_pareto-static-30utxo')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\'
-    # target_base_paths = [os.path.join(super_base_path, 'grid_lognorm-static-5utxo_only250w')]
-
-    # super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol13\\'
-    # target_base_paths = [os.path.join(super_base_path, '120blocks')]
+    # Assumptions:
+    #   - given target_base_paths contains one or more paths (target_base_path)
+    #   - each target_base_path contains one or more experiments with the partially same base setting
+    #     (repetitions or change of one parameter)
+    #   - each experiment contains 'data' subfolder with all data collected from the experiment execution
+    # Example:
+    #   - super_base_path = './WasabiWallet_experiments/'
+    #   ./WasabiWallet_experiments/
+    #   ./WasabiWallet_experiments/grid_paretosum-static-5utxo/
+    #                          /2024-02-18_16-17_paretosum-static-10-5utxo
+    #                               /data/{btc-node, wasabi-backend, wasabi-client-000, wasabi-client-001...}
+    #                          /2024-02-18_18-16_paretosum-static-10-5utxo
+    #                               /data/{btc-node, wasabi-backend, wasabi-client-000, wasabi-client-001...}
+    #                          ...
+    #                          /2024-02-29_05-48_pareto-static-100-5utxo
+    #                               /data/{btc-node, wasabi-backend, wasabi-client-000, wasabi-client-001...}
+    #                          ...
+    #   ./WasabiWallet_experiments/grid_paretosum-static-30utxo/
+    #                          /2024-01-25_11-43_paretosum-static-10-30utxo
+    #                               /data/{btc-node, wasabi-backend, wasabi-client-000, wasabi-client-001...}
+    #                          /2024-01-25_13-42_paretosum-static-10-30utxo
+    #                               /data/{btc-node, wasabi-backend, wasabi-client-000, wasabi-client-001...}
+    #                          ...
+    #                          /2024-01-26_14-59_paretosum-static-250-30utxo
+    #                               /data/{btc-node, wasabi-backend, wasabi-client-000, wasabi-client-001...}
+    #                          ...
+    # The computed analysis (jsons, data, graphs...) are stored into each experiment folder
+    # The all partial analysis results are output into super_base_path
 
     #super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol13\\'
     #target_base_paths = [os.path.join(super_base_path, '300blocks-lognorm-as25')]
     #target_base_paths = [os.path.join(super_base_path, '300blocks-lognorm-as5')]
     #target_base_paths = [os.path.join(super_base_path, '300blocks-lognorm-as50')]
     #target_base_paths = [os.path.join(super_base_path, 'emu_validation')]
-
 
     super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\'
     target_base_paths = [os.path.join(super_base_path, '!unproccesed')]
@@ -3540,7 +3402,7 @@ if __name__ == "__main__":
     # SAVE_BASE_FIGS = False  # Force no saving of figs
     all_results = {}
     for base_path in target_base_paths:
-        # Analyze one batch of experiments under 'base_path'
+        # Analyze all experiments under 'target_base_paths' as one batch
         results = process_multiple_experiments(base_path, SAVE_BASE_FIGS, NUM_THREADS)
         analyze_multiple_experiments(results, base_path)
         all_results.update(results)
@@ -3549,7 +3411,7 @@ if __name__ == "__main__":
     SM.print_summary()
     print('### END SUMMARY #########################')
     backup_log_files(target_base_paths[0])
-    exit(42)
+    exit(0)
 
     #
     ##Generate aggregated visualizations

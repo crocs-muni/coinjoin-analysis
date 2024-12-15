@@ -44,5 +44,6 @@ class GlobalConstants():
         else:
             print('WARNING: {} not found'.format(self.config_path))
 
+
 GLOBAL_CONSTANTS = GlobalConstants()
 
