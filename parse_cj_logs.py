@@ -33,6 +33,7 @@ import cj_analysis as als
 from cj_analysis import MIX_PROTOCOL
 from cj_analysis import CJ_LOG_TYPES
 import logging
+import argparse
 
 # Configure the logging module
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -68,6 +69,15 @@ als.SM = SM
 
 def float_equals(a, b, tolerance=1e-9):
     return abs(a - b) < tolerance
+
+
+def longest_common_prefix(paths):
+    if not paths:
+        return ""
+    # Use os.path.commonprefix for the initial prefix
+    prefix = os.path.commonprefix(paths)
+    # Ensure prefix aligns with a directory boundary
+    return prefix if prefix.endswith(os.sep) else os.path.dirname(prefix)
 
 
 # Define a custom JSON encoder that handles Decimal objects
@@ -3212,15 +3222,46 @@ def backup_log_files(target_path: str):
         logging.warning(f'Log file {log_file_path} does not found, not copied.')
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-a", "--action",
+                        help="Action to performed. collect_local=from running instances; "
+                             "collect_docker=from docker dumps; analyze_only=only analysis without extraction",
+                        choices=["collect_local", "collect_docker", "analyze_only"],
+                        action="store",
+                        required=False)
+    parser.add_argument("-tp", "--target-path",
+                        help="Target path with experiment(s) to be processed",
+                        action="append", metavar="file",
+                        required=False)
+    parser.add_argument("-lc", "--load-config",
+                        help="Load all configuration from file",
+                        action="store", metavar="file",
+                        required=False)
+    return parser.parse_args()
+
+
 class AnalysisType(Enum):
+    # Extracts all information from local running instances of Wallet Wasabi and Wasabi coordinator
     COLLECT_COINJOIN_DATA_LOCAL = 1
-    COMPUTE_COINJOIN_TXINFO_REMOTE = 2
+
+    # Extracts all information from folders with serialized information extracted form multiple docker runners
+    COLLECT_COINJOIN_DATA_LOCAL_DOCKER = 2
+
+    # Run only analysis part, skip time-consuming extraction (files with information are expected to be already present)
     ANALYZE_COINJOIN_DATA_LOCAL = 3
-    COLLECT_COINJOIN_DATA_LOCAL_DOCKER = 4
-    COLLECT_COINJOIN_DATA_REAL = 5
+
+    # (NOT IMPLEMENTED YET) Extracts all information from real coinjoins from Dumpling
+    COLLECT_COINJOIN_DATA_REAL = 4
+
+    # Run only time-consuming transaction entropy analysis from pre-retrieved transactions
+    COMPUTE_COINJOIN_TXINFO_REMOTE = 5
 
 
 if __name__ == "__main__":
+    # parse arguments, overwrite default settings if required
+    args = parse_arguments()
+
     PROFILE_PERFORMANCE = False
 
     # Analysis type
@@ -3228,6 +3269,14 @@ if __name__ == "__main__":
     cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
     #cfg = AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL
     #cfg = AnalysisType.COMPUTE_COINJOIN_TXINFO_REMOTE
+
+    if args.action is not None:
+        if args.action == "collect_local":
+            cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL
+        if args.action == "collect_docker":
+            cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
+        if args.action == "analyze_only":
+            cfg = AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL
 
     SM.print('Analysis configuration: {}'.format(cfg.name))
 
@@ -3284,7 +3333,6 @@ if __name__ == "__main__":
         target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
     elif cfg == AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL:
         # Just recompute analysis
-
         LOAD_TXINFO_FROM_DOCKER_FILES = False
         LOAD_TXINFO_FROM_FILE = True
         LOAD_WALLETS_INFO_VIA_RPC = False
@@ -3358,35 +3406,33 @@ if __name__ == "__main__":
             else:
                 print(f'ERROR: Path {target_base_path} does not exist')
 
-    # Aggregated analysis of multiple folders with experiments
+    #
+    # Aggregated analysis of multiple folders with experiments.
+    #
     # Assumptions:
-    #   - given target_base_paths contains one or more paths (target_base_path)
-    #   - each target_base_path contains one or more experiments with the partially same base setting
-    #     (repetitions or change of one parameter)
-    #   - each experiment contains 'data' subfolder with all data collected from the experiment execution
+    #   - given target_base_paths contains one or more paths (target_base_path_x)
+    #      all target_base_path_x are manually inserted into target_base_paths or provided using cli (-tp)
+    #   - each target_base_path_x contains one or more experiments with partially same base setting
+    #     (repetitions or change of one parameter). These sub-folder
+    #     - each experiment contains 'data' subfolder with all data collected from the experiment execution
     # Example:
-    #   - super_base_path = './WasabiWallet_experiments/'
-    #   ./WasabiWallet_experiments/
-    #   ./WasabiWallet_experiments/grid_paretosum-static-5utxo/
-    #                          /2024-02-18_16-17_paretosum-static-10-5utxo
-    #                               /data/{btc-node, wasabi-backend, wasabi-client-000, wasabi-client-001...}
-    #                          /2024-02-18_18-16_paretosum-static-10-5utxo
-    #                               /data/{btc-node, wasabi-backend, wasabi-client-000, wasabi-client-001...}
-    #                          ...
-    #                          /2024-02-29_05-48_pareto-static-100-5utxo
-    #                               /data/{btc-node, wasabi-backend, wasabi-client-000, wasabi-client-001...}
-    #                          ...
-    #   ./WasabiWallet_experiments/grid_paretosum-static-30utxo/
-    #                          /2024-01-25_11-43_paretosum-static-10-30utxo
-    #                               /data/{btc-node, wasabi-backend, wasabi-client-000, wasabi-client-001...}
-    #                          /2024-01-25_13-42_paretosum-static-10-30utxo
-    #                               /data/{btc-node, wasabi-backend, wasabi-client-000, wasabi-client-001...}
-    #                          ...
-    #                          /2024-01-26_14-59_paretosum-static-250-30utxo
-    #                               /data/{btc-node, wasabi-backend, wasabi-client-000, wasabi-client-001...}
-    #                          ...
-    # The computed analysis (jsons, data, graphs...) are stored into each experiment folder
-    # The all partial analysis results are output into super_base_path
+    #   - target_base_paths[] => target_base_path_1, target_base_path_2 ...
+    #   - all subfolders of target_base_path (with sub-folder /data/) are assumed to contain experiments
+    #   super_base_path
+    #       /target_base_path_1
+    #           /exp_1/data/{btc-node,wasabi-backend,wasabi-client-000...}
+    #           /exp_2/data/{...}
+    #           ...
+    #           /exp_n/data/{...}
+    #       /target_base_path_2
+    #           /exp_n+1/data/{...}
+    #       ...
+    #       /target_base_path_n
+    # The computed analysis (jsons, data, graphs...) are stored into each experiment's folder (e.g. /exp_1/
+    # The all partial analysis results from given target_base_path_x are output into /target_base_path_x/
+    # The all partial analysis results from all target_base_paths are output into /super_base_path/
+    #
+    # NOTE: Can be used to analyse single experiment by simply placing it into folder /super_base_path/X/exp_1
 
     #super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol13\\'
     #target_base_paths = [os.path.join(super_base_path, '300blocks-lognorm-as25')]
@@ -3396,6 +3442,11 @@ if __name__ == "__main__":
 
     super_base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\'
     target_base_paths = [os.path.join(super_base_path, '!unproccesed')]
+
+    # If provided, use paths from cli arguments instead
+    if args.target_path is not None:
+        super_base_path = longest_common_prefix(args.target_path)
+        target_base_paths = [path for path in args.target_path]
 
     NUM_THREADS = 1  # if -1, then every experiment has own thread
     SAVE_BASE_FIGS = True if NUM_THREADS == 1 else False
@@ -3414,16 +3465,14 @@ if __name__ == "__main__":
     exit(0)
 
     #
-    ##Generate aggregated visualizations
+    # Generate aggregated visualizations
     # generate_aggregated_visualization(target_base_paths)
     # exit(42)
 
-
+    # Extraction of inputs and outputs from all wallets
     # extract_wallets_inouts(os.path.join(super_base_path, '!wallet_num_model'), target_base_paths)
     # exit(42)
     #
-    # analyze_wallet_usage_frequency(super_base_path, target_base_paths)
-    # exit(42)
 
     # Analyze usage frequency of all wallets
     analyze_wallet_usage_frequency(super_base_path, target_base_paths)
@@ -3431,15 +3480,13 @@ if __name__ == "__main__":
     # Analyze all batches together
     analyze_multiple_experiments(all_results, super_base_path)
 
-    # # Generate aggregated visualizations
+    # Generate aggregated visualizations
     generate_aggregated_visualization(target_base_paths)
 
     # TODO: Distribution of number of inputs per one wallet in given coinjoin -- dependency on other parameters.
     #  Crucial for establishing likely number of wallets participating in single coinjoin.
     # TODO: Add annotation of experiment name to aggregated graphs + possibility to change colors of lines
     # TODO: Add numeric annotation to bar graphs with exact numbers
-    # TODO: Important: think what it means that we have always most of the inputs in remixed, not fresh
-    # TODO: Analyze if number of fresh/remixed inputs changes over the time
     # TODO: Add computation of time required to finish given analysis => summary for easy identification of analyses to skip
     # TODO: Sort distributions as x, xsum, lognormal (coinjoin_tx_info_stats.json.pdf)
     # TODO: Catch exceptions, move folder with crash into !bad folder and continue
