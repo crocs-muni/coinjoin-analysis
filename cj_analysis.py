@@ -904,7 +904,10 @@ def extract_wallets_info(data):
                 coin['is_spent_by_cjtx'] = False if cjtxid not in txs_data.keys() else txs_data[cjtxid].get('is_cjtx', False)
                 coins[target_addr] = coin
             else:
-                assert coins[target_addr]['amount'] == txs_data[cjtxid]['inputs'][index]['value'], f'Inconsistent value found for {target_addr}'
+                if coins[target_addr]['amount'] != txs_data[cjtxid]['inputs'][index]['value']:
+                    print(f'Number of items in coins map: {len(coins)}')
+                    print(f'{coins[target_addr]}')
+                    assert coins[target_addr]['amount'] == txs_data[cjtxid]['inputs'][index]['value'], f'Inconsistent value found for {cjtxid}/{index}/{target_addr} {coins[target_addr]['amount']} != {txs_data[cjtxid]['inputs'][index]['value']}'
                 # We have found the coin, update destroy_time
                 coins[target_addr]['destroy_time'] = txs_data[cjtxid]['broadcast_time']
                 if 'spentBy' not in coins[target_addr].keys():
