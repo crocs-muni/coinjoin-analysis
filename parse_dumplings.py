@@ -6,6 +6,7 @@ import random
 import shutil
 from datetime import datetime, timedelta
 from collections import defaultdict, Counter
+from enum import Enum
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -19,10 +20,10 @@ import cj_analysis as als
 import mpl_toolkits.axisartist as AA
 from matplotlib import pyplot as plt
 from matplotlib.ticker import MaxNLocator
-import orjson
+import argparse
 
 # Configure the logging module
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger_to_disable = logging.getLogger("mathplotlib")
 logger_to_disable.setLevel(logging.WARNING)
 
@@ -43,6 +44,7 @@ SLOT_WIDTH_SECONDS = 3600   # hour
 
 #LEGEND_FONT_SIZE = 'small'
 LEGEND_FONT_SIZE = 'medium'
+
 
 class ClusterIndex:
     NEW_CLUSTER_INDEX = 0
@@ -3051,23 +3053,45 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
         print(f'# Total non-small coordinators (min={MIN_COORD_CJTXS}): {len(coord_txs_filtered)}')
 
 
-if __name__ == "__main__":
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    # --cjtype ww2 --action process_dumplings --action detect_false_positives --target-path c:\!blockchains\CoinJoin\Dumplings_Stats_20241225\
+    parser.add_argument("-t", "--cjtype",
+                        help="Type of coinjoin. 'ww1'...Wasabi 1.x; 'ww2'...Wasabi 2.x; 'sw'...Samourai Whirlpool",
+                        choices=["ww1", "ww2", "sw"],
+                        action="store", metavar="TYPE",
+                        required=False)
+    parser.add_argument("-a", "--action",
+                        help="Action to performed. Can be multiple. 'process_dumplings'...extract data from Dumpling files; "
+                             "'detect_false_positives'...heuristic detection of false cjtxs; 'plot_remixes'...plot coinjoins",
+                        choices=["process_dumplings", "detect_false_positives", "plot_coinjoins"],
+                        action="append", metavar="ACTION",
+                        required=False)
+    parser.add_argument("-tp", "--target-path",
+                        help="Target path with experiment(s) to be processed. Can be multiple.",
+                        action="store", metavar="PATH",
+                        required=False)
+    parser.add_argument("-lc", "--load-config",
+                        help="Load all configuration from file",
+                        action="store", metavar="FILE",
+                        required=False)
+
+    parser.print_help()
+
+    return parser.parse_args()
+
+
+class CoinjoinType(Enum):
+    WW1 = 1         # Wasabi 1.x
+    WW2 = 2         # Wasabi 2.x
+    SW = 3          # Samourai Whirlpool
+
+
+class DumplingsParseOptions:
     # Limit analysis only to specific coinjoin type
-    CONSIDER_WW1 = False
-    CONSIDER_WW2 = True
-    CONSIDER_WHIRLPOOL = False
+    CJ_TYPE = CoinjoinType.WW2
 
-    # Sorting strategy for coinjoins in time.
-    # If False, coinjoins are sorted using 'broadcast_time' (which is equal to mining_time for on-chain cjtxs where we lack real broadcast time)
-    # If True, then relative ordering based on connections in graph formed by remix inputs/outputs is used
-    # BUGBUG: SORT_COINJOINS_BY_RELATIVE_ORDER prevents corrects use of CONSIDER_WW2 and CONSIDER_WW1 / CONSIDER_WHIRLPOOL at the same time
-    if CONSIDER_WW2:
-        SORT_COINJOINS_BY_RELATIVE_ORDER = True
-    else:
-        SORT_COINJOINS_BY_RELATIVE_ORDER = False
-    als.SORT_COINJOINS_BY_RELATIVE_ORDER = SORT_COINJOINS_BY_RELATIVE_ORDER
-
-    FULL_TX_SET = False
+    SORT_COINJOINS_BY_RELATIVE_ORDER = True
 
     ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
     DETECT_FALSE_POSITIVES = False
@@ -3080,7 +3104,7 @@ if __name__ == "__main__":
     ANALYSIS_PROCESS_ALL_COINJOINS = False
     ANALYSIS_PROCESS_ALL_COINJOINS_DEBUG = False
     ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS_DEBUG = False
-    ANALYSIS_INPUTS_DISTRIBUTION = False  # OK
+    ANALYSIS_INPUTS_DISTRIBUTION = False
     ANALYSIS_BURN_TIME = False
     ANALYSIS_CLUSTERS = False
     PLOT_INTERMIX_FLOWS = False
@@ -3088,22 +3112,116 @@ if __name__ == "__main__":
     ANALYSIS_REMIXRATE = True
     ANALYSIS_LIQUIDITY = False
 
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240215\\'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240417\\'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240509\\'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240605\\'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240701\\'
-    target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240802\\'
-    interval_stop_date = '2024-08-03 00:00:07.000'
-    # target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240830\\'
-    # interval_stop_date = '2024-08-30 00:00:07.000'
-    # target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20241004\\'
-    # interval_stop_date = '2024-10-05 00:00:07.000'
-    # target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20241009\\'
-    # interval_stop_date = '2024-10-10 00:00:07.000'
+    target_base_path = ''
+    interval_stop_date = '2024-10-10 00:00:07.000'  # Last date to be analyzed, e.g., 2024-10-10 00:00:07.000
 
-    target_path = os.path.join(target_base_path, 'Scanner')
-    SM.print(f'Starting analysis of {target_path}, FULL_TX_SET={FULL_TX_SET}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
+    def __init__(self):
+        self.default_values()
+
+    def set_args(self, a):
+        if a.cjtype is not None:
+            if a.cjtype == 'ww1':
+                self.CJ_TYPE = CoinjoinType.WW1
+            if a.cjtype == 'ww2':
+                self.CJ_TYPE = CoinjoinType.WW2
+            if a.cjtype == 'sw':
+                self.CJ_TYPE = CoinjoinType.SW
+
+            if self.CJ_TYPE == CoinjoinType.WW2:
+                self.SORT_COINJOINS_BY_RELATIVE_ORDER = True
+            else:
+                self.SORT_COINJOINS_BY_RELATIVE_ORDER = False
+
+        if a.action is not None:
+            for act in a.action:
+                if act == 'process_dumplings':
+                    self.ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = True
+                if act == 'detect_false_positives':
+                    self.DETECT_FALSE_POSITIVES = True
+                if act == 'plot_coinjoins':
+                    self.PLOT_REMIXES = True
+
+        if a.target_path is not None:
+            self.target_base_path = a.target_path
+
+    def default_values(self):
+        self.CJ_TYPE = CoinjoinType.WW2
+        # Sorting strategy for coinjoins in time.
+        # If False, coinjoins are sorted using 'broadcast_time'
+        #    (which is equal to mining_time for on-chain cjtxs where we lack real broadcast time)
+        # If True, then relative ordering based on connections in graph formed by remix inputs/outputs is used
+        if self.CJ_TYPE == CoinjoinType.WW2:
+            self.SORT_COINJOINS_BY_RELATIVE_ORDER = True
+        else:
+            self.SORT_COINJOINS_BY_RELATIVE_ORDER = False
+
+        self.ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
+        self.DETECT_FALSE_POSITIVES = False
+        self.PLOT_REMIXES = False
+        self.PROCESS_NOTABLE_INTERVALS = False
+        self.SPLIT_WHIRLPOOL_POOLS = False
+        self.SPLIT_WASABI2_POOLS = False
+
+        self.ANALYSIS_ADDRESS_REUSE = False
+        self.ANALYSIS_PROCESS_ALL_COINJOINS = False
+        self.ANALYSIS_PROCESS_ALL_COINJOINS_DEBUG = False
+        self.ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS_DEBUG = False
+        self.ANALYSIS_INPUTS_DISTRIBUTION = False
+        self.ANALYSIS_BURN_TIME = False
+        self.ANALYSIS_CLUSTERS = False
+        self.ANALYSIS_REMIXRATE = False
+        self.ANALYSIS_LIQUIDITY = False
+
+        self.PLOT_REMIXES_FLOWS = False
+        self.PLOT_INTERMIX_FLOWS = False
+        self.VISUALIZE_ALL_COINJOINS_INTERVALS = False
+
+        # target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240215\\'
+        # target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240417\\'
+        # target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240509\\'
+        # target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240605\\'
+        # target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240701\\'
+        # target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240802\\'
+        # interval_stop_date = '2024-08-03 00:00:07.000'
+        # target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240830\\'
+        # interval_stop_date = '2024-08-30 00:00:07.000'
+        # target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20241004\\'
+        # interval_stop_date = '2024-10-05 00:00:07.000'
+        # target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20241009\\'
+        # interval_stop_date = '2024-10-10 00:00:07.000'
+        self.target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20241225\\'
+        #self.interval_stop_date = '2024-12-26 00:00:07.000'
+        # If not set, then use current date => take all coinjoins, no limit
+        self.interval_stop_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+
+
+if __name__ == "__main__":
+    op = DumplingsParseOptions()
+    # parse arguments, overwrite default settings if required
+    args = parse_arguments()
+
+    op.set_args(args)
+
+    # op.target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20241225\\'
+    # op.interval_stop_date = '2024-12-26 00:00:07.000'
+
+    #op.CJ_TYPE = CoinjoinType.WW2
+    #op.ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = True
+    #op.DETECT_FALSE_POSITIVES = True
+    #op.PLOT_REMIXES = True
+
+    # Sorting strategy for coinjoins in time.
+    # If False, coinjoins are sorted using 'broadcast_time' (which is equal to mining_time for on-chain cjtxs where we lack real broadcast time)
+    # If True, then relative ordering based on connections in graph formed by remix inputs/outputs is used
+    # BUGBUG: SORT_COINJOINS_BY_RELATIVE_ORDER prevents corrects use of CONSIDER_WW2 and CONSIDER_WW1 / CONSIDER_WHIRLPOOL at the same time
+    # if op.CJ_TYPE == CoinjoinType.WW2:
+    #     op.SORT_COINJOINS_BY_RELATIVE_ORDER = True
+    # else:
+    #     op.SORT_COINJOINS_BY_RELATIVE_ORDER = False
+    # als.SORT_COINJOINS_BY_RELATIVE_ORDER = op.SORT_COINJOINS_BY_RELATIVE_ORDER
+
+    target_path = os.path.join(op.target_base_path, 'Scanner')
+    SM.print(f'Starting analysis of {target_path}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
 
     # BUGBUG: Very recent WW2 coinjoins are not connected previous ones, having relative dist 0 => got into first month of WW2.
     #   Fixed by not setting virtual block time too far away
@@ -3111,7 +3229,10 @@ if __name__ == "__main__":
 
     DEBUG = False
     if DEBUG:
-        wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'),
+        wasabi_detect_coordinators('wasabi2_others', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_others'))
+        exit(42)
+
+        wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool'),
                     'coinjoin_tx_info.json', False, True, None, None, False)
         exit(42)
         wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'),
@@ -3205,13 +3326,13 @@ if __name__ == "__main__":
         interval_stop_date = '2024-08-03 00:00:07.000'
         SORT_COINJOINS_BY_RELATIVE_ORDER = False
         als.SORT_COINJOINS_BY_RELATIVE_ORDER = SORT_COINJOINS_BY_RELATIVE_ORDER
-        wasabi_plot_remixes('whirlpool_100k', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
+        wasabi_plot_remixes('whirlpool_100k', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
                             False, True, None, None, False)
-        wasabi_plot_remixes('whirlpool_1M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
+        wasabi_plot_remixes('whirlpool_1M', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
                             False, True, None, None, False)
-        wasabi_plot_remixes('whirlpool_5M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
+        wasabi_plot_remixes('whirlpool_5M', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
                             False, True, None, None, False)
-        wasabi_plot_remixes('whirlpool_50M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
+        wasabi_plot_remixes('whirlpool_50M', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
                             False, True, None, None, False)
         exit(42)
         wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json',
@@ -3247,7 +3368,7 @@ if __name__ == "__main__":
                             'coinjoin_tx_info.json',
                             False, True, None, None, False)
         exit(42)
-        wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
+        wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
                             False, True, None, None, False)
         exit(42)
 
@@ -3272,10 +3393,10 @@ if __name__ == "__main__":
         exit(42)
         compute_stats('wasabi2_test', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_test'))
         exit(42)
-        wasabi_plot_remixes('whirlpool_5M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
+        wasabi_plot_remixes('whirlpool_5M', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
                             False, True, None, None, True)
         exit(42)
-        wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
+        wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
                             False, True, None, None, True)
         exit(42)
         #limits = [1000000]
@@ -3307,7 +3428,7 @@ if __name__ == "__main__":
         wasabi_plot_remixes('wasabi2__2023_12-01', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2__2023_12-01'), 'coinjoin_tx_info.json',
                             False, True, None, None, True)
         exit(42)
-        wasabi_plot_remixes('whirlpool_5M_test', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_5M_test'), 'coinjoin_tx_info.json',
+        wasabi_plot_remixes('whirlpool_5M_test', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_5M_test'), 'coinjoin_tx_info.json',
                             True, False, None, None, False)
         exit(42)
         SORT_COINJOINS_BY_RELATIVE_ORDER = False
@@ -3322,15 +3443,15 @@ if __name__ == "__main__":
                             True, False, None, None, False)
         SORT_COINJOINS_BY_RELATIVE_ORDER = False
         als.SORT_COINJOINS_BY_RELATIVE_ORDER = SORT_COINJOINS_BY_RELATIVE_ORDER
-        wasabi_plot_remixes('whirlpool_100k', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
+        wasabi_plot_remixes('whirlpool_100k', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
                             True, False, None, None, False)
-        wasabi_plot_remixes('whirlpool_1M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
+        wasabi_plot_remixes('whirlpool_1M', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
                             True, False, None, None, False)
-        wasabi_plot_remixes('whirlpool_5M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
+        wasabi_plot_remixes('whirlpool_5M', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
                             True, False, None, None, False)
-        wasabi_plot_remixes('whirlpool_50M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
+        wasabi_plot_remixes('whirlpool_50M', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
                             True, False, None, None, False)
-        wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
+        wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json',
                             True, False, None, None, False)
         target_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240701\\Scanner\\'
         wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json',
@@ -3338,10 +3459,10 @@ if __name__ == "__main__":
         exit(42)
         wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json',
                             True, False, None, None, False)
-        wasabi_plot_remixes('whirlpool_5M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
+        wasabi_plot_remixes('whirlpool_5M', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
                             True, False, None, None, False)
         exit(42)
-        wasabi_plot_remixes('whirlpool_50M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
+        wasabi_plot_remixes('whirlpool_50M', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
                             True, False, None, None, False)
         wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json',
                             True, False, None, None, False)
@@ -3444,7 +3565,7 @@ if __name__ == "__main__":
         wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', True, False)
         wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', True, True)
 
-    if PROCESS_NOTABLE_INTERVALS:
+    if op.PROCESS_NOTABLE_INTERVALS:
         def process_joint_interval(mix_origin_name, interval_name, all_data, mix_type, target_path, start_date: str,
                                    end_date: str):
             process_and_save_single_interval(interval_name, all_data, mix_type, target_path, start_date, end_date)
@@ -3455,7 +3576,7 @@ if __name__ == "__main__":
             wasabi_plot_remixes(interval_name, MIX_PROTOCOL.WASABI1, os.path.join(target_path, interval_name),
                                 'coinjoin_tx_info.json', True, False)
 
-        if CONSIDER_WW1:
+        if op.CJ_TYPE == CoinjoinType.WW1:
             target_load_path = os.path.join(target_path, 'wasabi1')
             all_data = als.load_coinjoins_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'), None, True)
 
@@ -3468,7 +3589,7 @@ if __name__ == "__main__":
             # Two inflows, subsequent remixing
             process_joint_interval('wasabi1', 'wasabi1__2022_04-05', all_data, MIX_PROTOCOL.WASABI1, target_path, '2022-04-23 00:00:07.000', '2022-05-06 23:59:59.000')
 
-        if CONSIDER_WW2:
+        if op.CJ_TYPE == CoinjoinType.WW2:
             target_load_path = os.path.join(target_path, 'wasabi2')
             all_data = als.load_coinjoins_from_file(os.path.join(target_load_path), None, True)
 
@@ -3478,11 +3599,11 @@ if __name__ == "__main__":
     #
     #
     #
-    if ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS:
-        if CONSIDER_WHIRLPOOL:
-            all_data = process_and_save_intervals_filter('whirlpool', MIX_PROTOCOL.WHIRLPOOL, target_path, '2019-04-17 01:38:07.000', interval_stop_date,
+    if op.ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS:
+        if op.CJ_TYPE == CoinjoinType.SW:
+            all_data = process_and_save_intervals_filter('whirlpool', MIX_PROTOCOL.WHIRLPOOL, target_path, '2019-04-17 01:38:07.000', op.interval_stop_date,
                                        'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt',
-                                              SAVE_BASE_FILES_JSON, False)
+                                                SAVE_BASE_FILES_JSON, False)
 
             # Split Whirlpool based on pools
             whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_100k', 100000)
@@ -3492,57 +3613,57 @@ if __name__ == "__main__":
 
             # 100k pool
             process_and_save_intervals_filter('whirlpool_100k', MIX_PROTOCOL.WHIRLPOOL, target_path,
-                                              WHIRLPOOL_FUNDING_TXS[100000]['start_date'], interval_stop_date,
+                                              WHIRLPOOL_FUNDING_TXS[100000]['start_date'], op.interval_stop_date,
                                               None, None, None, SAVE_BASE_FILES_JSON, True)
             # 1M pool
             process_and_save_intervals_filter('whirlpool_1M', MIX_PROTOCOL.WHIRLPOOL, target_path,
-                                              WHIRLPOOL_FUNDING_TXS[1000000]['start_date'], interval_stop_date,
+                                              WHIRLPOOL_FUNDING_TXS[1000000]['start_date'], op.interval_stop_date,
                                               None, None, None, SAVE_BASE_FILES_JSON, True)
             # 5M pool
             process_and_save_intervals_filter('whirlpool_5M', MIX_PROTOCOL.WHIRLPOOL, target_path,
-                                              WHIRLPOOL_FUNDING_TXS[5000000]['start_date'], interval_stop_date,
+                                              WHIRLPOOL_FUNDING_TXS[5000000]['start_date'], op.interval_stop_date,
                                               None, None, None, SAVE_BASE_FILES_JSON, True)
             # 50M pool
             process_and_save_intervals_filter('whirlpool_50M', MIX_PROTOCOL.WHIRLPOOL, target_path,
-                                              WHIRLPOOL_FUNDING_TXS[50000000]['start_date'], interval_stop_date,
+                                              WHIRLPOOL_FUNDING_TXS[50000000]['start_date'], op.interval_stop_date,
                                               None, None, None, SAVE_BASE_FILES_JSON, True)
 
-        if CONSIDER_WW1:
-            process_and_save_intervals_filter('wasabi1', MIX_PROTOCOL.WASABI1, target_path, '2018-07-19 01:38:07.000', interval_stop_date,
+        if op.CJ_TYPE == CoinjoinType.WW1:
+            process_and_save_intervals_filter('wasabi1', MIX_PROTOCOL.WASABI1, target_path, '2018-07-19 01:38:07.000', op.interval_stop_date,
                                        'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
 
-        if CONSIDER_WW2:
-            process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', interval_stop_date,
+        if op.CJ_TYPE == CoinjoinType.WW2:
+            process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', op.interval_stop_date,
                                        'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
             # WW2 needs additional treatment - detect and fix origin of WW1 inflows as friends
             data = fix_ww2_for_fdnp_ww1('wasabi2', target_path)
-            # Split zkSNACKs and post-zkSNACKs pools
-            wasabi2_extract_pools(data, target_path, interval_stop_date)
+            # Split zkSNACKs (-> wasabi2_zksnacks) and post-zkSNACKs (-> wasabi2_others) pools
+            wasabi2_extract_pools(data, target_path, op.interval_stop_date)
 
-    if VISUALIZE_ALL_COINJOINS_INTERVALS:
-        if CONSIDER_WHIRLPOOL:
-            visualize_intervals('whirlpool', target_path, '2019-04-17 01:38:07.000', interval_stop_date)
+    if op.VISUALIZE_ALL_COINJOINS_INTERVALS:
+        if op.CJ_TYPE == CoinjoinType.SW:
+            visualize_intervals('whirlpool', target_path, '2019-04-17 01:38:07.000', op.interval_stop_date)
 
-        if CONSIDER_WW1:
-            visualize_intervals('wasabi1', target_path, '2018-07-19 01:38:07.000', interval_stop_date)
+        if op.CJ_TYPE == CoinjoinType.WW1:
+            visualize_intervals('wasabi1', target_path, '2018-07-19 01:38:07.000', op.interval_stop_date)
 
-        if CONSIDER_WW2:
-            visualize_intervals('wasabi2', target_path, '2022-06-01 00:00:07.000', interval_stop_date)
+        if op.CJ_TYPE == CoinjoinType.WW2:
+            visualize_intervals('wasabi2', target_path, '2022-06-01 00:00:07.000', op.interval_stop_date)
 
-    if DETECT_FALSE_POSITIVES:
-        if CONSIDER_WW1:
+    if op.DETECT_FALSE_POSITIVES:
+        if op.CJ_TYPE == CoinjoinType.WW1:
             wasabi_detect_false(os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json')
-        if CONSIDER_WW2:
+        if op.CJ_TYPE == CoinjoinType.WW2:
             wasabi_detect_false(os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json')
-        if CONSIDER_WHIRLPOOL:
+        if op.CJ_TYPE == CoinjoinType.SW:
             wasabi_detect_false(os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json')
             wasabi_detect_false(os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json')
             wasabi_detect_false(os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json')
             wasabi_detect_false(os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json')
             wasabi_detect_false(os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json')
 
-    if SPLIT_WHIRLPOOL_POOLS:
-        if CONSIDER_WHIRLPOOL:
+    if op.SPLIT_WHIRLPOOL_POOLS:
+        if op.CJ_TYPE == CoinjoinType.SW:
             # Load txs for all pools
             target_load_path = os.path.join(target_path, 'whirlpool')
             logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
@@ -3561,34 +3682,36 @@ if __name__ == "__main__":
             print(f'Total transactions not separated into pools: {len(missed_cjtxs)}')
             print(missed_cjtxs)
 
-    if SPLIT_WASABI2_POOLS:
-        if CONSIDER_WW2:
+    if op.SPLIT_WASABI2_POOLS:
+        if op.CJ_TYPE == CoinjoinType.WW2:
             # Load txs for all pools
             target_load_path = os.path.join(target_path, 'wasabi2')
             logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
             data = als.load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
 
-            # Separate per coordinator
-            wasabi2_extract_pools(data, target_path, interval_stop_date)
+            # Separate per coordinator -> zksnacks & others
+            wasabi2_extract_pools(data, target_path, op.interval_stop_date)
+            # Detect coordinators for others (wasabi2_others)
+            wasabi_detect_coordinators('wasabi2_others', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_others'))
 
-    if PLOT_INTERMIX_FLOWS:
+    if op.PLOT_INTERMIX_FLOWS:
         analyze_mixes_flows(target_path)
 
-    if PLOT_REMIXES:
-        if CONSIDER_WW1:
+    if op.PLOT_REMIXES:
+        if op.CJ_TYPE == CoinjoinType.WW1:
             wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False)
             wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, False)
             wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True)
             wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, True)
 
-        if CONSIDER_WW2:
+        if op.CJ_TYPE == CoinjoinType.WW2:
             for mix_id in ['wasabi2_others', 'wasabi2_zksnacks', 'wasabi2']:
                 wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, False)
                 wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, True)
                 wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, True)
                 wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, False)
 
-        if CONSIDER_WHIRLPOOL:
+        if op.CJ_TYPE == CoinjoinType.SW:
             PLOT_OPTIONS = []  # (analyze_values, normalize_values, plot_multigraph)
             PLOT_OPTIONS.append((True, False, False))  # values, not normalized
             PLOT_OPTIONS.append((False, True, False))  # number of inputs, normalized
@@ -3609,55 +3732,55 @@ if __name__ == "__main__":
             wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', False, True, None, None, False)
             wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, True, None, None, False)
 
-    if PLOT_REMIXES_FLOWS:
+    if op.PLOT_REMIXES_FLOWS:
         wasabi_plot_remixes_flows('wasabi2_select',
                              os.path.join(target_path, 'wasabi2_select'),
                              'coinjoin_tx_info.json', False, True)
         exit(42)
 
-    if ANALYSIS_CLUSTERS:
-        if CONSIDER_WASABI1:
+    if op.ANALYSIS_CLUSTERS:
+        if op.CJ_TYPE == CoinjoinType.WW1:
             target_load_path = os.path.join(target_path, 'wasabi1')
-        if CONSIDER_WASABI2:
+        if op.CJ_TYPE == CoinjoinType.WW2:
             target_load_path = os.path.join(target_path, 'wasabi2')
-        if CONSIDER_WHIRLPOOL:
+        if op.CJ_TYPE == CoinjoinType.SW:
             target_load_path = os.path.join(target_path, 'whirlpool')
 
         all_data = als.load_coinjoins_from_file(target_load_path, None, True)
         all_data = analyze_postmix_spends(all_data)
         als.save_json_to_file(os.path.join(target_load_path, 'coinjoin_tx_info_clusters.json'), {'postmix': all_data['postmix'], 'coinjoins': all_data['coinjoins']})
 
-    if ANALYSIS_BURN_TIME:
-        if CONSIDER_WW1:
+    if op.ANALYSIS_BURN_TIME:
+        if op.CJ_TYPE == CoinjoinType.WW1:
             wasabi1_analyse_remixes('Wasabi1', target_path)
-        if CONSIDER_WW2:
+        if op.CJ_TYPE == CoinjoinType.WW2:
             wasabi2_analyse_remixes('Wasabi2', target_path)
-        if CONSIDER_WHIRLPOOL:
+        if op.CJ_TYPE == CoinjoinType.SW:
             whirlpool_analyse_remixes('Whirlpool', target_path)
 
     # Extract distribution of mix fresh input sizes
-    if ANALYSIS_INPUTS_DISTRIBUTION:
+    if op.ANALYSIS_INPUTS_DISTRIBUTION:
         # TODO: Compute input / output distributions from processed coinjoin_tx_info.json files including removal of false positives
         # Produce figure with distribution of diffferent pools merged
-        if CONSIDER_WW1:
+        if op.CJ_TYPE == CoinjoinType.WW1:
             process_inputs_distribution('Wasabi1', MIX_PROTOCOL.WASABI1,  target_path, 'WasabiCoinJoins.txt', True)
-        if CONSIDER_WHIRLPOOL:
+        if op.CJ_TYPE == CoinjoinType.SW:
             #process_inputs_distribution('whirlpool_tx0_test', MIX_PROTOCOL.WHIRLPOOL, target_path, 'sam_premix_test.txt', True)
             process_inputs_distribution_whirlpool('whirlpool', MIX_PROTOCOL.WHIRLPOOL,  target_path, 'SamouraiTx0s.txt', True)
-        if CONSIDER_WW2:
+        if op.CJ_TYPE == CoinjoinType.WW2:
             process_inputs_distribution('wasabi2', MIX_PROTOCOL.WASABI2,  target_path, 'Wasabi2CoinJoins.txt', True)
             #process_inputs_distribution('Wasabi2', MIX_PROTOCOL.WASABI2,  target_path, 'Wasabi2CoinJoins.txt', True)
 
     #
     # Analyze address reuse in all mixes
     #
-    if ANALYSIS_ADDRESS_REUSE:
+    if op.ANALYSIS_ADDRESS_REUSE:
         analyze_address_reuse(target_path)
 
-    if ANALYSIS_REMIXRATE:
-        print_remix_stats(target_base_path)
+    if op.ANALYSIS_REMIXRATE:
+        print_remix_stats(op.target_base_path)
 
-    if ANALYSIS_LIQUIDITY:
+    if op.ANALYSIS_LIQUIDITY:
         print_liquidity_summary_all(target_path)
 
     # TODO: Analyze difference of unmoved and dynamic liquidity for Whirlpool between 2024-04-24 and 2024-08-24 (impact of knowledge of whirlpool seizure). Show last 1 year.
