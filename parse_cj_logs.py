@@ -1,4 +1,3 @@
-import copy
 import csv
 import math
 import random
@@ -8,7 +7,6 @@ import subprocess
 import json
 import sys
 import wcli
-from itertools import zip_longest
 from graphviz import Digraph
 import numpy as np
 import matplotlib
@@ -27,8 +25,8 @@ import jsonpickle
 from multiprocessing.pool import ThreadPool, Pool
 from tqdm import tqdm
 import anonymity_score
-import bitcoinlib.transactions
-from bitcoinlib.transactions import Transaction
+# import bitcoinlib.transactions
+# from bitcoinlib.transactions import Transaction
 import cj_analysis as als
 from cj_analysis import MIX_PROTOCOL
 from cj_analysis import CJ_LOG_TYPES
@@ -41,7 +39,7 @@ logger_to_disable = logging.getLogger("mathplotlib")
 logger_to_disable.setLevel(logging.WARNING)
 
 BTC_CLI_PATH = 'C:\\bitcoin-25.0\\bin\\bitcoin-cli'
-WASABIWALLET_DATA_DIR = 'c:\\Users\\xsvenda\\AppData\\Roaming'
+WASABIWALLET_DATA_DIR = ''
 TX_AD_CUT_LEN = 16  # length of displayed address or txid
 WALLET_COLORS = {}
 UNKNOWN_WALLET_STRING = 'UNKNOWN'
@@ -3225,18 +3223,18 @@ def backup_log_files(target_path: str):
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("-a", "--action",
-                        help="Action to performed. collect_local=from running instances; "
-                             "collect_docker=from docker dumps; analyze_only=only analysis without extraction",
+                        help="Action to performed. collect_local...from running instances; "
+                             "collect_docker...from docker dumps; analyze_only...only analysis without extraction",
                         choices=["collect_local", "collect_docker", "analyze_only"],
                         action="store",
                         required=False)
     parser.add_argument("-tp", "--target-path",
-                        help="Target path with experiment(s) to be processed",
-                        action="append", metavar="file",
+                        help="Target path with experiment(s) to be processed. Can be repeated.",
+                        action="append", metavar="PATH",
                         required=False)
     parser.add_argument("-lc", "--load-config",
                         help="Load all configuration from file",
-                        action="store", metavar="file",
+                        action="store", metavar="FILE",
                         required=False)
     return parser.parse_args()
 
@@ -3314,8 +3312,6 @@ if __name__ == "__main__":
         GENERATE_COINJOIN_GRAPH = False
         # If True, final analytics are saved into base coinjoin_tx_info.json file
         SAVE_ANALYTICS_TO_FILE = True
-        # Base start path with data for processing (WalletWasabi and other folders)
-        target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
     elif cfg == AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER:
         # Extract info from static files previously created and collected from dockerized instances
         LOAD_TXINFO_FROM_DOCKER_FILES = True
@@ -3330,7 +3326,6 @@ if __name__ == "__main__":
         PARALLELIZE_COMPUTE_COINJOIN_STATS = False
         GENERATE_COINJOIN_GRAPH = False
         SAVE_ANALYTICS_TO_FILE = True
-        target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
     elif cfg == AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL:
         # Just recompute analysis
         LOAD_TXINFO_FROM_DOCKER_FILES = False
@@ -3349,8 +3344,6 @@ if __name__ == "__main__":
 
         GENERATE_COINJOIN_GRAPH = True
         SAVE_ANALYTICS_TO_FILE = True
-
-        target_base_path = 'c:\\Users\\xsvenda\\AppData\\Roaming\\'
     elif cfg == AnalysisType.COMPUTE_COINJOIN_TXINFO_REMOTE:
         # Compute only time-consuming transaction entropy analysis from pre-retrieved transactions
 
@@ -3372,7 +3365,6 @@ if __name__ == "__main__":
 
         GENERATE_COINJOIN_GRAPH = False
 
-        target_base_path = '/home/xsvenda/coinjoin/'
 
     GENERATE_COINJOIN_GRAPH = False
     GENERATE_COINJOIN_GRAPH_BLIND = False
