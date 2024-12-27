@@ -2030,13 +2030,15 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
         files = [""] if os.path.exists(target_path) else print(
             f'Path {target_path} does not exist')
 
+    REUSE_TRESHOLD = 0.7
     print(f'Going to process the following subfolders of {target_path}: {files}')
     # Load false positives
     fp_file = os.path.join(target_path, 'false_cjtxs.json')
     false_cjtxs = als.load_json_from_file(fp_file)
 
-    no_remix_all = {'inputs': [], 'outputs': [], 'both': [],
-                    'inputs_address_reuse': [], 'outputs_address_reuse': [], 'both_reuse': []}
+    no_remix_all = {'inputs_noremix': [], 'outputs_noremix': [], 'both_noremix': [],
+                    f'inputs_address_reuse_{REUSE_TRESHOLD}': [], f'outputs_address_reuse_{REUSE_TRESHOLD}': [],
+                    f'both_reuse_{REUSE_TRESHOLD}': []}
     for dir_name in files:
         target_base_path = os.path.join(target_path, dir_name)
         tx_json_file = os.path.join(target_base_path, f'{tx_file}')
@@ -2054,7 +2056,7 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
                 no_remix_all[key].extend(no_remix[key])
 
             # Detect transactions with too many address reuse
-            address_reuse = als.detect_address_reuse_txs(data['coinjoins'], 0.7)
+            address_reuse = als.detect_address_reuse_txs(data['coinjoins'], REUSE_TRESHOLD)
             for key in address_reuse.keys():
                 no_remix_all[key].extend(address_reuse[key])
 
