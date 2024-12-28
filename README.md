@@ -8,6 +8,8 @@ git clone https://github.com/crocs-muni/coinjoin-analysis.git
 pip install -r requirements.txt
 ```
 
+---
+
 ## Usage: Parsing Wallet Wasabi 2.x emulations (parse_cj_logs.py)
 The scenario assumes previous execution of Wasabi 2.x coinjoins (containerized coordinator and clients) using [EmuCoinJoin](https://github.com/crocs-muni/coinjoin-emulator) orchestration tool. After execution, relevant files from containers are serialized as subfolders into ```/path_to_experiments/experiment_1/data/``` folder with the following structure. 
 ```
@@ -42,12 +44,12 @@ If the analysis finishes successfully, the following files are created:
   * ```coinjoin_stats.3.pdf, coinjoin_stats.3.pdf``` ... multiple graphs capturing various analysis results obtained from coinjoin data. 
   * ```coinjoin_tx_info_stats.json``` ... captures information about participation of every wallet in given coinjoin transaction.
   
-### Example results
+### 3. Example results
 ![image](https://github.com/user-attachments/assets/2e5406bc-b8f8-4725-8ff9-6484e805f682)
 
 ![image](https://github.com/user-attachments/assets/5325a4ae-468b-4b52-b58f-95d521c15b1c)
 
-
+---
 
 ## Usage: Parsing, analyzing and visualizing mainnet coinjoins from Dumplings (parse_dumplings.py)
 This scenario processes data from real coinjoins (Wasabi 1.x, Wasabi 2.x, Whirlpool and others) stored on Bitcoin mainnet, detected and extracted using [Dumplings tool](https://github.com/nopara73/dumplings). 
@@ -67,7 +69,7 @@ After Dumplings tool execution, the relevant files with coinjoin premix, mix and
 ### 2. Parsing of Dumplings results into intermediate coinjoin_tx_info.json (```--action process_dumplings```)
 To parse coinjoin information from Dumplings files (step 1.) into unified json format (```coinjoin_tx_info.json```) used later for analysis, run:
 ```
-parse_dumplings.py --cjtype ww2 --action process_dumplings --action detect_false_positives --target-path path_to_results
+parse_dumplings.py --cjtype ww2 --action process_dumplings --target-path path_to_results
 ```
 The example is given for Wasabi 2.x coinjoins (```--cjtype ww2```). Use ```--cjtype ww1``` for Wasabi 1.x or ```--cjtype sw``` for Samourai Whirlpool instead. 
 
@@ -91,23 +93,43 @@ The detection in each iteration utilizes already known false positives loaded fr
 
 To perform one iteration false positives detection (repeat until no new false positives are found):
 
-1. Run detection (this command utilize already known false positives from ```false_cjtxs.json``` file):
+#### 3.1. Run detection (this command utilize already known false positives from ```false_cjtxs.json``` file):
 ```
 parse_dumplings.py --cjtype ww2 --action detect_false_positives --target-path path_to_results
 ```
-2. Inspect created file ```no_remix_txs.json``` containing *potential* false positives. 
+#### 3.2. Inspect created file ```no_remix_txs.json``` containing *potential* false positives. 
   - 'both_reuse_0_70' txs are almost certainly false positives (too many address reused, default threshold is 70% of reused addresses, normal coinjoins are having almost all addresses freshly generated). Put them all into false_cjtxs.json and rerun.
   - 'both_noremix' txs are transactions with no input and no output conected to other known coinjoin transaction. Very likely false positive, but needs to be analyzed one by one to confirm. 
   - txs left in "inputs_noremix" after all are typically the starting cjtx of some pool (no previous coinjoin was executed).
   - txs left in "outputs_noremix" are typically the last cjtx of some pool (either pool closed and no longer produce transactions, or is last mined cjtx(s) wrt Dumpling sync date)
   - after false positives are confirmed in mempool.space, put them into false_cjtxs.json 
 
-3. Repeat whole process again (=> smaller no_remix_txs.json). 
+#### 3.3. Repeat whole process again (=> smaller no_remix_txs.json). 
   - the typical stop point is when "both", "inputs_address_reuse", "outputs_address_reuse" and "both_reuse" are empty
   
 Once finished (no new false positives detected), copy ```false_cjtxs.json``` into other folders if multiple pools of the same coinjoin protocol exists (e.g., wasabi2, wasabi2_others, wasabi2_zksnacks)
 
 Note, that false positives are *not* directly removed from ```coinjoin_tx_info.json```. Instead, they are filtered after loading based on the content of ```false_cjtxs.json``` file. As a result, only modification of ```false_cjtxs.json``` is required without change of (large) base files like ```coinjoin_tx_info.json``` and can be quickly recomputed.
 
-### Example results
+### 4. Analyze and plot results (```--action plot_coinjoins```)
+To analyze and plot various analysis graphs from processed coinjoins, run:
+```
+parse_dumplings.py --cjtype ww2 --action plot_coinjoins --target-path path_to_results
+```
+This command generates several files with analysis and visualization of executed coinjoins. For visualizations, both png and pdf file formats are generated - use *.pdf where necessary as not all details may be visible in larger *.png files. 
+
+The files are named using the following convention: 
+  - ```_values_``` means visualization of values of coinjoin inputs  
+  - ```_nums_``` means visualization of number of coinjoin inputs  
+  - ```_norm_``` means normalization of values before analysis  
+  - ```_notnorm_``` means no normalization is performed before analysis  
+
+The following files are generated:
+  - ```*_remixrate_[values/nums]_[norm/notnorm].json``` cointains remix rate 
+  - ```*_input_types_values_notnorm.pdf```
+
+
+#### Example results
 FIXME
+
+---
