@@ -84,21 +84,26 @@ Note that based on the coinjoin protocol analyzed, the name of some files may di
 ### 3. Detect and filter false positives (```--action detect_false_positives```)
 The Dumplings heuristic coinjoin detection algorithm is not flawless and occasionally selects also transaction, which looks like a coinjoin, but is not. We therefore apply another pass of heuristics to detected like false positives. This step is iterative and requires human interaction to confirm the potential false positives. 
 
+The detection in each iteration utilizes already known false positives loaded from ```false_cjtxs.json``` file. You may download pre-prepared files for different coinjoin protocols already manually filtered by us here (file commit date corresponds approximately to ):
+  - Wasabi 1.x: [false_cjtxs.json](https://github.com/crocs-muni/coinjoin-analysis/blob/main/data/wasabi1/false_cjtxs.json)  (last coinjoin 2024-05-30)
+  - Wasabi 2.x: [false_cjtxs.json](https://github.com/crocs-muni/coinjoin-analysis/blob/main/data/wasabi2/false_cjtxs.json)  (new coinjoins still created, needs update)
+  - Whirlpool: [false_cjtxs.json](https://github.com/crocs-muni/coinjoin-analysis/blob/main/data/whirlpool/false_cjtxs.json) (last coinjoin 2024-04-25, empty file, no false positives by Dumplings)
+
 To perform one iteration false positives detection (repeat until no new false positives are found):
 
 1. Run detection (this command utilize already known false positives from ```false_cjtxs.json``` file):
 ```
 parse_dumplings.py --cjtype ww2 --action detect_false_positives --target-path path_to_results
 ```
-2. Inspected created file ```no_remix_txs.json``` with *potential* false positives. 
+2. Inspect created file ```no_remix_txs.json``` containing *potential* false positives. 
+  - 'both_reuse_0_70' txs are almost certainly false positives (too many address reused, default threshold is 70% of reused addresses, normal coinjoins are having almost all addresses freshly generated). Put them all into false_cjtxs.json and rerun.
+  - 'both_noremix' txs are transactions with no input and no output conected to other known coinjoin transaction. Very likely false positive, but needs to be analyzed one by one to confirm. 
+  - txs left in "inputs_noremix" after all are typically the starting cjtx of some pool (no previous coinjoin was executed).
+  - txs left in "outputs_noremix" are typically the last cjtx of some pool (either pool closed and no longer produce transactions, or is last mined cjtx(s) wrt Dumpling sync date)
   - after false positives are confirmed in mempool.space, put them into false_cjtxs.json 
-  - 'both_reuse' txs are almost certainly false positives (too many address reuse, default 0.7)
-  - 'both' analyze one by one, confirm
-  - the typical stop point is when "both", "inputs_address_reuse", "outputs_address_reuse" and "both_reuse" are empty
-  - txs left in "inputs" are typically the starting cjtx of some pool
-  - txs left in "outputs" are typically the last cjtx of some pool (either pool closed or last mined cjtxs)
 
 3. Repeat whole process again (=> smaller no_remix_txs.json). 
+  - the typical stop point is when "both", "inputs_address_reuse", "outputs_address_reuse" and "both_reuse" are empty
   
 Once finished (no new false positives detected), copy ```false_cjtxs.json``` into other folders if multiple pools of the same coinjoin protocol exists (e.g., wasabi2, wasabi2_others, wasabi2_zksnacks)
 
