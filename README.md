@@ -111,17 +111,11 @@ The following files are generated:
 Vizualized liquidity changes in Wasabi 1.x, Wasabi 2.x and Whirlpool coinjoins 
 ![image](https://github.com/user-attachments/assets/33af36a6-8650-47dc-b92a-f5c611962b72)
 
-Value of Wasabi 2.x coinjoin inputs during December 2023: 
-![image](https://github.com/user-attachments/assets/9d327604-b0e5-4c60-86c0-c6e04f01b694)
+Value of Wasabi 2.x coinjoin inputs during (March-August 2023): 
+![image](https://github.com/user-attachments/assets/2a79e7ca-8a81-42c0-9c5e-3296132893c1)
 
-Value of Wasabi 2.x coinjoin inputs during December 2023 (normalized): 
-![image](https://github.com/user-attachments/assets/2364a7ce-e45b-48ac-825c-aeb755a65dfd)
-
-Number of Wasabi 2.x coinjoin inputs during first month of operation: 
-![image](https://github.com/user-attachments/assets/6362d74f-7c5a-4020-9e85-0c41e991c263)
-
-Number of Wasabi 2.x coinjoin inputs during first month of operation (normalized): 
-![image](https://github.com/user-attachments/assets/a18c9d91-e416-48e3-bb7c-e39883bc6c5b)
+Normalized ratio of different input types of Wasabi 2.x coinjoin inputs during (June-November 2023): 
+![image](https://github.com/user-attachments/assets/3a6c69b8-b850-4176-973b-35422f6a111b)
 
 Value of Wasabi 2.x coinjoins for post-zkSNACKS coordinators (June-December 2024): 
 ![image](https://github.com/user-attachments/assets/69ebb029-83f0-493c-bbb7-11b9b86fd746)
