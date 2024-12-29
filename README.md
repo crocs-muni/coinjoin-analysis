@@ -8,10 +8,29 @@ git clone https://github.com/crocs-muni/coinjoin-analysis.git
 pip install -r requirements.txt
 ```
 
+## Supported operations
+
+1. [Process Wallet Wasabi 2.x emulations from EmuCoinJoin (```parse_cj_logs.py```)](#ecj-process)
+    1. [Execute EmuCoinJoin emulator](#run-ecj)
+    1. [Extract coinjoin information from original raw files (```--action collect_docker```)](#ecj-extract)
+    1. [Re-run analysis from alreday extracted coinjoins (```--action analyze_only```)](#ecj-rerun)
+    1. [Example results](#ecj-examples)
+2. [Process mainnet coinjoins collected by Dumplings (```parse_dumplings.py```)](#process-dumplings)
+    1. [Execute Dumplings tool](#run-dumplings)
+    1. [Parse Dumplings results into intermediate coinjoin_tx_info.json (```--action process_dumplings```)](#process-dumplings)
+    1. [Detect and filter false positives (```--action detect_false_positives```)](#detect-false-positives)
+    1. [Analyze and plot results (```--action plot_coinjoins```)](#plot-coinjoins)
+    1. [Example results](#dumplings-examples)
 ---
 
-## Usage: Parsing Wallet Wasabi 2.x emulations (parse_cj_logs.py)
-The scenario assumes previous execution of Wasabi 2.x coinjoins (containerized coordinator and clients) using [EmuCoinJoin](https://github.com/crocs-muni/coinjoin-emulator) orchestration tool. After execution, relevant files from containers are serialized as subfolders into ```/path_to_experiments/experiment_1/data/``` folder with the following structure. 
+<a id="ecj-process"></a>
+## Usage: Parsing Wallet Wasabi 2.x emulations from EmuCoinJoin (```parse_cj_logs.py```)
+The scenario assumes previous execution of Wasabi 2.x coinjoins (containerized coordinator and clients) using [EmuCoinJoin](https://github.com/crocs-muni/coinjoin-emulator) orchestration tool. 
+
+<a id="run-ecj"></a>
+### 1. Execute EmuCoinJoin emulator
+See [EmuCoinJoin](https://github.com/crocs-muni/coinjoin-emulator) for detailed setup and run of the tool.
+After EmuCoinJoin execution, relevant files from containers are serialized as subfolders into ```/path_to_experiments/experiment_1/data/``` folder with the following structure. 
 ```
   ..
   btc-node           (bitcoin core, regtest blocks)
@@ -23,7 +42,8 @@ The scenario assumes previous execution of Wasabi 2.x coinjoins (containerized c
 ```
 Note, that multiple experiments can be stored inside ```/path_to_experiments/``` path. All found folders are checked for ```/data/``` subfolder and if found, the experiment is processed.
 
-### 1. Extraction of coinjoin informaton from original raw files 
+<a id="ecj-extract"></a>
+### 2. Extract coinjoin information from original raw files (```--action collect_docker```)
 To extract all executed coinjoins into unified json format and perform analysis, run:
 ```
 parse_cj_logs.py --action collect_docker --target-path path_to_experiments
@@ -34,27 +54,31 @@ The extraction process creates the following files:
   * ```wallets_coins.json``` ... information about every output created during execution, mapped to its coinjoin.
   * ```wallets_info.json``` ... information about every address controlled by a given wallet. 
 
-### 2. Re-running analysis from alreday extracted coinjoins 
-The coinjoin extraction part is time consuming. If new analysis methods are added or uodated, only the anlaysis part can be re-run. To execute again only analysis (extraction must be already done with files like ```coinjoin_tx_info.json``` already created), run:
+<a id="ecj-rerun"></a>
+### 3. Re-run analysis from already extracted coinjoins (```--action analyze_only```)
+The coinjoin extraction part is time consuming. If new analysis methods are added or udated, only the anlaysis part can be re-run. To execute again only analysis (extraction must be already done with files like ```coinjoin_tx_info.json``` already created), run:
 ```
-parse_cj_logs.py --action collect_docker --target-path path_to_experiments
+parse_cj_logs.py --action analyze_only --target-path path_to_experiments
 ```
 
 If the analysis finishes successfully, the following files are created:
   * ```coinjoin_stats.3.pdf, coinjoin_stats.3.pdf``` ... multiple graphs capturing various analysis results obtained from coinjoin data. 
   * ```coinjoin_tx_info_stats.json``` ... captures information about participation of every wallet in given coinjoin transaction.
-  
-### 3. Example results
+
+<a id="ecj-examples"></a>
+### 4. Example results
 ![image](https://github.com/user-attachments/assets/2e5406bc-b8f8-4725-8ff9-6484e805f682)
 
 ![image](https://github.com/user-attachments/assets/5325a4ae-468b-4b52-b58f-95d521c15b1c)
 
 ---
 
-## Usage: Parsing, analyzing and visualizing mainnet coinjoins from Dumplings (parse_dumplings.py)
+<a id="process-dumplings"></a>
+## Usage: Parse, analyze and visualize mainnet coinjoins from Dumplings (```parse_dumplings.py```)
 This scenario processes data from real coinjoins (Wasabi 1.x, Wasabi 2.x, Whirlpool and others) stored on Bitcoin mainnet, detected and extracted using [Dumplings tool](https://github.com/nopara73/dumplings). 
 
-### 1. Execution of Dumplings tool
+<a id="run-dumplings"></a>
+### 1. Execute Dumplings tool
 See [Dumplings instructions](https://github.com/nopara73/dumplings?tab=readme-ov-file#1-synchronization) for detailed setup and run of the tool.
 ```
 dotnet run -- sync --rpcuser=user --rpcpassword=password
@@ -66,7 +90,8 @@ After Dumplings tool execution, the relevant files with coinjoin premix, mix and
   Stats              (Aggregated Dumplings results, not processed at the moment)
 ```
 
-### 2. Parsing of Dumplings results into intermediate coinjoin_tx_info.json (```--action process_dumplings```)
+<a id="process-dumplings"></a>
+### 2. Parse Dumplings results into intermediate coinjoin_tx_info.json (```--action process_dumplings```)
 To parse coinjoin information from Dumplings files (step 1.) into unified json format (```coinjoin_tx_info.json```) used later for analysis, run:
 ```
 parse_dumplings.py --cjtype ww2 --action process_dumplings --target-path path_to_results
@@ -83,6 +108,7 @@ Additionally, a subfolder for every month of detected coinjoin activity is creat
 
 Note that based on the coinjoin protocol analyzed, the name of some files may differ. E.g., ```whirlpool_events.json``` for Samourai Whirlpool or ```wasabi1_events.json``` for Wasabi 1.x. 
 
+<a id="detect-false-positives"></a>
 ### 3. Detect and filter false positives (```--action detect_false_positives```)
 The Dumplings heuristic coinjoin detection algorithm is not flawless and occasionally selects also transaction, which looks like a coinjoin, but is not. We therefore apply another pass of heuristics to detected like false positives. This step is iterative and requires human interaction to confirm the potential false positives. 
 
@@ -98,6 +124,7 @@ To perform one iteration false positives detection (repeat until no new false po
 parse_dumplings.py --cjtype ww2 --action detect_false_positives --target-path path_to_results
 ```
 #### 3.2. Inspect created file ```no_remix_txs.json``` containing *potential* false positives. 
+Here are some tips for detection of false positives:
   - 'both_reuse_0_70' txs are almost certainly false positives (too many address reused, default threshold is 70% of reused addresses, normal coinjoins are having almost all addresses freshly generated). Put them all into false_cjtxs.json and rerun.
   - 'both_noremix' txs are transactions with no input and no output conected to other known coinjoin transaction. Very likely false positive, but needs to be analyzed one by one to confirm. 
   - txs left in "inputs_noremix" after all are typically the starting cjtx of some pool (no previous coinjoin was executed).
@@ -111,6 +138,7 @@ Once finished (no new false positives detected), copy ```false_cjtxs.json``` int
 
 Note, that false positives are *not* directly removed from ```coinjoin_tx_info.json```. Instead, they are filtered after loading based on the content of ```false_cjtxs.json``` file. As a result, only modification of ```false_cjtxs.json``` is required without change of (large) base files like ```coinjoin_tx_info.json``` and can be quickly recomputed.
 
+<a id="plot-coinjoins"></a>
 ### 4. Analyze and plot results (```--action plot_coinjoins```)
 To analyze and plot various analysis graphs from processed coinjoins, run:
 ```
@@ -128,8 +156,8 @@ The following files are generated:
   - ```*_remixrate_[values/nums]_[norm/notnorm].json``` cointains remix rate 
   - ```*_input_types_values_notnorm.pdf```
 
-
-#### Example results
+<a id="dumplings-examples"></a>
+### 5. Example results
 FIXME
 
 ---
