@@ -1,6 +1,6 @@
 # Wallet Wasabi 1.x, Wallet Wasabi 2.x and JoinMarket coinjoin analysis 
 
-Set of scripts for processing and analysis of datasets created by Wallet Wasabi 1.x, Wallet Wasabi 2.x and JoinMarket clients and coordinators. Allows for processing of files extracted by [Dumplings](https://github.com/nopara73/dumplings) tool.  
+Set of scripts for processing and analysis of datasets created by Wallet Wasabi 1.x, Wallet Wasabi 2.x and JoinMarket clients and coordinators. Allows for processing of Bitcoin mainnet coinjoins as extracted by [Dumplings](https://github.com/nopara73/dumplings) tool.  
 
 ## Setup
 ```
@@ -10,67 +10,17 @@ pip install -r requirements.txt
 
 ## Supported operations
 
-1. [Process Wallet Wasabi 2.x emulations from EmuCoinJoin (```parse_cj_logs.py```)](#ecj-process)
-    1. [Execute EmuCoinJoin emulator](#run-ecj)
-    1. [Extract coinjoin information from original raw files (```--action collect_docker```)](#ecj-extract)
-    1. [Re-run analysis from alreday extracted coinjoins (```--action analyze_only```)](#ecj-rerun)
-    1. [Example results](#ecj-examples)
-2. [Process mainnet coinjoins collected by Dumplings (```parse_dumplings.py```)](#process-dumplings)
+1. [Process mainnet coinjoins collected by Dumplings (```parse_dumplings.py```)](#process-dumplings)
     1. [Execute Dumplings tool](#run-dumplings)
     1. [Parse Dumplings results into intermediate coinjoin_tx_info.json (```--action process_dumplings```)](#process-dumplings)
     1. [Detect and filter false positives (```--action detect_false_positives```)](#detect-false-positives)
     1. [Analyze and plot results (```--action plot_coinjoins```)](#plot-coinjoins)
     1. [Example results](#dumplings-examples)
----
-
-<a id="ecj-process"></a>
-## Usage: Parsing Wallet Wasabi 2.x emulations from EmuCoinJoin (```parse_cj_logs.py```)
-The scenario assumes previous execution of Wasabi 2.x coinjoins (containerized coordinator and clients) using [EmuCoinJoin](https://github.com/crocs-muni/coinjoin-emulator) orchestration tool. 
-
-<a id="run-ecj"></a>
-### 1. Execute EmuCoinJoin emulator
-See [EmuCoinJoin](https://github.com/crocs-muni/coinjoin-emulator) for detailed setup and run of the tool.
-After EmuCoinJoin execution, relevant files from containers are serialized as subfolders into ```/path_to_experiments/experiment_1/data/``` folder with the following structure. 
-```
-  ..
-  btc-node           (bitcoin core, regtest blocks)
-  wasabi-backend     (wasabi 2.x coordinator container)
-  wasabi-client-000  (wasabi 2.x client logs)
-  wasabi-client-001
-  ...  
-  wasabi-client-499
-```
-Note, that multiple experiments can be stored inside ```/path_to_experiments/``` path. All found folders are checked for ```/data/``` subfolder and if found, the experiment is processed.
-
-<a id="ecj-extract"></a>
-### 2. Extract coinjoin information from original raw files (```--action collect_docker```)
-To extract all executed coinjoins into unified json format and perform analysis, run:
-```
-parse_cj_logs.py --action collect_docker --target-path path_to_experiments
-```
-
-The extraction process creates the following files: 
-  * ```coinjoin_tx_info.json``` ... basic information about all detected coinjoins, mapping of all wallets to their coins, started rounds, etc.. Used for subsequent analysis.
-  * ```wallets_coins.json``` ... information about every output created during execution, mapped to its coinjoin.
-  * ```wallets_info.json``` ... information about every address controlled by a given wallet. 
-
-<a id="ecj-rerun"></a>
-### 3. Re-run analysis from already extracted coinjoins (```--action analyze_only```)
-The coinjoin extraction part is time consuming. If new analysis methods are added or udated, only the anlaysis part can be re-run. To execute again only analysis (extraction must be already done with files like ```coinjoin_tx_info.json``` already created), run:
-```
-parse_cj_logs.py --action analyze_only --target-path path_to_experiments
-```
-
-If the analysis finishes successfully, the following files are created:
-  * ```coinjoin_stats.3.pdf, coinjoin_stats.3.pdf``` ... multiple graphs capturing various analysis results obtained from coinjoin data. 
-  * ```coinjoin_tx_info_stats.json``` ... captures information about participation of every wallet in given coinjoin transaction.
-
-<a id="ecj-examples"></a>
-### 4. Example results
-![image](https://github.com/user-attachments/assets/2e5406bc-b8f8-4725-8ff9-6484e805f682)
-
-![image](https://github.com/user-attachments/assets/5325a4ae-468b-4b52-b58f-95d521c15b1c)
-
+1. [Process Wallet Wasabi 2.x emulations from EmuCoinJoin (```parse_cj_logs.py```)](#ecj-process)
+    1. [Execute EmuCoinJoin emulator](#run-ecj)
+    1. [Extract coinjoin information from original raw files (```--action collect_docker```)](#ecj-extract)
+    1. [Re-run analysis from alreday extracted coinjoins (```--action analyze_only```)](#ecj-rerun)
+    1. [Example results](#ecj-examples)
 ---
 
 <a id="process-dumplings"></a>
@@ -158,6 +108,72 @@ The following files are generated:
 
 <a id="dumplings-examples"></a>
 ### 5. Example results
-FIXME
+Vizualized liquidity changes in Wasabi 1.x, Wasabi 2.x and Whirlpool coinjoins 
+![image](https://github.com/user-attachments/assets/33af36a6-8650-47dc-b92a-f5c611962b72)
+
+Value of Wasabi 2.x coinjoin inputs during December 2023: 
+![image](https://github.com/user-attachments/assets/9d327604-b0e5-4c60-86c0-c6e04f01b694)
+
+Value of Wasabi 2.x coinjoin inputs during December 2023 (normalized): 
+![image](https://github.com/user-attachments/assets/2364a7ce-e45b-48ac-825c-aeb755a65dfd)
+
+Number of Wasabi 2.x coinjoin inputs during first month of operation: 
+![image](https://github.com/user-attachments/assets/6362d74f-7c5a-4020-9e85-0c41e991c263)
+
+Number of Wasabi 2.x coinjoin inputs during first month of operation (normalized): 
+![image](https://github.com/user-attachments/assets/a18c9d91-e416-48e3-bb7c-e39883bc6c5b)
+
+Value of Wasabi 2.x coinjoins for post-zkSNACKS coordinators (June-December 2024): 
+![image](https://github.com/user-attachments/assets/69ebb029-83f0-493c-bbb7-11b9b86fd746)
+
+---
+
+<a id="ecj-process"></a>
+## Usage: Parse Wallet Wasabi 2.x emulations from EmuCoinJoin (```parse_cj_logs.py```)
+The scenario assumes previous execution of Wasabi 2.x and JoinMarket coinjoins (produced by containerized coordinator and clients) using [EmuCoinJoin](https://github.com/crocs-muni/coinjoin-emulator) orchestration tool. 
+
+<a id="run-ecj"></a>
+### 1. Execute EmuCoinJoin emulator
+See [EmuCoinJoin](https://github.com/crocs-muni/coinjoin-emulator) for detailed setup and run of the tool.
+After EmuCoinJoin execution, relevant files from containers are serialized as subfolders into ```/path_to_experiments/experiment_1/data/``` folder with the following structure. 
+```
+  ..
+  btc-node           (bitcoin core, regtest blocks)
+  wasabi-backend     (wasabi 2.x coordinator container)
+  wasabi-client-000  (wasabi 2.x client logs)
+  wasabi-client-001
+  ...  
+  wasabi-client-499
+```
+Note, that multiple experiments can be stored inside ```/path_to_experiments/``` path. All found folders are checked for ```/data/``` subfolder and if found, the experiment is processed.
+
+<a id="ecj-extract"></a>
+### 2. Extract coinjoin information from original raw files (```--action collect_docker```)
+To extract all executed coinjoins into unified json format and perform analysis, run:
+```
+parse_cj_logs.py --action collect_docker --target-path path_to_experiments
+```
+
+The extraction process creates the following files: 
+  * ```coinjoin_tx_info.json``` ... basic information about all detected coinjoins, mapping of all wallets to their coins, started rounds, etc.. Used for subsequent analysis.
+  * ```wallets_coins.json``` ... information about every output created during execution, mapped to its coinjoin.
+  * ```wallets_info.json``` ... information about every address controlled by a given wallet. 
+
+<a id="ecj-rerun"></a>
+### 3. Re-run analysis from already extracted coinjoins (```--action analyze_only```)
+The coinjoin extraction part is time consuming. If new analysis methods are added or udated, only the anlaysis part can be re-run. To execute again only analysis (extraction must be already done with files like ```coinjoin_tx_info.json``` already created), run:
+```
+parse_cj_logs.py --action analyze_only --target-path path_to_experiments
+```
+
+If the analysis finishes successfully, the following files are created:
+  * ```coinjoin_stats.3.pdf, coinjoin_stats.3.pdf``` ... multiple graphs capturing various analysis results obtained from coinjoin data. 
+  * ```coinjoin_tx_info_stats.json``` ... captures information about participation of every wallet in given coinjoin transaction.
+
+<a id="ecj-examples"></a>
+### 4. Example results
+![image](https://github.com/user-attachments/assets/2e5406bc-b8f8-4725-8ff9-6484e805f682)
+
+![image](https://github.com/user-attachments/assets/5325a4ae-468b-4b52-b58f-95d521c15b1c)
 
 ---
