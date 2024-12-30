@@ -2032,15 +2032,15 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
         files = [""] if os.path.exists(target_path) else print(
             f'Path {target_path} does not exist')
 
-    REUSE_TRESHOLD = 0.7
+    REUSE_THRESHOLD = 0.7
     print(f'Going to process the following subfolders of {target_path}: {files}')
     # Load false positives
     fp_file = os.path.join(target_path, 'false_cjtxs.json')
     false_cjtxs = als.load_json_from_file(fp_file)
 
     no_remix_all = {'inputs_noremix': [], 'outputs_noremix': [], 'both_noremix': [],
-                    f'inputs_address_reuse_{REUSE_TRESHOLD}': [], f'outputs_address_reuse_{REUSE_TRESHOLD}': [],
-                    f'both_reuse_{REUSE_TRESHOLD}': []}
+                    f'inputs_address_reuse': [], f'outputs_address_reuse': [],
+                    f'both_reuse': []}
     for dir_name in files:
         target_base_path = os.path.join(target_path, dir_name)
         tx_json_file = os.path.join(target_base_path, f'{tx_file}')
@@ -2058,9 +2058,15 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
                 no_remix_all[key].extend(no_remix[key])
 
             # Detect transactions with too many address reuse
-            address_reuse = als.detect_address_reuse_txs(data['coinjoins'], REUSE_TRESHOLD)
+            address_reuse = als.detect_address_reuse_txs(data['coinjoins'], REUSE_THRESHOLD)
             for key in address_reuse.keys():
                 no_remix_all[key].extend(address_reuse[key])
+
+    # Add used threshold value into key value in dictionary
+    reuse_threshold_string = f"{REUSE_THRESHOLD:.2f}".replace('.', '_')
+    no_remix_all[f'inputs_address_reuse_{reuse_threshold_string}'] = no_remix_all.pop('inputs_address_reuse')
+    no_remix_all[f'outputs_address_reuse_{reuse_threshold_string}'] = no_remix_all.pop('outputs_address_reuse')
+    no_remix_all[f'both_reuse_{reuse_threshold_string}'] = no_remix_all.pop('both_reuse')
 
     # save detected no transactions with no remixes (potentially false positives)
     als.save_json_to_file_pretty(os.path.join(target_path, 'no_remix_txs.json'), no_remix_all)

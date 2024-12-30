@@ -86,19 +86,19 @@ def save_json_to_file_pretty(file_path: str, data: dict, sort: bool = False):
 
 
 def detect_no_inout_remix_txs(coinjoins):
-    no_remix = {'inputs': [], 'outputs': []}
+    no_remix = {'inputs_noremix': [], 'outputs_noremix': []}
     for cjtx in coinjoins.keys():
         if sum([1 for index in coinjoins[cjtx]['inputs'].keys()
                 if coinjoins[cjtx]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name]) == 0:
             logging.warning(f'No input remix detected for {cjtx}')
-            no_remix['inputs'].append(cjtx)
+            no_remix['inputs_noremix'].append(cjtx)
         if sum([1 for index in coinjoins[cjtx]['outputs'].keys()
              if coinjoins[cjtx]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name]) == 0:
             logging.warning(f'No output remix detected for {cjtx}')
-            no_remix['outputs'].append(cjtx)
+            no_remix['outputs_noremix'].append(cjtx)
 
-    no_remix['both'] = set(no_remix['inputs']).intersection(set(no_remix['outputs']))
-    logging.warning(f'Txs with no input&output remix: {no_remix['both']}')
+    no_remix['both_noremix'] = set(no_remix['inputs_noremix']).intersection(set(no_remix['outputs_noremix']))
+    logging.warning(f'Txs with no input&output remix: {no_remix['both_noremix']}')
     return no_remix
 
 
