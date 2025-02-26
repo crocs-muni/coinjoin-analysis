@@ -98,7 +98,7 @@ def detect_no_inout_remix_txs(coinjoins):
             no_remix['outputs_noremix'].append(cjtx)
 
     no_remix['both_noremix'] = set(no_remix['inputs_noremix']).intersection(set(no_remix['outputs_noremix']))
-    logging.warning(f'Txs with no input&output remix: {no_remix['both_noremix']}')
+    logging.warning(f'Txs with no input&output remix: {no_remix["both_noremix"]}')
     return no_remix
 
 
@@ -123,7 +123,7 @@ def detect_address_reuse_txs(coinjoins, reuse_threshold: float):
             addr_reuse['outputs_address_reuse'].append(cjtx)
 
     addr_reuse['both_reuse'] = set(addr_reuse['inputs_address_reuse']).intersection(set(addr_reuse['outputs_address_reuse']))
-    logging.warning(f'Txs with no input&output remix: {addr_reuse['both_reuse']}')
+    logging.warning(f'Txs with no input&output remix: {addr_reuse["both_reuse"]}')
     return addr_reuse
 
 
@@ -255,7 +255,7 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
 
     def print_inputs_stats(input_types: dict, start_offset: int = 0, end_offset: int = -1):
         SM.print(f'  MIX_ENTER median ratio: {round(np.median(input_types[MIX_EVENT_TYPE.MIX_ENTER.name][start_offset: end_offset]) * 100, 2)}%')
-        SM.print(f'  MIX_REMIX_nonstd median ratio: {round(np.median(input_types['MIX_REMIX_nonstd'][start_offset: end_offset]) * 100, 2)}%')
+        SM.print(f'  MIX_REMIX_nonstd median ratio: {round(np.median(input_types["MIX_REMIX_nonstd"][start_offset: end_offset]) * 100, 2)}%')
         SM.print(f'  MIX_REMIX median ratio: {round(np.median(input_types[MIX_EVENT_TYPE.MIX_REMIX.name][start_offset: end_offset]) * 100, 2)}%')
         for range_val in BURN_TIME_RANGES:
             remix_name = f'{event_type.name}_{range_val[0]}'
@@ -308,7 +308,7 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
                         bottom=bar_bottom, linewidth=0)
                 bar_bottom = bar_bottom + np.array(bar_item[0])
 
-        ax.set_title(f'Type of inputs for given cjtx ({'values' if analyze_values else 'number'})\n{short_exp_name}')
+        ax.set_title(f'Type of inputs for given cjtx ({"values" if analyze_values else "number"})\n{short_exp_name}')
         ax.set_xlabel('Coinjoin in time')
         if analyze_values and normalize_values:
             ax.set_ylabel('Fraction of inputs sizes')
@@ -463,7 +463,7 @@ def plot_mining_fee_rates(mix_id: str, data: dict, mining_fees: dict, ax):
         while timestamp > mining_fees[fee_start_index]['timestamp']:
             fee_start_index = fee_start_index + 1
             if fee_start_index >= len(mining_fees):
-                logging.error(f'Missing mining_fees entry for timestamp {sorted_cj_fee_time_dict[cj['txid']]['broadcast_time']} if {cj['txid']}.')
+                logging.error(f'Missing mining_fees entry for timestamp {sorted_cj_fee_time_dict[cj["txid"]]["broadcast_time"]} if {cj["txid"]}.')
                 # Use the latest one and stop searching
                 fee_start_index = fee_start_index - 1
                 break
@@ -734,7 +734,7 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
     print('Transactions with relative order 0 ("first"):')
     for index in range(0, len(sorted_cj_ordering)):
         if sorted_cj_ordering[index]['relative_order'] == 0:
-            print(f'  {sorted_cj_ordering[index]['broadcast_time']}:{sorted_cj_ordering[index]['txid']}')
+            print(f'  {sorted_cj_ordering[index]["broadcast_time"]}:{sorted_cj_ordering[index]["txid"]}')
         else:
             break
 
@@ -749,7 +749,7 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
             sorted_datetimes = sorted(broadcast_times_observed)
             time_difference = sorted_datetimes[-1] - sorted_datetimes[0]
             if time_difference > timedelta(days=1):
-                print(f'WARNING: Coinjoins with same relative ordering \'{min_broadcast_time_order}\' differ too much \'{time_difference}\'. {tx['txid']} ')
+                print(f'WARNING: Coinjoins with same relative ordering \'{min_broadcast_time_order}\' differ too much \'{time_difference}\'. {tx["txid"]} ')
 
             # Set min_broadcast_time as a broadcast_time of first from this chunk
             min_broadcast_time = tx['broadcast_time']
@@ -907,14 +907,14 @@ def extract_wallets_info(data):
                 if coins[target_addr]['amount'] != txs_data[cjtxid]['inputs'][index]['value']:
                     print(f'Number of items in coins map: {len(coins)}')
                     print(f'{coins[target_addr]}')
-                    assert coins[target_addr]['amount'] == txs_data[cjtxid]['inputs'][index]['value'], f'Inconsistent value found for {cjtxid}/{index}/{target_addr} {coins[target_addr]['amount']} != {txs_data[cjtxid]['inputs'][index]['value']}'
+                    assert coins[target_addr]['amount'] == txs_data[cjtxid]['inputs'][index]['value'], f'Inconsistent value found for {cjtxid}/{index}/{target_addr} {coins[target_addr]["amount"]} != {txs_data[cjtxid]["inputs"][index]["value"]}'
                 # We have found the coin, update destroy_time
                 coins[target_addr]['destroy_time'] = txs_data[cjtxid]['broadcast_time']
                 if 'spentBy' not in coins[target_addr].keys():
                     coins[target_addr]['spentBy'] = cjtxid
                     coin['is_spent_by_cjtx'] = False if cjtxid not in txs_data.keys() else txs_data[cjtxid].get('is_cjtx', False)
                 else:
-                    assert coins[target_addr]['spentBy'] == cjtxid, f'Inconsistent spentBy mapping for {coins[target_addr]['address']}'
+                    assert coins[target_addr]['spentBy'] == cjtxid, f'Inconsistent spentBy mapping for {coins[target_addr]["address"]}'
 
     wallets_coins_info_updated = {}
     for address in coins.keys():
