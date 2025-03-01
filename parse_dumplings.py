@@ -984,26 +984,29 @@ def process_interval(mix_id: str, data: dict, mix_filename: str, premix_filename
 
 
 def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: os.path, start_date: str, stop_date: str, mix_filename: str,
-                                      postmix_filename: str, premix_filename: str=None, save_base_files=True, load_base_files=False):
+                                      postmix_filename: str, premix_filename: str=None, save_base_files=True, load_base_files=False, preloaded_data: dict=None):
     # Create directory structure with files split per month (around 1000 subsequent coinjoins)
     # Load all coinjoins first, then filter based on intervals
     target_save_path = os.path.join(target_path, mix_id)
     if not os.path.exists(target_save_path):
         os.makedirs(target_save_path.replace('\\', '/'))
 
-    if load_base_files:
-        # Load base files from already stored json
-        logging.info(f'Loading {target_save_path}/coinjoin_tx_info.json ...')
+    if preloaded_data is None:
+        if load_base_files:
+            # Load base files from already stored json
+            logging.info(f'Loading {target_save_path}/coinjoin_tx_info.json ...')
 
-        data = als.load_json_from_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'))
+            data = als.load_json_from_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'))
 
-        logging.info(f'{target_save_path}/coinjoin_tx_info.json loaded with {len(data["coinjoins"])} conjoins')
+            logging.info(f'{target_save_path}/coinjoin_tx_info.json loaded with {len(data["coinjoins"])} conjoins')
+        else:
+            #
+            # Convert all Dumplings files into json (time intensive)
+            SAVE_BASE_FILES_JSON = False
+            data = process_and_save_coinjoins(mix_id, mix_protocol, target_path, mix_filename, postmix_filename, premix_filename, None, None, target_save_path)
+            SAVE_BASE_FILES_JSON = save_base_files
     else:
-        #
-        # Convert all Dumplings files into json (time intensive)
-        SAVE_BASE_FILES_JSON = False
-        data = process_and_save_coinjoins(mix_id, mix_protocol, target_path, mix_filename, postmix_filename, premix_filename, None, None, target_save_path)
-        SAVE_BASE_FILES_JSON = save_base_files
+        data = preloaded_data
 
     if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
         # Whirlpool
@@ -3677,13 +3680,59 @@ if __name__ == "__main__":
             process_and_save_intervals_filter('wasabi1', MIX_PROTOCOL.WASABI1, target_path, '2018-07-19 01:38:07.000', op.interval_stop_date,
                                        'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
 
+        # if op.CJ_TYPE == CoinjoinType.WW2:
+        #     data = process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', op.interval_stop_date,
+        #                                'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
+        #
+        #     # # Fix the large aggregate file (may crash due to huge memory requirements)
+        #     # data = fix_ww2_for_fdnp_ww1('wasabi2', target_path)
+        #
+        #     # Split zkSNACKs (-> wasabi2_zksnacks) and post-zkSNACKs (-> wasabi2_others) pools
+        #     # This splitting will allow to analyze separate pools, but also to make data files smaller and easier to process later
+        #     logging.info('*****************************')
+        #     logging.info('Going to wasabi2_extract_pools()')
+        #     split_pool_paths = wasabi2_extract_pools(data, target_path, op.interval_stop_date)
+        #     logging.info('done wasabi2_extract_pools() *****************************')
+        #
+        #     # WW2 needs additional treatment - detect and fix origin of WW1 inflows as friends
+        #     # Do first separated pools, then the original (large) unseparated one
+        #     for pool_path in split_pool_paths:
+        #         fix_ww2_for_fdnp_ww1(pool_path, target_path)
+        #     # Fix the large aggregate file (may crash due to huge memory requirements)
+        #     fix_ww2_for_fdnp_ww1('wasabi2', target_path)
+
+
         if op.CJ_TYPE == CoinjoinType.WW2:
-            process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', op.interval_stop_date,
-                                       'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
-            # WW2 needs additional treatment - detect and fix origin of WW1 inflows as friends
-            data = fix_ww2_for_fdnp_ww1('wasabi2', target_path)
+            data = process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', op.interval_stop_date,
+                    'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
+
             # Split zkSNACKs (-> wasabi2_zksnacks) and post-zkSNACKs (-> wasabi2_others) pools
-            wasabi2_extract_pools(data, target_path, op.interval_stop_date)
+            # This splitting will allow to analyze separate pools, but also to make data files smaller and easier to process later
+            logging.info('Going to wasabi2_extract_pools() *****************************')
+            split_pool_info = wasabi2_extract_pools(data, target_path, op.interval_stop_date)
+            logging.info('done wasabi2_extract_pools() *****************************')
+
+            # WW2 needs additional treatment - detect and fix origin of WW1 inflows as friends
+            # Do first separated pools, then the original (large) unseparated one
+            for pool_name in split_pool_info.keys():
+                fix_ww2_for_fdnp_ww1(pool_name, target_path)
+
+            for pool_name in split_pool_info.keys():
+                logging.info(f'Going to process_and_save_intervals_filter({pool_name}) *****************************')
+                process_and_save_intervals_filter(pool_name, MIX_PROTOCOL.WASABI2, target_path,
+                                                         split_pool_info[pool_name]['start_date'], split_pool_info[pool_name]['stop_date'],
+                                                         'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None,
+                                                         SAVE_BASE_FILES_JSON, True)
+                logging.info(f'done for {pool_info["pool_name"]}) *****************************')
+
+            # Fix the large aggregate file (may crash due to huge memory requirements)
+            logging.info(
+                f'Going to process_and_save_intervals_filter(wasabi2) *****************************')
+            fix_ww2_for_fdnp_ww1('wasabi2', target_path)
+            process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', op.interval_stop_date,
+                                       'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, True)
+            logging.info(f'done for wasabi2) *****************************')
+
 
     if op.VISUALIZE_ALL_COINJOINS_INTERVALS:
         if op.CJ_TYPE == CoinjoinType.SW:
