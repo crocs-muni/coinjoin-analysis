@@ -2509,6 +2509,9 @@ def whirlpool_extract_pool(full_data: dict, mix_id: str, target_path: Path, pool
 
 
 def wasabi2_extract_pools(data: dict, target_path: str, interval_stop_date: str):
+    logging.debug('wasabi2_extract_pools() started')
+
+    split_pools_paths = []
     # Extract post-zksnacks coordinator(s)
     # Rule: only after 2024-06-02, with few transactions from 2024-05-30 but with lower than 150 inputs (which is minimum for zkSNACKs)
     interval_start_date_others = '2024-05-01 00:00:00.000'
@@ -2522,6 +2525,7 @@ def wasabi2_extract_pools(data: dict, target_path: str, interval_stop_date: str)
     cjtx_others.update(cjtx_others_overlap)
     print(f'cjtx_others joined len={len(cjtx_others)}')
     target_save_path = os.path.join(target_path, 'wasabi2_others')
+    split_pools_paths.append('wasabi2_others')
     if not os.path.exists(target_save_path):
         os.makedirs(target_save_path.replace('\\', '/'))
     als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_others})
@@ -2544,6 +2548,8 @@ def wasabi2_extract_pools(data: dict, target_path: str, interval_stop_date: str)
     cjtx_zksnacks.update(cjtx_zksnacks_overlap)
     print(f'cjtx_zksnacks joined len={len(cjtx_zksnacks)}')
     target_save_path = os.path.join(target_path, 'wasabi2_zksnacks')
+    split_pools_paths.append('wasabi2_zksnacks')
+
     if not os.path.exists(target_save_path):
         os.makedirs(target_save_path.replace('\\', '/'))
     als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_zksnacks})
@@ -2561,6 +2567,8 @@ def wasabi2_extract_pools(data: dict, target_path: str, interval_stop_date: str)
 
     # Backup corresponding log file
     backup_log_files(target_path)
+
+    return split_pools_paths
 
 
 def backup_log_files(target_path: str):
