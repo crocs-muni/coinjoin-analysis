@@ -1768,6 +1768,8 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
             # Detect transactions with no remixes on input/out or both
             no_remix = als.detect_no_inout_remix_txs(data["coinjoins"])
             for key in no_remix.keys():
+                if key not in no_remix_all.keys():
+                    no_remix_all[key] = []
                 no_remix_all[key].extend(no_remix[key])
 
             # Plot bars corresponding to different input types
