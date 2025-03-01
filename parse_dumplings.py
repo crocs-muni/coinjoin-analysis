@@ -209,6 +209,19 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
     return cj_stats
 
 
+def load_coinjoin_txids_from_file(target_file, start_date: str = None, stop_date: str = None):
+    cjtxs = {}
+    logging.debug(f'load_coinjoin_txids_from_file() Processing file {target_file}')
+    with open(target_file, "r") as file:
+        for line in file.readlines():
+            parts = line.split(VerboseTransactionInfoLineSeparator)
+            tx_id = None if parts[0] is None else parts[0]
+            if tx_id:
+                cjtxs[tx_id] = None
+
+    return cjtxs
+
+
 def load_coinjoin_stats(base_path):
     coinjoin_stats = {}
     files = []
@@ -2098,10 +2111,15 @@ def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: str):
     :param target_path:
     :return:
     """
+    logging.info(f'Going to fix_ww2_for_fdnp_ww1({mix_id})')
+
     #'wasabi2', target_path, os.path.join(target_path, 'wasabi1_burn', 'coinjoin_tx_info.json.full'))
     # Load Wasabi1 files, then update MIX_ENTER for Wasabi2 where friends-do-not-pay rule does not apply
-    ww1_coinjoins = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiCoinJoins.txt'))
-    ww1_postmix_spend = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
+    # We will need only WW1 txids, drop all other values to decrease peak memory requirements
+    ww1_coinjoins = load_coinjoin_txids_from_file(os.path.join(target_path, 'WasabiCoinJoins.txt'))
+    ww1_postmix_spend = load_coinjoin_txids_from_file(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
+    # ww1_coinjoins = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiCoinJoins.txt'))
+    # ww1_postmix_spend = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
 
     target_path = os.path.join(target_path, mix_id)  # Go into target ww2 folder
 
@@ -2113,13 +2131,14 @@ def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: str):
         tx_json_file = os.path.join(target_base_path, f'coinjoin_tx_info.json')
         if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
             paths_to_process.append(target_base_path)
-    # Always process 'coinjoin_tx_info.json' with all transactions
+
+    # Always process 'coinjoin_tx_info.json' with all transactions.
     paths_to_process.append(target_path)
 
     # Now fix all prepared paths
-    ww2_data = {}
-    for path in paths_to_process:
+    for path in sorted(paths_to_process):
         logging.info(f'Processing {path}...')
+
         ww2_data = als.load_json_from_file(os.path.join(path, f'coinjoin_tx_info.json'))
 
         # For all values with mix_event_type equal to MIX_ENTER check if they are not from WW1
@@ -2132,16 +2151,18 @@ def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: str):
                 if coinjoins[cjtx]['inputs'][input]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name:
                     if 'spending_tx' in coinjoins[cjtx]['inputs'][input].keys():
                         spending_tx, index = als.extract_txid_from_inout_string(coinjoins[cjtx]['inputs'][input]['spending_tx'])
-                        if spending_tx in ww1_coinjoins.keys() or spending_tx in ww1_postmix_spend.keys():
+                        if spending_tx in ww1_coinjoins or spending_tx in ww1_postmix_spend:
                             # Friends do not pay rule tx - change to MIX_REMIX_FRIENDS_WW1
                             coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name
                             total_ww1_inputs += 1
 
-        print(f'Total WW1 inputs with friends-do-not-pay rule: {total_ww1_inputs}')
+        logging.info(f'Total WW1 inputs with friends-do-not-pay rule: {total_ww1_inputs} for {path}')
 
         als.save_json_to_file(os.path.join(path, f'coinjoin_tx_info.json'), ww2_data)
 
-    return ww2_data
+    # Load all aggregated coinjoins and return
+    # ww2_data = als.load_json_from_file(os.path.join(target_path, f'coinjoin_tx_info.json'))
+    # return ww2_data
 
 
 def extract_flows_blocksci(flows: dict):
