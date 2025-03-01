@@ -3751,10 +3751,14 @@ if __name__ == "__main__":
 
         if op.CJ_TYPE == CoinjoinType.WW2:
             for mix_id in ['wasabi2_others', 'wasabi2_zksnacks', 'wasabi2']:
-                wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, False)
-                wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, True)
-                wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, True)
-                wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, False)
+                target_base_path = os.path.join(target_path, mix_id)
+                if os.path.exists(target_base_path):
+                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, False)
+                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, True)
+                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, True)
+                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, False)
+                else:
+                    logging.warning(f'Path {target_base_path} does not exists.')
 
         if op.CJ_TYPE == CoinjoinType.SW:
             PLOT_OPTIONS = []  # (analyze_values, normalize_values, plot_multigraph)
