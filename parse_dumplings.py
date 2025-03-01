@@ -2532,7 +2532,7 @@ def whirlpool_extract_pool(full_data: dict, mix_id: str, target_path: Path, pool
 def wasabi2_extract_pools(data: dict, target_path: str, interval_stop_date: str):
     logging.debug('wasabi2_extract_pools() started')
 
-    split_pools_paths = []
+    split_pools_info = {}
     # Extract post-zksnacks coordinator(s)
     # Rule: only after 2024-06-02, with few transactions from 2024-05-30 but with lower than 150 inputs (which is minimum for zkSNACKs)
     interval_start_date_others = '2024-05-01 00:00:00.000'
@@ -2546,15 +2546,15 @@ def wasabi2_extract_pools(data: dict, target_path: str, interval_stop_date: str)
     cjtx_others.update(cjtx_others_overlap)
     print(f'cjtx_others joined len={len(cjtx_others)}')
     target_save_path = os.path.join(target_path, 'wasabi2_others')
-    split_pools_paths.append('wasabi2_others')
+    split_pools_info['wasabi2_others'] = {'pool_name': 'wasabi2_others', 'start_date': interval_start_date_others, 'stop_date': interval_stop_date,
+                                           'num_cjtxs': len(cjtx_others)}
     if not os.path.exists(target_save_path):
         os.makedirs(target_save_path.replace('\\', '/'))
     als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_others})
     logging.info(f'Total cjtxs extracted for pool WW2-others: {len(cjtx_others)}')
-
-    process_and_save_intervals_filter('wasabi2_others', MIX_PROTOCOL.WASABI2, target_path, interval_start_date_others,
-                                      interval_stop_date, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
-                                      True)
+    # process_and_save_intervals_filter('wasabi2_others', MIX_PROTOCOL.WASABI2, target_path, interval_start_date_others,
+    #                                   interval_stop_date, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+    #                                   True, {'coinjoins': cjtx_others})
 
     # Extract zksnacks coordinator
     # Rule: All till 2024-06-02 00:00:00.000, in final 10 days must have >= 150 inputs
@@ -2569,15 +2569,16 @@ def wasabi2_extract_pools(data: dict, target_path: str, interval_stop_date: str)
     cjtx_zksnacks.update(cjtx_zksnacks_overlap)
     print(f'cjtx_zksnacks joined len={len(cjtx_zksnacks)}')
     target_save_path = os.path.join(target_path, 'wasabi2_zksnacks')
-    split_pools_paths.append('wasabi2_zksnacks')
+    split_pools_info['wasabi2_zksnacks'] = {'pool_name': 'wasabi2_zksnacks', 'start_date': '2022-06-01 00:00:07.000', 'stop_date': interval_stop_date_zksnacks,
+                                           'num_cjtxs': len(cjtx_others)}
 
     if not os.path.exists(target_save_path):
         os.makedirs(target_save_path.replace('\\', '/'))
     als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_zksnacks})
     logging.info(f'Total cjtxs extracted for pool WW2-zkSNACKs: {len(cjtx_zksnacks)}')
-    process_and_save_intervals_filter('wasabi2_zksnacks', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000',
-                                      interval_stop_date_zksnacks,'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
-                                      True)
+    # process_and_save_intervals_filter('wasabi2_zksnacks', MIX_PROTOCOL.WASABI2, target_path, split_pools_info['wasabi2_zksnacks']['start_date'],
+    #                                   split_pools_info['wasabi2_zksnacks']['stop_date'],'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+    #                                   True, {'coinjoins': cjtx_zksnacks})
 
     # Detect transactions which were not assigned to any pool
     missed_cjtxs = list(
@@ -2589,7 +2590,7 @@ def wasabi2_extract_pools(data: dict, target_path: str, interval_stop_date: str)
     # Backup corresponding log file
     backup_log_files(target_path)
 
-    return split_pools_paths
+    return split_pools_info
 
 
 def backup_log_files(target_path: str):
