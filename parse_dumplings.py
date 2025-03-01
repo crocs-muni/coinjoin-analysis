@@ -1729,7 +1729,8 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
     next_month_index = 0
     weeks_dict = defaultdict(dict)
     days_dict = defaultdict(dict)
-    for dir_name in files:
+
+    for dir_name in sorted(files):
         target_base_path = os.path.join(target_path, dir_name)
         tx_json_file = os.path.join(target_base_path, f'{tx_file}')
         current_year = dir_name[0:4]
