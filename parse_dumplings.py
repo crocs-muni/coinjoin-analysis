@@ -21,6 +21,7 @@ import mpl_toolkits.axisartist as AA
 from matplotlib import pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import argparse
+import gc
 
 # Configure the logging module
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -3277,6 +3278,17 @@ if __name__ == "__main__":
 
     DEBUG = False
     if DEBUG:
+        target_load_path = os.path.join(target_path, 'wasabi2')
+        logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
+        load_path = os.path.join(target_load_path, f'coinjoin_tx_info.json')
+        data = als.load_json_from_file(load_path)
+        split_pool_paths = wasabi2_extract_pools(data, target_path, op.interval_stop_date)
+        exit(42)
+        data = fix_ww2_for_fdnp_ww1('wasabi2_others', target_path)
+        exit(0)
+        data = fix_ww2_for_fdnp_ww1('wasabi2', target_path)
+        exit(0)
+
         wasabi_detect_coordinators('wasabi2_others', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_others'))
         exit(42)
 
