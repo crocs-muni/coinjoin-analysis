@@ -22,6 +22,7 @@ from matplotlib import pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import argparse
 import gc
+import time
 
 # Configure the logging module
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -2147,26 +2148,22 @@ def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: str):
 
         # For all values with mix_event_type equal to MIX_ENTER check if they are not from WW1
         # with friends-do-not-pay rule
-        coinjoins = ww2_data["coinjoins"]
-
         total_ww1_inputs = 0
-        for cjtx in coinjoins:
-            for input in coinjoins[cjtx]['inputs']:
-                if coinjoins[cjtx]['inputs'][input]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name:
-                    if 'spending_tx' in coinjoins[cjtx]['inputs'][input].keys():
-                        spending_tx, index = als.extract_txid_from_inout_string(coinjoins[cjtx]['inputs'][input]['spending_tx'])
+        for cjtx in ww2_data["coinjoins"]:
+            for input in ww2_data["coinjoins"][cjtx]['inputs']:
+                if ww2_data["coinjoins"][cjtx]['inputs'][input]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name:
+                    if 'spending_tx' in ww2_data["coinjoins"][cjtx]['inputs'][input].keys():
+                        spending_tx, index = als.extract_txid_from_inout_string(ww2_data["coinjoins"][cjtx]['inputs'][input]['spending_tx'])
                         if spending_tx in ww1_coinjoins or spending_tx in ww1_postmix_spend:
                             # Friends do not pay rule tx - change to MIX_REMIX_FRIENDS_WW1
-                            coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name
+                            ww2_data["coinjoins"][cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name
                             total_ww1_inputs += 1
 
         logging.info(f'Total WW1 inputs with friends-do-not-pay rule: {total_ww1_inputs} for {path}')
 
         als.save_json_to_file(os.path.join(path, f'coinjoin_tx_info.json'), ww2_data)
 
-    # Load all aggregated coinjoins and return
-    # ww2_data = als.load_json_from_file(os.path.join(target_path, f'coinjoin_tx_info.json'))
-    # return ww2_data
+        free_memory(ww2_data)
 
 
 def extract_flows_blocksci(flows: dict):
@@ -2533,7 +2530,7 @@ def whirlpool_extract_pool(full_data: dict, mix_id: str, target_path: Path, pool
     return {'coinjoins': pool_txs, 'premix': pool_premix_txs}
 
 
-def wasabi2_extract_pools(data: dict, target_path: str, interval_stop_date: str):
+def wasabi2_extract_pools_original(data: dict, target_path: str, interval_stop_date: str):
     logging.debug('wasabi2_extract_pools() started')
 
     split_pools_info = {}
@@ -2587,6 +2584,81 @@ def wasabi2_extract_pools(data: dict, target_path: str, interval_stop_date: str)
     # Detect transactions which were not assigned to any pool
     missed_cjtxs = list(
         set(data["coinjoins"].keys()) - set(cjtx_zksnacks.keys()) - set(cjtx_others.keys()))
+    als.save_json_to_file_pretty(os.path.join(target_path, f'coinjoin_tx_info__missed.json'), missed_cjtxs)
+    print(f'Total transactions not separated into pools: {len(missed_cjtxs)}')
+    print(missed_cjtxs)
+
+    # Backup corresponding log file
+    backup_log_files(target_path)
+
+    return split_pools_info
+
+
+def wasabi2_extract_pools_destroys_data(data: dict, target_path: str, interval_stop_date: str):
+    """
+    Takes dictionary with all coinjoins and split it to ones belonging to zksnacks coordinator and other coordinators.
+    IMPORTANT: due to peak memory requirements of higher tens of GBs (03/2025), this function filters transactions inplace
+    and as a result erases data from 'data' input argument - you need to load it again after calling this function.
+    :param data: Dictionary will all coinjoins for all coordinators (IS erased afterwards)
+    :param target_path: directory where to store jsons with separated coordinators
+    :param interval_stop_date: the last date to process (all coinjoins after it are ignored)
+    :return: dictionary with basic information regarding separated cooridnators
+    """
+    logging.debug('wasabi2_extract_pools() started')
+
+    split_pools_info = {}
+    # Extract post-zksnacks coordinator(s)
+    # Rule: only after 2024-06-02, with few transactions from 2024-05-30 but with lower than 150 inputs (which is minimum for zkSNACKs)
+    interval_start_date_others = '2024-05-01 00:00:00.000'
+    cjtx_others = {cjtx: data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys() if data["coinjoins"][cjtx][
+        'broadcast_time'] > "2024-06-02 00:00:00.000"}
+    print(f'cjtx_others len={len(cjtx_others)}')
+    cjtx_others_overlap = {cjtx:data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys() if data["coinjoins"][cjtx][
+        'broadcast_time'] > interval_start_date_others and data["coinjoins"][cjtx][
+        'broadcast_time'] < "2024-06-02 00:00:00.000" and len(data["coinjoins"][cjtx]['inputs']) < 150}
+    print(f'cjtx_others_overlap len={len(cjtx_others_overlap)}')
+    cjtx_others.update(cjtx_others_overlap)
+    print(f'cjtx_others joined len={len(cjtx_others)}')
+    target_save_path = os.path.join(target_path, 'wasabi2_others')
+    split_pools_info['wasabi2_others'] = {'pool_name': 'wasabi2_others', 'start_date': interval_start_date_others, 'stop_date': interval_stop_date,
+                                           'num_cjtxs': len(cjtx_others)}
+    if not os.path.exists(target_save_path):
+        os.makedirs(target_save_path.replace('\\', '/'))
+    als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_others})
+    logging.info(f'Total cjtxs extracted for pool WW2-others: {len(cjtx_others)}')
+
+    # Extract zksnacks coordinator
+    # Rule: All till 2024-06-02 00:00:00.000, in final 10 days must have >= 150 inputs
+    interval_stop_date_zksnacks = "2024-06-03 00:00:00.000"
+    cjtx_zksnacks_keys = {cjtx: None for cjtx in data["coinjoins"].keys() if data["coinjoins"][cjtx][
+        'broadcast_time'] < "2024-05-20 00:00:00.000"}
+    print(f'cjtx_zksnacks len={len(cjtx_zksnacks_keys)}')
+    cjtx_zksnacks_overlap_keys = {cjtx: None for cjtx in data["coinjoins"].keys() if data["coinjoins"][cjtx][
+        'broadcast_time'] > "2024-05-20 00:00:00.000" and data["coinjoins"][cjtx]['broadcast_time'] < interval_stop_date_zksnacks
+                             and len(data["coinjoins"][cjtx]['inputs']) >= 150}
+    print(f'cjtx_zksnacks_overlap len={len(cjtx_zksnacks_overlap_keys)}')
+    cjtx_zksnacks_keys.update(cjtx_zksnacks_overlap_keys)
+    print(f'cjtx_zksnacks joined len={len(cjtx_zksnacks_keys)}')
+
+    # We have coinjoins to keep - delete all others. Use in place deletion not to cause high peak memory
+    non_zksnacks_cjtxs = [cjtx for cjtx in data["coinjoins"].keys() if cjtx not in cjtx_zksnacks_keys]
+    for cjtx in non_zksnacks_cjtxs:
+        del data["coinjoins"][cjtx]
+
+    target_save_path = os.path.join(target_path, 'wasabi2_zksnacks')
+    split_pools_info['wasabi2_zksnacks'] = {'pool_name': 'wasabi2_zksnacks', 'start_date': '2022-06-01 00:00:07.000', 'stop_date': interval_stop_date_zksnacks,
+                                           'num_cjtxs': len(cjtx_zksnacks_keys)}
+
+    if not os.path.exists(target_save_path):
+        os.makedirs(target_save_path.replace('\\', '/'))
+    als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), data)
+    logging.info(f'Total cjtxs extracted for pool WW2-zkSNACKs: {len(data)}')
+    # IMPORTANT Explicitly change data dictionary to empty one as we already modified it inplace for peak memory requirements
+    data.clear()  # Clears the original dictionary
+    data["deleted"] = "deleted"
+
+    # Detect transactions which were not assigned to any pool (neither zksnacks, nor others)
+    missed_cjtxs = list(set(non_zksnacks_cjtxs) - set(cjtx_others.keys()))
     als.save_json_to_file_pretty(os.path.join(target_path, f'coinjoin_tx_info__missed.json'), missed_cjtxs)
     print(f'Total transactions not separated into pools: {len(missed_cjtxs)}')
     print(missed_cjtxs)
@@ -3244,6 +3316,13 @@ class DumplingsParseOptions:
         self.interval_stop_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
 
 
+def  free_memory(data_to_free):
+    del data_to_free
+    data_to_free = None
+    gc.collect()
+    time.sleep(3)
+
+
 if __name__ == "__main__":
     op = DumplingsParseOptions()
     # parse arguments, overwrite default settings if required
@@ -3282,7 +3361,7 @@ if __name__ == "__main__":
         logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
         load_path = os.path.join(target_load_path, f'coinjoin_tx_info.json')
         data = als.load_json_from_file(load_path)
-        split_pool_paths = wasabi2_extract_pools(data, target_path, op.interval_stop_date)
+        split_pool_paths = wasabi2_extract_pools_destroys_data(data, target_path, op.interval_stop_date)
         exit(42)
         data = fix_ww2_for_fdnp_ww1('wasabi2_others', target_path)
         exit(0)
@@ -3721,8 +3800,9 @@ if __name__ == "__main__":
             # Split zkSNACKs (-> wasabi2_zksnacks) and post-zkSNACKs (-> wasabi2_others) pools
             # This splitting will allow to analyze separate pools, but also to make data files smaller and easier to process later
             logging.info('Going to wasabi2_extract_pools() *****************************')
-            split_pool_info = wasabi2_extract_pools(data, target_path, op.interval_stop_date)
+            split_pool_info = wasabi2_extract_pools_destroys_data(data, target_path, op.interval_stop_date)
             logging.info('done wasabi2_extract_pools() *****************************')
+            free_memory(data)
 
             # WW2 needs additional treatment - detect and fix origin of WW1 inflows as friends
             # Do first separated pools, then the original (large) unseparated one
@@ -3731,19 +3811,21 @@ if __name__ == "__main__":
 
             for pool_name in split_pool_info.keys():
                 logging.info(f'Going to process_and_save_intervals_filter({pool_name}) *****************************')
-                process_and_save_intervals_filter(pool_name, MIX_PROTOCOL.WASABI2, target_path,
+                pool_data = process_and_save_intervals_filter(pool_name, MIX_PROTOCOL.WASABI2, target_path,
                                                          split_pool_info[pool_name]['start_date'], split_pool_info[pool_name]['stop_date'],
                                                          'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None,
                                                          SAVE_BASE_FILES_JSON, True)
-                logging.info(f'done for {pool_info["pool_name"]}) *****************************')
+                free_memory(pool_data)
+                logging.info(f'done for {pool_name}) *****************************')
 
             # Fix the large aggregate file (may crash due to huge memory requirements)
-            logging.info(
-                f'Going to process_and_save_intervals_filter(wasabi2) *****************************')
+            logging.info(f'Going to fix_ww2_for_fdnp_ww1(wasabi2) *****************************')
             fix_ww2_for_fdnp_ww1('wasabi2', target_path)
+            logging.info(f'done fix_ww2_for_fdnp_ww1(wasabi2) *****************************')
+            logging.info(f'Going to process_and_save_intervals_filter(wasabi2) *****************************')
             process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', op.interval_stop_date,
                                        'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, True)
-            logging.info(f'done for wasabi2) *****************************')
+            logging.info(f'done process_and_save_intervals_filter(wasabi2) *****************************')
 
 
     if op.VISUALIZE_ALL_COINJOINS_INTERVALS:
@@ -3796,7 +3878,7 @@ if __name__ == "__main__":
             data = als.load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
 
             # Separate per coordinator -> zksnacks & others
-            wasabi2_extract_pools(data, target_path, op.interval_stop_date)
+            wasabi2_extract_pools_destroys_data(data, target_path, op.interval_stop_date)
             # Detect coordinators for others (wasabi2_others)
             wasabi_detect_coordinators('wasabi2_others', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_others'))
 
