@@ -86,18 +86,19 @@ def save_json_to_file_pretty(file_path: str, data: dict, sort: bool = False):
 
 
 def detect_no_inout_remix_txs(coinjoins):
-    no_remix = {'inputs_noremix': [], 'outputs_noremix': []}
+    no_remix = {'inputs_noremix': {}, 'outputs_noremix': {}}
     for cjtx in coinjoins.keys():
         if sum([1 for index in coinjoins[cjtx]['inputs'].keys()
                 if coinjoins[cjtx]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name]) == 0:
             logging.warning(f'No input remix detected for {cjtx}')
-            no_remix['inputs_noremix'].append(cjtx)
+            no_remix['inputs_noremix'][cjtx] = coinjoins[cjtx]['broadcast_time']
         if sum([1 for index in coinjoins[cjtx]['outputs'].keys()
              if coinjoins[cjtx]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name]) == 0:
             logging.warning(f'No output remix detected for {cjtx}')
-            no_remix['outputs_noremix'].append(cjtx)
+            no_remix['outputs_noremix'][cjtx] = coinjoins[cjtx]['broadcast_time']
 
-    no_remix['both_noremix'] = set(no_remix['inputs_noremix']).intersection(set(no_remix['outputs_noremix']))
+    noremix_txs = set(no_remix['inputs_noremix'].keys()).intersection(set(no_remix['outputs_noremix'].keys()))
+    no_remix['both_noremix'] = {cjtx: coinjoins[cjtx]['broadcast_time'] for cjtx in noremix_txs}
     logging.warning(f'Txs with no input&output remix: {no_remix["both_noremix"]}')
     return no_remix
 
@@ -109,20 +110,23 @@ def detect_address_reuse_txs(coinjoins, reuse_threshold: float):
     :param reuse_threshold: value between 0 and 1. Higher the threshold, more addresses needs to be reused (=> less size of set())
     :return: detected txs with addresses reusing
     '''
-    addr_reuse = {'inputs_address_reuse': [], 'outputs_address_reuse': []}
+    addr_reuse = {'inputs_address_reuse': {}, 'outputs_address_reuse': {}}
     for cjtx in coinjoins.keys():
         in_addressses = set([coinjoins[cjtx]['inputs'][index]['script'] for index in coinjoins[cjtx]['inputs'].keys()])
         ratio = len(in_addressses) / len(coinjoins[cjtx]['inputs'])
         if ratio < (1 - reuse_threshold):
             logging.warning(f'Input address reuse above threshold {ratio} detected for {cjtx}')
-            addr_reuse['inputs_address_reuse'].append(cjtx)
+            #addr_reuse['inputs_address_reuse'].append(cjtx)
+            addr_reuse['inputs_address_reuse'][cjtx] = coinjoins[cjtx]['broadcast_time']
         out_addressses = set([coinjoins[cjtx]['outputs'][index]['script'] for index in coinjoins[cjtx]['outputs'].keys()])
         ratio = len(out_addressses) / len(coinjoins[cjtx]['outputs'])
         if ratio < (1 - reuse_threshold):
             logging.warning(f'Output address reuse above threshold {ratio} detected for {cjtx}')
-            addr_reuse['outputs_address_reuse'].append(cjtx)
+            #addr_reuse['outputs_address_reuse'].append(cjtx)
+            addr_reuse['outputs_address_reuse'][cjtx] = coinjoins[cjtx]['broadcast_time']
 
-    addr_reuse['both_reuse'] = set(addr_reuse['inputs_address_reuse']).intersection(set(addr_reuse['outputs_address_reuse']))
+    reused_txs = set(addr_reuse['inputs_address_reuse'].keys()).intersection(set(addr_reuse['outputs_address_reuse'].keys()))
+    addr_reuse['both_reuse'] = {cjtx: coinjoins[cjtx]['broadcast_time'] for cjtx in reused_txs}
     logging.warning(f'Txs with no input&output remix: {addr_reuse["both_reuse"]}')
     return addr_reuse
 

@@ -2065,9 +2065,9 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
     fp_file = os.path.join(target_path, 'false_cjtxs.json')
     false_cjtxs = als.load_json_from_file(fp_file)
 
-    no_remix_all = {'inputs_noremix': [], 'outputs_noremix': [], 'both_noremix': [],
-                    f'inputs_address_reuse': [], f'outputs_address_reuse': [],
-                    f'both_reuse': []}
+    no_remix_all = {'inputs_noremix': {}, 'outputs_noremix': {}, 'both_noremix': {},
+                    f'inputs_address_reuse': {}, f'outputs_address_reuse': {},
+                    f'both_reuse': {}}
     for dir_name in files:
         target_base_path = os.path.join(target_path, dir_name)
         tx_json_file = os.path.join(target_base_path, f'{tx_file}')
@@ -2082,12 +2082,12 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
             # Detect transactions with no remixes on input/out or both
             no_remix = als.detect_no_inout_remix_txs(data["coinjoins"])
             for key in no_remix.keys():
-                no_remix_all[key].extend(no_remix[key])
+                no_remix_all[key].update(no_remix[key])
 
             # Detect transactions with too many address reuse
             address_reuse = als.detect_address_reuse_txs(data["coinjoins"], REUSE_THRESHOLD)
             for key in address_reuse.keys():
-                no_remix_all[key].extend(address_reuse[key])
+                no_remix_all[key].update(address_reuse[key])
 
     # Add used threshold value into key value in dictionary
     reuse_threshold_string = f"{REUSE_THRESHOLD:.2f}".replace('.', '_')
