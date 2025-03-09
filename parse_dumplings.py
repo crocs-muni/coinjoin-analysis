@@ -2043,7 +2043,7 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
     plt.close()
 
     # save detected no transactions with no remixes (potentially false positives)
-    als.save_json_to_file_pretty(os.path.join(target_path, 'no_remix_txs.json'), no_remix_all)
+    als.save_json_to_file_pretty(os.path.join(target_path, 'no_remix_txs_simplified.json'), no_remix_all)
     # Backup corresponding log file
     backup_log_files(target_path)
 
@@ -3184,8 +3184,8 @@ def parse_arguments():
                         required=False)
     parser.add_argument("-a", "--action",
                         help="Action to performed. Can be multiple. 'process_dumplings'...extract data from Dumpling files; "
-                             "'detect_false_positives'...heuristic detection of false cjtxs; 'plot_remixes'...plot coinjoins",
-                        choices=["process_dumplings", "detect_false_positives", "plot_coinjoins"],
+                             "'detect_false_positives'...heuristic detection of false cjtxs; 'detect_coordinators' ...heuristic detection of coordinators for cjtxs; 'plot_remixes'...plot coinjoins",
+                        choices=["process_dumplings", "detect_false_positives", "detect_coordinators", "plot_coinjoins"],
                         action="append", metavar="ACTION",
                         required=False)
     parser.add_argument("-tp", "--target-path",
@@ -3219,7 +3219,7 @@ class DumplingsParseOptions:
     PLOT_REMIXES = False
     PROCESS_NOTABLE_INTERVALS = False
     SPLIT_WHIRLPOOL_POOLS = False
-    SPLIT_WASABI2_POOLS = False
+    DETECT_COORDINATORS = False
     PLOT_REMIXES_FLOWS = False
     ANALYSIS_ADDRESS_REUSE = False
     ANALYSIS_PROCESS_ALL_COINJOINS = False
@@ -3259,6 +3259,8 @@ class DumplingsParseOptions:
                     self.ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = True
                 if act == 'detect_false_positives':
                     self.DETECT_FALSE_POSITIVES = True
+                if act == 'detect_coordinators':
+                    self.DETECT_COORDINATORS = True
                 if act == 'plot_coinjoins':
                     self.PLOT_REMIXES = True
 
@@ -3281,7 +3283,7 @@ class DumplingsParseOptions:
         self.PLOT_REMIXES = False
         self.PROCESS_NOTABLE_INTERVALS = False
         self.SPLIT_WHIRLPOOL_POOLS = False
-        self.SPLIT_WASABI2_POOLS = False
+        self.DETECT_COORDINATORS = False
 
         self.ANALYSIS_ADDRESS_REUSE = False
         self.ANALYSIS_PROCESS_ALL_COINJOINS = False
@@ -3316,7 +3318,7 @@ class DumplingsParseOptions:
         self.interval_stop_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
 
 
-def  free_memory(data_to_free):
+def free_memory(data_to_free):
     del data_to_free
     data_to_free = None
     gc.collect()
@@ -3357,6 +3359,9 @@ if __name__ == "__main__":
 
     DEBUG = False
     if DEBUG:
+        wasabi_detect_false(os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json')
+        exit(42)
+
         target_load_path = os.path.join(target_path, 'wasabi2')
         logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
         load_path = os.path.join(target_load_path, f'coinjoin_tx_info.json')
@@ -3827,7 +3832,6 @@ if __name__ == "__main__":
                                        'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, True)
             logging.info(f'done process_and_save_intervals_filter(wasabi2) *****************************')
 
-
     if op.VISUALIZE_ALL_COINJOINS_INTERVALS:
         if op.CJ_TYPE == CoinjoinType.SW:
             visualize_intervals('whirlpool', target_path, '2019-04-17 01:38:07.000', op.interval_stop_date)
@@ -3870,15 +3874,8 @@ if __name__ == "__main__":
             print(f'Total transactions not separated into pools: {len(missed_cjtxs)}')
             print(missed_cjtxs)
 
-    if op.SPLIT_WASABI2_POOLS:
+    if op.DETECT_COORDINATORS:
         if op.CJ_TYPE == CoinjoinType.WW2:
-            # Load txs for all pools
-            target_load_path = os.path.join(target_path, 'wasabi2')
-            logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
-            data = als.load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
-
-            # Separate per coordinator -> zksnacks & others
-            wasabi2_extract_pools_destroys_data(data, target_path, op.interval_stop_date)
             # Detect coordinators for others (wasabi2_others)
             wasabi_detect_coordinators('wasabi2_others', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_others'))
 
@@ -4033,6 +4030,9 @@ if __name__ == "__main__":
 
 
 #   Clever consolidation: 349f27c3104984f2668f981283695b81ce96a4ee5d984f8df26ee92c52dc6fe4
+
+# cjtx with no output remixes (possibly end of coordinator): https://mempool.space/tx/22f64af816772533696b15677b00b780acff6fe39cd09b98d84ab95bb3c46c3a
+#
 
 
 # 1. Download fees from mempool.space: fee_rates.json (add action)
