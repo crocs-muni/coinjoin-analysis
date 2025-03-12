@@ -1,9 +1,11 @@
 import copy
+import logging
 import math
 import os
 from datetime import datetime
 from itertools import chain
 
+import orjson
 import seaborn as sns
 import numpy as np
 from matplotlib import pyplot as plt
@@ -11,6 +13,7 @@ from matplotlib import pyplot as plt
 import parse_dumplings as dmp
 import cj_analysis as als
 
+from collections import defaultdict
 
 SATS_IN_BTC = 100000000
 
@@ -104,15 +107,47 @@ def get_session_label(mix_name: str, session_size_inputs: int, segment: list, se
     return cjsession_label_short
 
 
+def find_highest_scores(root_folder, mix_name: str):
+    highest_scores = defaultdict(int)  # Default score is 0
+
+    # Traverse all subfolders
+    for subdir, _, files in os.walk(root_folder):
+        if f'{mix_name}_coins.json' in files:
+            file_path = os.path.join(subdir, f'{mix_name}_coins.json')
+
+            try:
+                # Read JSON file
+                with open(file_path, "r", encoding="utf-8") as f:
+                    coin_data = als.load_json_from_file(file_path)['result']
+
+                # Update highest scores for each coin address
+                for coin in coin_data:
+                    #for coin_address, score in coin_data.items():
+                    highest_scores[coin['address']] = max(highest_scores[coin['address']], coin['anonymityScore'])
+
+            except (FileNotFoundError, PermissionError) as e:
+                logging.error(f"Error reading {file_path}: {e}")
+
+    return dict(highest_scores)  # Convert back to regular dictionary
+
+
 def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experiment_start_date: str):
     target_path = os.path.join(target_base_path, f'{mix_name}_history.json')
     history_all = als.load_json_from_file(target_path)['result']
     target_path = os.path.join(target_base_path, f'{mix_name}_coins.json')
     coins = als.load_json_from_file(target_path)['result']
+
+    # After each merge, anonymity score for merge transaction is set to 1 for all inputs.
+    # Search older *_coins.json files and try to find one before experiment coins merge
+    intermediate_coins_max_score = find_highest_scores(target_base_path, mix_name)
+    for coin in coins:
+        if coin['anonymityScore'] == 1:
+            coin['anonymityScore'] = intermediate_coins_max_score[coin['address']] if coin['address'] in intermediate_coins_max_score else 1
+
     target_path = os.path.join(target_base_path, f'coinjoin_tx_info.json')
     coinjoins = als.load_json_from_file(target_path)['coinjoins']
-    target_path = os.path.join(target_base_path, f'logww2.json')
-    coord_logs = als.load_json_from_file(target_path)
+    # target_path = os.path.join(target_base_path, f'logww2.json')
+    # coord_logs = als.load_json_from_file(target_path)
 
     # Filter all items from history older than experiment start date
     history = [tx for tx in history_all if tx['datetime'] >= experiment_start_date]
@@ -439,6 +474,23 @@ def full_analyze_as25():
     experiment_target_anonscore = 25
     problematic_sessions = ['mix1 0.1btc | 12 cjs | txid: 34']  # Failed experiments to be removed from processing
 
+    analyze_ww2_artifacts(target_path, experiment_start_cut_date, experiment_target_anonscore,
+                          ['mix1', 'mix2', 'mix3'], problematic_sessions, 23)
+
+
+def full_analyze_as38():
+    # Experiment configuration
+    target_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\mn1\\as38\\'
+    experiment_start_cut_date = '2025-03-09T00:02:49+00:00'  # AS=38 experiment start time
+    experiment_target_anonscore = 38
+    problematic_sessions = []  # Failed experiments to be removed from processing
+
+    analyze_ww2_artifacts(target_path, experiment_start_cut_date, experiment_target_anonscore,
+                          ['mix6'], problematic_sessions, -1)
+
+
+def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, experiment_target_anonscore: int,
+                          wallets_names: list, problematic_sessions: list, assert_num_expected_sessions: int):
     all_cjs = {}
     all_stats = {}
 
@@ -461,9 +513,10 @@ def full_analyze_as25():
         cjs, wallet_stats = analyze_as25(target_path, mix_name, experiment_target_anonscore, experiment_start_cut_date)
         wallet_stats = filter_sessions(wallet_stats, problematic_sessions)
         for to_remove in problematic_sessions:
-            for session in list(cjs['sessions'].keys()):
-                if session.find(to_remove) != -1:
-                    cjs['sessions'].pop(session)
+            if len(to_remove) > 0:
+                for session in list(cjs['sessions'].keys()):
+                    if session.find(to_remove) != -1:
+                        cjs['sessions'].pop(session)
         PLOT_FOR_WALLETS = False
         if PLOT_FOR_WALLETS:
             plot_cj_anonscores(wallet_stats['anon_percentage_status'],
@@ -478,26 +531,22 @@ def full_analyze_as25():
         return cjs, wallet_stats
 
 
-    NUM_COLUMNS = 4
-    NUM_ROWS = 5
+    NUM_COLUMNS = 2  # 4
+    NUM_ROWS = 6     # 5
     fig = plt.figure(figsize=(20, NUM_ROWS * 2.5))
     mfig = Multifig(plt, fig, NUM_ROWS, NUM_COLUMNS)
 
-    cjs, wallet_stats = analyze_mix(target_path, 'mix1', experiment_target_anonscore, experiment_start_cut_date, problematic_sessions)
-    als.merge_dicts(cjs, all_cjs)
-    als.merge_dicts(wallet_stats, all_stats)
-    cjs, wallet_stats = analyze_mix(target_path, 'mix2', experiment_target_anonscore, experiment_start_cut_date, problematic_sessions)
-    als.merge_dicts(cjs, all_cjs)
-    als.merge_dicts(wallet_stats, all_stats)
-    cjs, wallet_stats = analyze_mix(target_path, 'mix3', experiment_target_anonscore, experiment_start_cut_date, problematic_sessions)
-    als.merge_dicts(cjs, all_cjs)
-    als.merge_dicts(wallet_stats, all_stats)
-    assert len(all_stats['anon_percentage_status']) == 23, f'Unexpected number of coinjoin sessions {len(all_stats['anon_percentage_status'])}'
+    for wallet_name in wallets_names:
+        cjs, wallet_stats = analyze_mix(target_path, wallet_name, experiment_target_anonscore, experiment_start_cut_date, problematic_sessions)
+        als.merge_dicts(cjs, all_cjs)
+        als.merge_dicts(wallet_stats, all_stats)
+    if assert_num_expected_sessions > -1:
+        assert len(all_stats['anon_percentage_status']) == assert_num_expected_sessions, f'Unexpected number of coinjoin sessions {len(all_stats['anon_percentage_status'])}'
 
     # Save extracted information
-    save_path = os.path.join(target_path, 'as25_coinjoin_tx_info.json')
+    save_path = os.path.join(target_path, f'as{experiment_target_anonscore}_coinjoin_tx_info.json')
     als.save_json_to_file_pretty(save_path, all_cjs)
-    save_path = os.path.join(target_path, 'as25_stats.json')
+    save_path = os.path.join(target_path, f'as{experiment_target_anonscore}_stats.json')
     als.save_json_to_file_pretty(save_path, all_stats)
 
     # Extract complete coinjoins info
@@ -588,7 +637,8 @@ if __name__ == "__main__":
 
     # prison_logs = analyse_prison_logs(target_path)
     # exit(42)
-    full_analyze_as25()
+    #full_analyze_as25()
+    full_analyze_as38()
 
     # base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\mn1\\tmp\\'
     # merged = merge_coins_files(base_path, 'mix2_coins.json', 'mix2_coins_20240528.json')
