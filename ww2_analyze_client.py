@@ -30,7 +30,7 @@ class Multifig:
         self.plt = plt
 
     def add_subplot(self):
-        ax = fig.add_subplot(self.num_rows, self.num_columns, mfig.ax_index)
+        ax = self.fig.add_subplot(self.num_rows, self.num_columns, self.ax_index)
         self.ax_index += 1
         return ax
 
@@ -109,7 +109,7 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
     coord_logs = als.load_json_from_file(target_path)
 
     # Filter all items from history older than experiment start date
-    history = [tx for tx in history_all if tx['datetime'] >= experiment_start_cut_date]
+    history = [tx for tx in history_all if tx['datetime'] >= experiment_start_date]
 
     # Pair wallet coins to transactions from wallet history
     for cjtx in history:
