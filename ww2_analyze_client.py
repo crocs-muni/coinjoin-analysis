@@ -38,19 +38,25 @@ class Multifig:
 def plot_cj_anonscores(mfig: Multifig, data: dict, title: str, y_label: str, show_txid: bool = False):
     ax = mfig.add_subplot()  # Get next subplot
     #fig, ax = plt.subplots(figsize=(10, 5))
+    size_01_used = False
+    size_02_used = False
     for cj_session in data.keys():
         line_style = ':'
         if cj_session.find('0.1btc') != -1:
             line_style = 'solid'
+            size_01_used = True
         if cj_session.find('0.2btc') != -1:
             line_style = ':'
+            size_02_used = True
         cj_label = cj_session
         if not show_txid and cj_session.find('txid:'):
             cj_label = cj_label[0:cj_session.find('txid:')]
         x_range = range(1, len(data[cj_session]) + 1)
         ax.plot(x_range, data[cj_session], color='gray', linestyle=line_style, alpha=0.5)
-    ax.plot([1], [1], color='gray', label='Input size 0.1 btc', linestyle='solid', alpha=0.5)
-    ax.plot([1], [1], color='gray', label='Input size 0.2 btc', linestyle=':', alpha=0.5)
+    if size_01_used:
+        ax.plot([1], [1], color='gray', label='Input size 0.1 btc', linestyle='solid', alpha=0.5)
+    if size_02_used:
+        ax.plot([1], [1], color='gray', label='Input size 0.2 btc', linestyle=':', alpha=0.5)
     ax.set_xticks(np.arange(1, 15, 2))
 
     def compute_average_at_index(lists, index):
