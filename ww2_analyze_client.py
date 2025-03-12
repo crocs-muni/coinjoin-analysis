@@ -426,14 +426,7 @@ def plot_cj_heatmap(mfig: Multifig, x, y, x_label, y_label, title):
     #plt.show()
 
 
-if __name__ == "__main__":
-    als.SORT_COINJOINS_BY_RELATIVE_ORDER = False
-    # round_logs = als.parse_client_coinjoin_logs(target_path)
-    # exit(42)
-
-    # prison_logs = analyse_prison_logs(target_path)
-    # exit(42)
-
+def full_analyze_as25():
     # Experiment configuration
     target_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\mn1\\as25\\'
     experiment_start_cut_date = '2024-05-14T19:02:49+00:00'  # AS=25 experiment start time
@@ -581,6 +574,15 @@ if __name__ == "__main__":
 
     exit(42)
 
+
+if __name__ == "__main__":
+    als.SORT_COINJOINS_BY_RELATIVE_ORDER = False
+    # round_logs = als.parse_client_coinjoin_logs(target_path)
+    # exit(42)
+
+    # prison_logs = analyse_prison_logs(target_path)
+    # exit(42)
+    full_analyze_as25()
 
     # base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\mn1\\tmp\\'
     # merged = merge_coins_files(base_path, 'mix2_coins.json', 'mix2_coins_20240528.json')
