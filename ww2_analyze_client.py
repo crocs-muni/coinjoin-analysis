@@ -147,7 +147,7 @@ def find_highest_scores(root_folder, mix_name: str):
     return dict(highest_scores)  # Convert back to regular dictionary
 
 
-def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experiment_start_date: str):
+def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, target_as: int, experiment_start_date: str):
     target_path = os.path.join(target_base_path, f'{mix_name}_history.json')
     history_all = als.load_json_from_file(target_path)['result']
     target_path = os.path.join(target_base_path, f'{mix_name}_coins.json')
@@ -261,6 +261,8 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
             print(f'#', end='')
             assert len(cjtx['outputs']) != 0, f'No coins assigned to {cjtx['txid']}'
 
+            # Print all output coins (at given state of time) based on their anonscore
+            # red ... anonscore target not reached yet, green ... already reached
             for index in cjtx['outputs']:
                 if cjtx['outputs'][index]['anon_score'] < target_as:
                     # Print in red - target as not yet reached
@@ -272,16 +274,25 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
                     print("\033[32m" + f' {round(cjtx['outputs'][index]['anon_score'], 1)}' + "\033[0m", end='')
 
             # Compute privacy progress
-            for index in cjtx['inputs']:  # Remove coins from session_coins spend by this cj
+            # 1. Update pool of coins in the wallet by removal of input coins and addition of newly created output coins
+            # 2. Compute percentage progress status as weighted fraction of coins anonscore wrt desired target onescore
+            #    (if coin's current anonscore is bigger that target anonscore, target anonscore is used as maximum => effective_as)
+            # 3. Check if result is not above 1 (100%), if yes then warn and limit to 100%
+            # Update pool (step 1.)
+            for index in cjtx['inputs']:  # Remove coins from session_coins spend by this cjtx
                 session_coins.pop(cjtx['inputs'][index]['address'], None)
-            for index in cjtx['outputs']:  # Add coins to session_coins created by this cj
+            for index in cjtx['outputs']:  # Add coins to session_coins created by this cjtx
                 session_coins[cjtx['outputs'][index]['address']] = cjtx['outputs'][index]
+            # Compute percentage progress status (step 2.)
             anon_percentage_status = 0
             for address in session_coins.keys():
                 if session_coins[address]['anon_score'] > 1:
                     effective_as = min(session_coins[address]['anon_score'], target_as)
+                    # Weighted percentage contribution of this specific coin to progress status
                     anon_percentage_status += (effective_as / target_as) * (
                             session_coins[address]['value'] / session_size_inputs)
+            # Privacy progress can be sometimes slightly bigger than 100% for sessions where some previously prisoned
+            # coins were included into mix during experiment (happened rarely and for very small coins)
             WARN_TOO_HIGH_PRIVACY_PROGRESS = True
             if WARN_TOO_HIGH_PRIVACY_PROGRESS and anon_percentage_status > 1.01:
                 print(f'\nToo large anon_percentage_status {round(anon_percentage_status * 100, 1)}%: {cjtxid}')
@@ -289,9 +300,13 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
             print(f' {round(anon_percentage_status * 100, 1)}%', end='')
             anon_percentage_status_list.append(anon_percentage_status * 100)
 
-            observed_remix_liquidity_ratio = 0
-            for index in cjtx['inputs']:
-                observed_remix_liquidity_ratio += cjtx['inputs'][index]['value'] / session_size_inputs
+            # Compute observed liquidity ratio for wallet's coins
+            # This value enumerates multiplier of initial fresh liquidity over multiple cjtxs
+            # (If all coins are fully mixed in the first coinjoin, then observed_remix_liquidity_ratio is 1,
+            # every additional mix is adding additional input liquidity (remixed))
+            # 1. Sum values of all wallet's input coins (to this cjtx), divided by fresh liquidity (of this session)
+            # 2. Compute cummulative liquidity for each subsequent coinjoin (observed_remix_liquidity_ratio_cumul_list)
+            observed_remix_liquidity_ratio = sum([cjtx['inputs'][index]['value'] for index in cjtx['inputs']]) / session_size_inputs
             observed_remix_liquidity_ratio_list.append(observed_remix_liquidity_ratio)
             if len(observed_remix_liquidity_ratio_cumul_list) == 0:
                 if not math.isclose(observed_remix_liquidity_ratio, 1.0, rel_tol=1e-9):
@@ -318,7 +333,7 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
         print(f' |--> \"{cjsession_label_short}\"', end='')
         print()
 
-    # Number of skipped coinjoins
+    # Number of completely skipped coinjoin transactions (no wallet's coin is participating in coinjoin executed   )
     sorted_cj_times = als.sort_coinjoins(coinjoins, als.SORT_COINJOINS_BY_RELATIVE_ORDER)
     coinjoins_index = {sorted_cj_times[i]['txid']: i for i in range(0, len(sorted_cj_times))}  # Precomputed mapping of txid to index for fast burntime computation
     # coord_logs_sanitized = [{**item, 'mp_first_seen': item['mp_first_seen'] if item['mp_first_seen'] is not None else item['cj_last_seen']} for item in coord_logs]
@@ -479,9 +494,9 @@ def plot_cj_heatmap(mfig: Multifig, x, y, x_label, y_label, title):
     #plt.show()
 
 
-def full_analyze_as25():
+def full_analyze_as25_202405(base_path: str):
     # Experiment configuration
-    target_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\mn1\\as25\\'
+    target_path = os.path.join(base_path, 'as25\\')
     experiment_start_cut_date = '2024-05-14T19:02:49+00:00'  # AS=25 experiment start time
     experiment_target_anonscore = 25
     problematic_sessions = ['mix1 0.1btc | 12 cjs | txid: 34']  # Failed experiments to be removed from processing
@@ -490,9 +505,9 @@ def full_analyze_as25():
                           ['mix1', 'mix2', 'mix3'], problematic_sessions, 23)
 
 
-def full_analyze_as38():
+def full_analyze_as38_202503(base_path: str):
     # Experiment configuration
-    target_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\mn1\\as38\\'
+    target_path = os.path.join(base_path, 'as38\\')
     experiment_start_cut_date = '2025-03-09T00:02:49+00:00'  # AS=38 experiment start time
     experiment_target_anonscore = 38
     problematic_sessions = []  # Failed experiments to be removed from processing
@@ -522,7 +537,7 @@ def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, expe
         return data
 
     def analyze_mix(target_path, mix_name, experiment_target_anonscore, experiment_start_cut_date, problematic_sessions):
-        cjs, wallet_stats = analyze_as25(target_path, mix_name, experiment_target_anonscore, experiment_start_cut_date)
+        cjs, wallet_stats = analyze_multisession_mix_experiments(target_path, mix_name, experiment_target_anonscore, experiment_start_cut_date)
         wallet_stats = filter_sessions(wallet_stats, problematic_sessions)
         for to_remove in problematic_sessions:
             if len(to_remove) > 0:
@@ -674,8 +689,9 @@ if __name__ == "__main__":
 
     # prison_logs = analyse_prison_logs(target_path)
     # exit(42)
-    all25 = full_analyze_as25()
-    all38 = full_analyze_as38()
+    base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\mn1\\'
+    all25 = full_analyze_as25_202405(base_path)
+    all38 = full_analyze_as38_202503(base_path)
 
     NUM_COLUMNS = 2  # 4
     NUM_ROWS = 6     # 5
@@ -691,7 +707,7 @@ if __name__ == "__main__":
     # save graph
     mfig.plt.suptitle(f'Combined plots as25 and as38', fontsize=16)  # Adjust the fontsize and y position as needed
     mfig.plt.subplots_adjust(bottom=0.1, wspace=0.5, hspace=0.5)
-    save_file = os.path.join(f'c:/!blockchains/CoinJoin/WasabiWallet_experiments/mn1/as25_38_coinjoin_stats')
+    save_file = os.path.join(base_path, 'as25_38_coinjoin_stats')
     mfig.plt.savefig(f'{save_file}.png', dpi=300)
     mfig.plt.savefig(f'{save_file}.pdf', dpi=300)
     mfig.plt.close()
