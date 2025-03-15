@@ -21,9 +21,9 @@ cd $HOME/btc/coinjoin-analysis
 python3 parse_dumplings.py --cjtype ww2 --action process_dumplings --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
 # Copy already known false positives from false_cjtxs.json
-cp $HOME/btc/coinjoin-analysis/data/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/wasabi2/
-cp $HOME/btc/coinjoin-analysis/data/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/wasabi2_others/
-cp $HOME/btc/coinjoin-analysis/data/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/wasabi2_zksnacks/
+for dir in wasabi2 wasabi2_others wasabi2_zksnacks; do
+    cp $HOME/btc/coinjoin-analysis/data/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/$dir/
+done
 
 # Download historical fee rates
 curl -sSL "https://mempool.space/api/v1/mining/blocks/fee-rates/all" > $TMP_DIR/Scanner/wasabi2/fee_rates.json
@@ -34,26 +34,21 @@ curl -sSL "https://mempool.space/api/v1/mining/blocks/fee-rates/all" > $TMP_DIR/
 python3 parse_dumplings.py --cjtype ww2 --action detect_false_positives --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
 # Run coordinators detection
-cp $HOME/btc/coinjoin-analysis/data/wasabi2/txid_coord.json $TMP_DIR/Scanner/wasabi2/
-cp $HOME/btc/coinjoin-analysis/data/wasabi2/txid_coord.json $TMP_DIR/Scanner/wasabi2_others/
-cp $HOME/btc/coinjoin-analysis/data/wasabi2/txid_coord.json $TMP_DIR/Scanner/wasabi2_zksnacks/
+for dir in wasabi2 wasabi2_others wasabi2_zksnacks; do
+    cp $HOME/btc/coinjoin-analysis/data/wasabi2/txid_coord.json $TMP_DIR/Scanner/$dir/
+done
 python3 parse_dumplings.py --cjtype ww2 --action detect_coordinators --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
 # Run split of post-zksnacks coordinators
 python3 parse_dumplings.py --cjtype ww2 --action split_coordinators --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 # Copy fee rates into newly created folders (selected ones)
-cp $TMP_DIR/Scanner/wasabi2/fee_rates.json $TMP_DIR/Scanner/wasabi2_kruw/
-cp $TMP_DIR/Scanner/wasabi2/fee_rates.json $TMP_DIR/Scanner/wasabi2_gingerwallet/
-cp $TMP_DIR/Scanner/wasabi2/fee_rates.json $TMP_DIR/Scanner/wasabi2_opencoordinator/
-cp $TMP_DIR/Scanner/wasabi2/fee_rates.json $TMP_DIR/Scanner/wasabi2_wasabicoordinator/
-cp $TMP_DIR/Scanner/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/wasabi2_kruw/
-cp $TMP_DIR/Scanner/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/wasabi2_gingerwallet/
-cp $TMP_DIR/Scanner/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/wasabi2_opencoordinator/
-cp $TMP_DIR/Scanner/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/wasabi2_wasabicoordinator/
+for dir in kruw gingerwallet opencoordinator wasabicoordinator coinjoin_nl wasabist dragonordnance mega btip; do
+    cp $TMP_DIR/Scanner/wasabi2/fee_rates.json $TMP_DIR/Scanner/wasabi2_$dir/
+    cp $TMP_DIR/Scanner/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/wasabi2_$dir/
+done
 
 # Run generation of plots
 python3 parse_dumplings.py --cjtype ww2 --action plot_coinjoins --target-path $TMP_DIR/ | tee parse_dumplings.py.log
-
 
 
 #
