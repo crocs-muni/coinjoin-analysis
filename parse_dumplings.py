@@ -2594,7 +2594,7 @@ def wasabi2_extract_pools_original(data: dict, target_path: str, interval_stop_d
     return split_pools_info
 
 
-def wasabi2_extract_pools_destroys_data(data: dict, target_path: str, interval_stop_date: str):
+def wasabi2_extract_pools_destroys_data(data: dict, target_path: str, interval_stop_date: str, txid_coord_discovered: dict= None):
     """
     Takes dictionary with all coinjoins and split it to ones belonging to zksnacks coordinator and other coordinators.
     IMPORTANT: due to peak memory requirements of higher tens of GBs (03/2025), this function filters transactions inplace
@@ -2602,9 +2602,19 @@ def wasabi2_extract_pools_destroys_data(data: dict, target_path: str, interval_s
     :param data: Dictionary will all coinjoins for all coordinators (IS erased afterwards)
     :param target_path: directory where to store jsons with separated coordinators
     :param interval_stop_date: the last date to process (all coinjoins after it are ignored)
+    :param txid_coord_discovered: optional list with mapping between coordinators and their cjtxs
     :return: dictionary with basic information regarding separated cooridnators
     """
     logging.debug('wasabi2_extract_pools() started')
+
+    def save_split_coordinator(cjtx_coord: dict, target_path: str, coordinator_name: str, interval_start_date, interval_stop_date):
+        target_save_path = os.path.join(target_path, coordinator_name)
+        if not os.path.exists(target_save_path):
+            os.makedirs(target_save_path.replace('\\', '/'))
+        als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_coord})
+        return {'pool_name': coordinator_name, 'start_date': interval_start_date,
+                                              'stop_date': interval_stop_date,
+                                              'num_cjtxs': len(cjtx_coord)}
 
     split_pools_info = {}
     # Extract post-zksnacks coordinator(s)
@@ -2619,12 +2629,8 @@ def wasabi2_extract_pools_destroys_data(data: dict, target_path: str, interval_s
     print(f'cjtx_others_overlap len={len(cjtx_others_overlap)}')
     cjtx_others.update(cjtx_others_overlap)
     print(f'cjtx_others joined len={len(cjtx_others)}')
-    target_save_path = os.path.join(target_path, 'wasabi2_others')
-    split_pools_info['wasabi2_others'] = {'pool_name': 'wasabi2_others', 'start_date': interval_start_date_others, 'stop_date': interval_stop_date,
-                                           'num_cjtxs': len(cjtx_others)}
-    if not os.path.exists(target_save_path):
-        os.makedirs(target_save_path.replace('\\', '/'))
-    als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_others})
+    split_pools_info['wasabi2_others'] = save_split_coordinator(cjtx_others, target_path,
+                                                                'wasabi2_others', interval_start_date_others, interval_stop_date)
     logging.info(f'Total cjtxs extracted for pool WW2-others: {len(cjtx_others)}')
 
     # Extract zksnacks coordinator
@@ -2665,6 +2671,40 @@ def wasabi2_extract_pools_destroys_data(data: dict, target_path: str, interval_s
 
     # Backup corresponding log file
     backup_log_files(target_path)
+
+    return split_pools_info
+
+
+def wasabi2_extract_other_pools(selected_coords: list, data: dict, target_path: str, interval_stop_date: str, txid_coord_discovered: dict):
+    """
+    Takes dictionary with all post-zksnacks coinjoins and split it to separate coordinators.
+    :param selected_coords: list of coordinator names which shall be separated
+    :param data: Dictionary will all coinjoins for all coordinators
+    :param target_path: directory where to store jsons with separated coordinators
+    :param interval_stop_date: the last date to process (all coinjoins after it are ignored)
+    :param txid_coord_discovered: optional list with mapping between coordinators and their cjtxs
+    :return: dictionary with basic information regarding separated cooridnators
+    """
+    logging.debug('wasabi2_extract_other_pools() started')
+    interval_start_date_others = '2024-05-01 00:00:00.000'
+
+    split_pools_info = {}
+    # Extract selected post-zksnacks coordinators
+    # Precompute transaction-to-entity mapping for faster lookup
+    tx_to_entity = {tx_id: entity for entity, tx_ids in txid_coord_discovered.items() for tx_id in tx_ids}
+    for coord_name in selected_coords:
+        coord_full_name = f'wasabi2_{coord_name}'
+        cjtx_coord = {cjtx: data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys()
+                      if cjtx in tx_to_entity and tx_to_entity[cjtx] == coord_name}
+        target_save_path = os.path.join(target_path, coord_full_name)
+        if not os.path.exists(target_save_path):
+            os.makedirs(target_save_path.replace('\\', '/'))
+        als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_coord})
+        split_pools_info[coord_full_name] = {'pool_name': coord_full_name, 'start_date': interval_start_date_others,
+                'stop_date': interval_stop_date,
+                'num_cjtxs': len(cjtx_coord)}
+
+        logging.info(f'Total cjtxs extracted for pool {coord_name}: {len(cjtx_coord)}')
 
     return split_pools_info
 
@@ -3184,8 +3224,10 @@ def parse_arguments():
                         required=False)
     parser.add_argument("-a", "--action",
                         help="Action to performed. Can be multiple. 'process_dumplings'...extract data from Dumpling files; "
-                             "'detect_false_positives'...heuristic detection of false cjtxs; 'detect_coordinators' ...heuristic detection of coordinators for cjtxs; 'plot_remixes'...plot coinjoins",
-                        choices=["process_dumplings", "detect_false_positives", "detect_coordinators", "plot_coinjoins"],
+                             "'detect_false_positives'...heuristic detection of false cjtxs; "
+                             "'detect_coordinators' ...heuristic detection of coordinators for cjtxs; "
+                             "'split_coordinators' ...separate data files for different cooridnators; 'plot_remixes'...plot coinjoins",
+                        choices=["process_dumplings", "detect_false_positives", "detect_coordinators", "split_coordinators", "plot_coinjoins"],
                         action="append", metavar="ACTION",
                         required=False)
     parser.add_argument("-tp", "--target-path",
@@ -3220,6 +3262,7 @@ class DumplingsParseOptions:
     PROCESS_NOTABLE_INTERVALS = False
     SPLIT_WHIRLPOOL_POOLS = False
     DETECT_COORDINATORS = False
+    SPLIT_COORDINATORS = False
     PLOT_REMIXES_FLOWS = False
     ANALYSIS_ADDRESS_REUSE = False
     ANALYSIS_PROCESS_ALL_COINJOINS = False
@@ -3261,6 +3304,8 @@ class DumplingsParseOptions:
                     self.DETECT_FALSE_POSITIVES = True
                 if act == 'detect_coordinators':
                     self.DETECT_COORDINATORS = True
+                if act == 'split_coordinators':
+                    self.SPLIT_COORDINATORS = True
                 if act == 'plot_coinjoins':
                     self.PLOT_REMIXES = True
 
@@ -3284,6 +3329,7 @@ class DumplingsParseOptions:
         self.PROCESS_NOTABLE_INTERVALS = False
         self.SPLIT_WHIRLPOOL_POOLS = False
         self.DETECT_COORDINATORS = False
+        self.SPLIT_COORDINATORS = False
 
         self.ANALYSIS_ADDRESS_REUSE = False
         self.ANALYSIS_PROCESS_ALL_COINJOINS = False
@@ -3878,6 +3924,29 @@ if __name__ == "__main__":
         if op.CJ_TYPE == CoinjoinType.WW2:
             # Detect coordinators for others (wasabi2_others)
             wasabi_detect_coordinators('wasabi2_others', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_others'))
+        else:
+            logging.error('Unsupported CJ_TYPE for DETECT_COORDINATORS')
+            exit(-1)
+
+    if op.SPLIT_COORDINATORS:
+        if op.CJ_TYPE == CoinjoinType.WW2:
+            data = als.load_json_from_file(os.path.join(target_path, 'wasabi2_others', 'coinjoin_tx_info.json'))
+            coord_tx_mapping = als.load_json_from_file(os.path.join(target_path, 'wasabi2_others', 'txid_coord_discovered_renamed.json'))
+            selected_coords = ["kruw", "mega", "btip", "gingerwallet", "wasabicoordinator", "coinjoin_nl",
+                               "opencoordinator", "dragonordnance", "wasabist"]
+            split_pool_info = wasabi2_extract_other_pools(selected_coords, data, target_path, op.interval_stop_date, coord_tx_mapping)
+            # Perform splitting into month intervals for all processed coordinators
+            for pool_name in split_pool_info.keys():
+                logging.info(f'Going to process_and_save_intervals_filter({pool_name}) *****************************')
+                pool_data = process_and_save_intervals_filter(pool_name, MIX_PROTOCOL.WASABI2, target_path,
+                                                              split_pool_info[pool_name]['start_date'],
+                                                              split_pool_info[pool_name]['stop_date'],
+                                                              'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None,
+                                                              SAVE_BASE_FILES_JSON, True)
+                logging.info(f'done for {pool_name}) *****************************')
+        else:
+            logging.error('Unsupported CJ_TYPE for SPLIT_COORDINATORS')
+            exit(-1)
 
     if op.PLOT_INTERMIX_FLOWS:
         analyze_mixes_flows(target_path)
@@ -3890,7 +3959,10 @@ if __name__ == "__main__":
             wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, True)
 
         if op.CJ_TYPE == CoinjoinType.WW2:
-            for mix_id in ['wasabi2_others', 'wasabi2_zksnacks', 'wasabi2']:
+            for mix_id in ['wasabi2_kruw', 'wasabi2_gingerwallet', 'wasabi2_opencoordinator', 'wasabi2_coinjoin_nl',
+                           'wasabi2_wasabicoordinator', 'wasabi2_wasabist', 'wasabi2_dragonordnance',
+                           'wasabi2_mega', 'wasabi2_btip',
+                           'wasabi2_others', 'wasabi2_zksnacks', 'wasabi2']:
                 target_base_path = os.path.join(target_path, mix_id)
                 if os.path.exists(target_base_path):
                     wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, False)
