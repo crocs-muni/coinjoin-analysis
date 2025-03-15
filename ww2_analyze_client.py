@@ -325,11 +325,9 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
     # coord_logs_sorted = sorted(coord_logs_sanitized, key=lambda x: x['mp_first_seen'])
     # coinjoins_index = {coord_logs_sorted[i]['id']: i for i in range(0, len(coord_logs_sorted))}
     stats['skipped_cjtxs'] = {}
-    stats['skipped_cjtxs_corrected'] = {}  # TODO: Remove skipped_cjtxs_corrected, is now fixed by relative ordering
     for session_label in cjtxs['sessions'].keys():
         prev_cjtxid = None
         skipped_cjtxs_list = []
-        skipped_cjtxs_corrected_list = []
         for cjtxid in cjtxs['sessions'][session_label]['coinjoins'].keys():
             if cjtxid not in coinjoins_index.keys():
                 print(f'{cjtxid} missing from coord_logs')
@@ -348,10 +346,8 @@ def analyze_as25(target_base_path: str, mix_name: str, target_as: int, experimen
             if skipped < 0:
                 print(f'Inconsistent skipped coinjoins of {skipped} for {cjtxid} - {prev_cjtxid}')
             skipped_cjtxs_list.append(skipped)
-            skipped_cjtxs_corrected_list.append(skipped - min_burn_time)
             prev_cjtxid = cjtxid
         stats['skipped_cjtxs'][session_label] = skipped_cjtxs_list
-        stats['skipped_cjtxs_corrected'][session_label] = skipped_cjtxs_corrected_list
 
     # Number of inputs and outputs
     stats['num_inputs'] = {}
@@ -574,18 +570,15 @@ def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, expe
                        f'{experiment_target_anonscore}','Anonscore gain (weighted, ratio)', 'royalblue')
     plot_cj_anonscores(mfig, all_stats['observed_remix_liquidity_ratio_cumul'], f'All wallets, cumullative remix liquidity ratio (AS={experiment_target_anonscore}); total sessions={len(all_stats['observed_remix_liquidity_ratio_cumul'])}',
                        f'{experiment_target_anonscore}','Cummulative remix ratio', 'royalblue')
-    plot_cj_anonscores(mfig, all_stats['skipped_cjtxs'],
-                       f'All wallets, skipped cjtxs;total sessions={len(all_stats['skipped_cjtxs'])}',
-                       f'{experiment_target_anonscore}','num cjtxs skipped', 'royalblue')
-    plot_cj_anonscores(mfig, all_stats['skipped_cjtxs_corrected'],
-                       f'All wallets, skipped cjtxs corrected by smallest burntime;total sessions={len(all_stats['skipped_cjtxs_corrected'])}',
-                       f'{experiment_target_anonscore}','num cjtxs skipped', 'royalblue')
     plot_cj_anonscores(mfig, all_stats['num_inputs'],
                        f'All wallets, number of inputs;total sessions={len(all_stats['num_inputs'])}',
                        f'{experiment_target_anonscore}','number of inputs', 'royalblue')
     plot_cj_anonscores(mfig, all_stats['num_outputs'],
                        f'All wallets, number of outputs;total sessions={len(all_stats['num_outputs'])}',
                        f'{experiment_target_anonscore}','number of outputs', 'royalblue')
+    plot_cj_anonscores(mfig, all_stats['skipped_cjtxs'],
+                       f'All wallets, skipped cjtxs;total sessions={len(all_stats['skipped_cjtxs'])}',
+                       f'{experiment_target_anonscore}','num cjtxs skipped', 'royalblue')
     x, y = [], []
     for session in all_stats['num_inputs'].keys():
         x.extend(all_stats['num_inputs'][session])
@@ -602,12 +595,8 @@ def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, expe
     total_overmixed_coins = [all_stats['num_overmixed_coins'][session] for session in all_stats['num_overmixed_coins']]
     print(f'Total overmixed input coins: {sum(total_overmixed_coins)}')
 
-
     # num_skipped = list(chain.from_iterable(all_stats['skipped_cjtxs'][session] for session in all_stats['skipped_cjtxs']))
     # print(f'Skipped txs stats: median={np.median(num_skipped)}, average={round(np.average(num_skipped), 2)}, min={min(num_skipped)}, max={max(num_skipped)}')
-    #
-    # num_skipped_corrected = list(chain.from_iterable(all_stats['skipped_cjtxs_corrected'][session] for session in all_stats['skipped_cjtxs_corrected']))
-    # print(f'Skipped corrected txs stats: median={np.median(num_skipped_corrected)}, average={round(np.average(num_skipped_corrected), 2)}, min={min(num_skipped_corrected)}, max={max(num_skipped_corrected)}')
 
     remix_ratios = [max(all_stats['observed_remix_liquidity_ratio_cumul'][session]) for session in all_stats['observed_remix_liquidity_ratio_cumul'].keys()]
     print(f'Remix ratios: median={round(np.median(remix_ratios), 2)}, average={round(np.average(remix_ratios), 2)}, min={round(min(remix_ratios), 2)}, max={round(max(remix_ratios), 2)}')
@@ -663,16 +652,6 @@ def plot_ww2mix_stats(mfig, all_stats: dict, experiment_label: str, experiment_t
                        experiment_target_anonscore, 'Cummulative remix ratio', color)
     index += 1
     ax = mfig.get(index)
-    plot_cj_anonscores_ax(ax, all_stats['skipped_cjtxs'],
-                       f'All wallets, skipped cjtxs;total sessions={len(all_stats['skipped_cjtxs'])}',
-                       experiment_target_anonscore, 'num cjtxs skipped', color)
-    index += 1
-    ax = mfig.get(index)
-    plot_cj_anonscores_ax(ax, all_stats['skipped_cjtxs_corrected'],
-                       f'All wallets, skipped cjtxs corrected by smallest burntime;total sessions={len(all_stats['skipped_cjtxs_corrected'])}',
-                       experiment_target_anonscore, 'num cjtxs skipped', color)
-    index += 1
-    ax = mfig.get(index)
     plot_cj_anonscores_ax(ax, all_stats['num_inputs'],
                        f'All wallets, number of inputs;total sessions={len(all_stats['num_inputs'])}',
                        experiment_target_anonscore, 'number of inputs', color)
@@ -681,6 +660,11 @@ def plot_ww2mix_stats(mfig, all_stats: dict, experiment_label: str, experiment_t
     plot_cj_anonscores_ax(ax, all_stats['num_outputs'],
                        f'All wallets, number of outputs;total sessions={len(all_stats['num_outputs'])}',
                        experiment_target_anonscore, 'number of outputs', color)
+    index += 1
+    ax = mfig.get(index)
+    plot_cj_anonscores_ax(ax, all_stats['skipped_cjtxs'],
+                       f'All wallets, skipped cjtxs;total sessions={len(all_stats['skipped_cjtxs'])}',
+                       experiment_target_anonscore, 'num cjtxs skipped', color)
 
 
 if __name__ == "__main__":
