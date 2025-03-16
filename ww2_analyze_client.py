@@ -245,12 +245,14 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
     stats = {}
     stats['all_cjs_weight_anonscore'] = {}
     stats['anon_percentage_status'] = {}
+    stats['anon_gain_weighted'] = {}
     stats['observed_remix_liquidity_ratio'] = {}
     stats['observed_remix_liquidity_ratio_cumul'] = {}  # Remix liquidity based on value of inputs
     stats['observed_remix_inputs_ratio_cumul'] = {}     # unused now, remix liquidity based on number of inputs
     for session_label in cjtxs['sessions'].keys():
         session_coins = {}
         anon_percentage_status_list = []
+        anon_gain_weighted_list = []
         observed_remix_liquidity_ratio_list = []
         observed_remix_liquidity_ratio_cumul_list = []
         observed_remix_inputs_ratio_cumul_list = []
@@ -285,11 +287,14 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
                 session_coins[cjtx['outputs'][index]['address']] = cjtx['outputs'][index]
             # Compute percentage progress status (step 2.)
             anon_percentage_status = 0
+            anon_gain_weighted = 0  # Tae real achieved anonscore for given coin, weighted by its size to whole session
             for address in session_coins.keys():
                 if session_coins[address]['anon_score'] > 1:
                     effective_as = min(session_coins[address]['anon_score'], target_as)
                     # Weighted percentage contribution of this specific coin to progress status
                     anon_percentage_status += (effective_as / target_as) * (
+                            session_coins[address]['value'] / session_size_inputs)
+                    anon_gain_weighted += session_coins[address]['anon_score'] * (
                             session_coins[address]['value'] / session_size_inputs)
             # Privacy progress can be sometimes slightly bigger than 100% for sessions where some previously prisoned
             # coins were included into mix during experiment (happened rarely and for very small coins)
@@ -299,6 +304,7 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
                 anon_percentage_status = 1
             print(f' {round(anon_percentage_status * 100, 1)}%', end='')
             anon_percentage_status_list.append(anon_percentage_status * 100)
+            anon_gain_weighted_list.append(anon_gain_weighted)
 
             # Compute observed liquidity ratio for wallet's coins
             # This value enumerates multiplier of initial fresh liquidity over multiple cjtxs
@@ -319,6 +325,9 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
         if len(anon_percentage_status_list) > 0:
             assert session_label not in stats['anon_percentage_status'], f'Duplicate session label {session_label}'
             stats['anon_percentage_status'][session_label] = anon_percentage_status_list
+        if len(anon_gain_weighted_list) > 0:
+            assert session_label not in stats['anon_gain_weighted'], f'Duplicate session label {session_label}'
+            stats['anon_gain_weighted'][session_label] = anon_gain_weighted_list
         if len(observed_remix_liquidity_ratio_list) > 0:
             assert session_label not in stats['observed_remix_liquidity_ratio'], f'Duplicate session label {session_label}'
             stats['observed_remix_liquidity_ratio'][session_label] = observed_remix_liquidity_ratio_list
@@ -510,10 +519,10 @@ def full_analyze_as38_202503(base_path: str):
     target_path = os.path.join(base_path, 'as38\\')
     experiment_start_cut_date = '2025-03-09T00:02:49+00:00'  # AS=38 experiment start time
     experiment_target_anonscore = 38
-    problematic_sessions = []  # Failed experiments to be removed from processing
+    problematic_sessions = ['mix7 0.1btc | 3 cjs | txid: 3493c971d']  # Failed experiments to be removed from processing
 
     return analyze_ww2_artifacts(target_path, experiment_start_cut_date, experiment_target_anonscore,
-                          ['mix6'], problematic_sessions, -1)
+                          ['mix6', 'mix7'], problematic_sessions, -1)
 
 
 def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, experiment_target_anonscore: int,
@@ -594,6 +603,9 @@ def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, expe
     plot_cj_anonscores(mfig, all_stats['skipped_cjtxs'],
                        f'All wallets, skipped cjtxs;total sessions={len(all_stats['skipped_cjtxs'])}',
                        f'{experiment_target_anonscore}','num cjtxs skipped', 'royalblue')
+    plot_cj_anonscores(mfig, all_stats['anon_gain_weighted'], f'Nocap progress towards fully anonymized liquidity (AS={experiment_target_anonscore}); total sessions={len(all_stats['anon_gain_weighted'])}',
+                       f'{experiment_target_anonscore}', 'Privacy progress (%)', 'royalblue')
+
     x, y = [], []
     for session in all_stats['num_inputs'].keys():
         x.extend(all_stats['num_inputs'][session])
@@ -680,6 +692,11 @@ def plot_ww2mix_stats(mfig, all_stats: dict, experiment_label: str, experiment_t
     plot_cj_anonscores_ax(ax, all_stats['skipped_cjtxs'],
                        f'All wallets, skipped cjtxs;total sessions={len(all_stats['skipped_cjtxs'])}',
                        experiment_target_anonscore, 'num cjtxs skipped', color)
+
+    index += 1
+    ax = mfig.get(index)
+    plot_cj_anonscores_ax(ax, all_stats['anon_gain_weighted'], f'Privacy gain sum weighted; total sessions={len(all_stats['anon_gain_weighted'])}',
+                       experiment_target_anonscore, 'Privacy gain', color)
 
 
 if __name__ == "__main__":
