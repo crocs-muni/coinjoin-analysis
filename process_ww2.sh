@@ -83,6 +83,10 @@ for pool in others kruw gingerwallet opencoordinator coinjoin_nl wasabicoordinat
     pool_PATH="$DEST_DIR/Scanner/wasabi2_$pool/wasabi2_${pool}_cummul_values_norm.png"
     image_list="$image_list $pool_PATH"
 done
+#for pool in others kruw gingerwallet opencoordinator; do
+#    pool_PATH="$DEST_DIR/Scanner/wasabi2_$pool/wasabi2_${pool}_input_types_values_norm.png"
+#    image_list="$image_list $pool_PATH"
+#done
 montage $image_list -tile 2x -geometry +2+2 $DEST_DIR/Scanner/wasabi2/wasabi2_tiles_all_cummul_values_norm.png
 
 # Upload selected files (separate scripts, can be configured based on desired upload service)
