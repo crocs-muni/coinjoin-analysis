@@ -783,6 +783,21 @@ def plot_ww2mix_stats(mfig, all_stats: dict, experiment_label: str, experiment_t
                        experiment_target_anonscore, 'Privacy gain', color)
 
 
+def create_download_script(cjtxs: dict, file_name: str):
+    """
+    Generate download script for hex versions of provided transactions.
+    :param all_cjtxs: list of cjtxs to download
+    :param file_name: output name of download sript with all generated commands
+    :return:
+    """
+    curl_lines = []
+    for cjtx in cjtxs:
+        curl_str = "curl --user user:password --data-binary \'{\"jsonrpc\": \"1.0\", \"id\": \"curltest\", \"method\": \"getrawtransaction\", \"params\": [\"" + cjtx + "\", true]}\' -H \'Content-Type: application/json\' http://127.0.0.1:8332/" + f" > {cjtx}.json\n"
+        curl_lines.append(curl_str)
+    with open(file_name, 'w') as f:
+        f.writelines(curl_lines)
+
+
 if __name__ == "__main__":
     als.SORT_COINJOINS_BY_RELATIVE_ORDER = False
     # round_logs = als.parse_client_coinjoin_logs(target_path)
@@ -791,8 +806,14 @@ if __name__ == "__main__":
     # prison_logs = analyse_prison_logs(target_path)
     # exit(42)
     base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\mn1\\'
-    all25 = full_analyze_as25_202405(base_path)
-    all38 = full_analyze_as38_202503(base_path)
+    all38_stats, all38 = full_analyze_as38_202503(base_path)
+    all25_stats, all25 = full_analyze_as25_202405(base_path)
+
+    # Create download script for full transactions download
+    cjtxs = [cjtx for session in all25['sessions'].keys() for cjtx in all25['sessions'][session]['coinjoins'].keys()]
+    create_download_script(cjtxs, 'download_as25.sh')
+    cjtxs = [cjtx for session in all38['sessions'].keys() for cjtx in all38['sessions'][session]['coinjoins'].keys()]
+    create_download_script(cjtxs, 'download_as38.sh')
 
     NUM_COLUMNS = 2  # 4
     NUM_ROWS = 6     # 5
