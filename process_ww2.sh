@@ -17,6 +17,10 @@ source $HOME/btc/coinjoin-analysis/myenv/bin/activate
 # Go to analysis folder with scripts
 cd $HOME/btc/coinjoin-analysis
 
+# Copy processed metadata 
+cp $HOME/btc/coinjoin-analysis/data/wasabi2/wasabi2_wallet_predictions.json $TMP_DIR/Scanner/
+
+
 # Extract and process Dumplings results
 python3 parse_dumplings.py --cjtype ww2 --action process_dumplings --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
