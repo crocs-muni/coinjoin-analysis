@@ -231,20 +231,63 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
             record['inputs'] = {}
             for index in tx['inputs']:
                 record['inputs'][index] = {}
+                record['inputs'][index]['index'] = index
                 record['inputs'][index]['address'] = tx['inputs'][index]['address']
                 record['inputs'][index]['value'] = tx['inputs'][index]['amount']
                 record['inputs'][index]['wallet_name'] = mix_name
                 record['inputs'][index]['anon_score'] = tx['inputs'][index]['anonymityScore']
 
             record['outputs'] = {}
-            for index in tx['outputs']:
+            for index in tx['outputs']:  # For outputs, index is correct value in this coinjoin cjtx
                 record['outputs'][index] = {}
+                record['outputs'][index]['index'] = index
                 record['outputs'][index]['address'] = tx['outputs'][index]['address']
                 record['outputs'][index]['value'] = tx['outputs'][index]['amount']
                 record['outputs'][index]['wallet_name'] = mix_name
                 record['outputs'][index]['anon_score'] = tx['outputs'][index]['anonymityScore']
 
-            session_cjtxs[tx['tx']] = record
+            # Try to load full serialized tx (if available) and extract additional info
+            tx_file_path = os.path.join(target_base_path, 'data', f'{tx['tx']}.json')
+            if os.path.exists(tx_file_path):
+                tx_hex = als.load_json_from_file(tx_file_path)['result']
+                # Compute total mining fee paid (sum(inputs) - sum(outputs))
+                inputs_sum = sum([coinjoins[txid]['inputs'][index]['value'] for index in coinjoins[txid]['inputs'].keys()])
+                outputs_sum = sum([coinjoins[txid]['outputs'][index]['value'] for index in coinjoins[txid]['outputs'].keys()])
+                total_mining_fee = inputs_sum - outputs_sum
+                # Compute vsize for "our" inputs and outputs out of whole transaction => our share of mining fees
+                wallet_inputs = [int(record['inputs'][item]['index']) for item in record['inputs'].keys()]
+                wallet_outputs = [int(record['outputs'][item]['index']) for item in record['outputs'].keys()]
+                wallet_vsize, total_vsize = als.compute_partial_vsize(tx_hex['hex'], wallet_inputs, wallet_outputs)
+                # Fee rate paid for whole transaction
+                fee_rate = total_mining_fee / total_vsize
+                # Mining fee rate to pay fair share for our inputs and outputs
+                wallet_fair_mfee_sats = math.ceil(wallet_vsize * fee_rate)
+                wallet_inputs_sum = sum([coinjoins[txid]['inputs'][index]['value'] for index in record['inputs'].keys()])
+                wallet_outputs_sum = sum([coinjoins[txid]['outputs'][index]['value'] for index in record['outputs'].keys()])
+                wallet_fee_paid_sats = wallet_inputs_sum - wallet_outputs_sum
+                #assert tx['amount'] == -wallet_fee_paid_sats, f"Incorrect wallet fee computed {wallet_fee_paid_sats} sats vs. {tx['amount']} sats for {txid}"
+                if tx['amount'] != -wallet_fee_paid_sats:
+                    logging.error(f"Incorrect wallet fee computed {wallet_fee_paid_sats} sats vs. {tx['amount']} sats for {txid}")
+                    logging.debug(f"Inputs: ")
+                    for index in record['inputs'].keys():
+                        logging.debug(f"  [{index}]: {coinjoins[txid]['inputs'][index]['value']} sats")
+                    logging.debug(f"Outputs: ")
+                    for index in record['outputs'].keys():
+                        logging.debug(f"  [{index}]: {coinjoins[txid]['outputs'][index]['value']} sats")
+                hidden_cfee = -tx['amount'] - wallet_fair_mfee_sats
+                if hidden_cfee < -10:
+                    logging.debug(f"Sligthly smaller hidden fee than expected: {hidden_cfee} sats")
+                assert hidden_cfee >= -100, f"Incorrect hidden fee of {hidden_cfee} sats"
+
+                record['total_mining_fee'] = total_mining_fee
+                record['mining_fee_rate'] = fee_rate
+                record['total_vsize'] = total_vsize
+                record['wallet_vsize'] = wallet_vsize
+                record['wallet_fair_mfee'] = wallet_fair_mfee_sats
+                record['wallet_fee_paid'] = -tx['amount']
+                record['wallet_hidden_cfee_paid'] = hidden_cfee
+
+            session_cjtxs[txid] = record
         else:
             # Non-coinjoin transaction detected (assume initial or final merge)
 
