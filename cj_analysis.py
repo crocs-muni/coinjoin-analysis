@@ -1,6 +1,5 @@
 import logging
 import os
-import sys
 from collections import Counter
 
 import orjson
@@ -10,6 +9,10 @@ import numpy as np
 from datetime import datetime, timedelta
 from enum import Enum
 import re
+import math
+from bitcoin.core import CTransaction, CMutableTransaction, CTxWitness
+
+
 
 SATS_IN_BTC = 100000000
 
@@ -1244,3 +1247,35 @@ def load_coinjoins_from_file(target_load_path: str, false_cjtxs: dict, filter_fa
                 data['coinjoins'].pop(false_tx)
 
     return data
+
+
+def compute_partial_vsize(tx_hex: str, input_indices: list[int], output_indices: list[int]):
+    """
+    Compute the exact virtual size (vsize) contribution of selected inputs and outputs
+    into a Bitcoin transaction.
+
+    :param tx_hex: Hexadecimal string of the raw Bitcoin transaction
+    :param input_indices: List of input indices to include in the computation
+    :param output_indices: List of output indices to include in the computation
+    :return: Exact virtual size (vsize) in vbytes for the selected parts, total vsize for whole tx
+    """
+    # Deserialize transaction
+    tx_bytes = bytes.fromhex(tx_hex)
+    original_tx = CTransaction.deserialize(tx_bytes)
+    orig_vsize = math.ceil(original_tx.calc_weight() / 4)
+
+    # Turn original transaction into mutable and remove specified inputs and outputs
+    mutable_tx = CMutableTransaction.from_tx(original_tx)
+    # Filter out inputs and outputs we want to compute (tx2 is smaller tx without inputs and outputs to be evaluated)
+    mutable_tx.vin = [mutable_tx.vin[index] for index in range(0, len(mutable_tx.vin)) if index not in input_indices]
+    filtered_tx2_witness = tuple(item for index, item in enumerate(mutable_tx.wit.vtxinwit) if index not in input_indices)
+    mutable_tx.vout = [mutable_tx.vout[index] for index in range(0, len(mutable_tx.vout)) if index not in output_indices]
+
+    # Create new transaction with specified inputs and outputs removed
+    filtered_tx = CMutableTransaction(mutable_tx.vin, mutable_tx.vout, mutable_tx.nLockTime, mutable_tx.nVersion, CTxWitness(filtered_tx2_witness))
+
+    # Difference between original and filtered transaction is the contribution by the specified inputs and outputs
+    filtered_weight = original_tx.calc_weight() - filtered_tx.calc_weight()
+    filtered_vsize = math.ceil(filtered_weight / 4)
+
+    return filtered_vsize, orig_vsize
