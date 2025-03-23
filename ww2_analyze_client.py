@@ -822,8 +822,8 @@ if __name__ == "__main__":
     mfig.add_multiple_subplots(8)
 
     # Plot both experiments into single image
-    plot_ww2mix_stats(mfig, all25, '25&38', '25', 'royalblue')
-    plot_ww2mix_stats(mfig, all38, '25&38', '38', 'lightcoral')
+    plot_ww2mix_stats(mfig, all25_stats, '25&38', '25', 'royalblue')
+    plot_ww2mix_stats(mfig, all38_stats, '25&38', '38', 'lightcoral')
     #plot_ww2mix_stats(mfig, all38, 38, 'lightcoral')
 
     # save graph
@@ -841,10 +841,11 @@ if __name__ == "__main__":
     # dmp.save_json_to_file_pretty(os.path.join(base_path, 'mix1_coins_merged.json'), merged)
     # exit(42)
 
-    # TODO: Fraction of coins already above AS=25, yet remixed again
-    # TODO: num inputs / outputs
+    # TODO: limits stats
     # TODO: Prison time distribution
-
+    # TODO: Compute cost of mixing including hidden coordination fee
     # TODO: Compute remixed liquidity when as limited to 5
+    # TODO: plot how long it takes (#coinjoins, walltime) to achieve desired anonscore target
+    #
 
 

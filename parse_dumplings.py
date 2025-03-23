@@ -3460,6 +3460,18 @@ if __name__ == "__main__":
 
     DEBUG = False
     if DEBUG:
+        #mix_id = 'wasabi2_zksnacks'
+        mix_id = 'wasabi2_kruw'
+        data = process_and_save_intervals_filter(mix_id, MIX_PROTOCOL.WASABI2, target_path,
+                                                 '2022-06-01 00:00:07.000', op.interval_stop_date,
+                                                 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None,
+                                                 SAVE_BASE_FILES_JSON, True)
+        wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+                    'coinjoin_tx_info.json', False, False, None, None, True)
+        wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+                    'coinjoin_tx_info.json', False, True, None, None, True)
+        exit(42)
+
         wasabi_detect_false(os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json')
         exit(42)
 
@@ -4020,10 +4032,10 @@ if __name__ == "__main__":
                            'wasabi2_others', 'wasabi2_zksnacks', 'wasabi2']:
                 target_base_path = os.path.join(target_path, mix_id)
                 if os.path.exists(target_base_path):
-                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, False)
-                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, True)
                     wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, True)
                     wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, False)
+                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, False)
+                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, True)
                 else:
                     logging.warning(f'Path {target_base_path} does not exists.')
 
