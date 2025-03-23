@@ -687,6 +687,15 @@ def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, expe
         y.extend(all_stats['num_outputs'][session])
     plot_cj_heatmap(mfig, x, y, 'number of inputs', 'number of outputs','Occurence frequency of inputs to outputs pairs')
 
+    # Plot histogram of hidden coordination fees (cfee)
+    ax = mfig.add_subplot()
+    data_mfee = [all_cjs['sessions'][session_label]['coinjoins'][cjtxid]['wallet_fair_mfee'] for session_label in all_cjs['sessions'].keys() for cjtxid in all_cjs['sessions'][session_label]['coinjoins'].keys()]
+    data_cfee = [all_cjs['sessions'][session_label]['coinjoins'][cjtxid]['wallet_hidden_cfee_paid'] for session_label in all_cjs['sessions'].keys() for cjtxid in all_cjs['sessions'][session_label]['coinjoins'].keys()]
+    print(f'Mining fee sum={sum(data_mfee)}')
+    print(f'Hidden cfee (sum={sum(data_cfee)}): {sorted(data_cfee)}')
+    ax.hist(data_cfee, bins=30, edgecolor='black', alpha=0.7)
+    #ax.set_title(title)
+
     sessions_lengths = [len(all_cjs['sessions'][session]['coinjoins']) for session in all_cjs['sessions'].keys()]
     print(f'Total sessions={len(all_cjs['sessions'].keys())}, total coinjoin txs={sum(sessions_lengths)}')
     print(f'Session lengths (#cjtxs): median={round(np.median(sessions_lengths), 2)}, average={round(np.average(sessions_lengths), 2)}, min={min(sessions_lengths)}, max={max(sessions_lengths)}')
