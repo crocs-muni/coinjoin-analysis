@@ -904,6 +904,13 @@ def process_and_save_coinjoins(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
     data, data_extended, cj_relative_order = process_coinjoins(target_path, mix_protocol, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
     als.save_json_to_file_pretty(os.path.join(target_save_path, f'cj_relative_order.json'), cj_relative_order)
 
+    # If found, enrich data with coinjoin-specific metadata
+    metadata_file = os.path.join(target_path, f'{mix_id}_wallet_predictions.json')
+    if os.path.exists(metadata_file):
+        wallet_nums_predictions = als.load_json_from_file(metadata_file)
+        for cjtx in data['coinjoins'].keys():
+            data['coinjoins'][cjtx]['num_wallets_predicted'] = wallet_nums_predictions.get(cjtx, -100)
+
     if SAVE_BASE_FILES_JSON:
         als.save_json_to_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'), data)
         als.save_json_to_file(os.path.join(target_save_path, f'coinjoin_tx_info_extended.json'), data_extended)
@@ -999,6 +1006,13 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
             logging.info(f'Loading {target_save_path}/coinjoin_tx_info.json ...')
 
             data = als.load_json_from_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'))
+
+            # If found, enrich data with coinjoin-specific metadata
+            metadata_file = os.path.join(target_path, f'{mix_id}_wallet_predictions.json')
+            if os.path.exists(metadata_file):
+                wallet_nums_predictions = als.load_json_from_file(metadata_file)
+                for cjtx in data['coinjoins'].keys():
+                    data['coinjoins'][cjtx]['num_wallets_predicted'] = wallet_nums_predictions.get(cjtx, -100)
 
             logging.info(f'{target_save_path}/coinjoin_tx_info.json loaded with {len(data["coinjoins"])} conjoins')
         else:
@@ -1706,7 +1720,29 @@ def wasabi2_analyse_remixes(mix_id: str, target_path: str):
     burntime_histogram(mix_id, data)
 
 
-def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_file: str, analyze_values: bool = True, normalize_values: bool = True, restrict_to_out_size: int = None, restrict_to_in_size = None, plot_multigraph: bool = True):
+def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_file: str,
+                        analyze_values: bool = True, normalize_values: bool = True,
+                        restrict_to_out_size: int = None, restrict_to_in_size = None,
+                        plot_multigraph: bool = True):
+
+    #
+    # Plot all graphs together
+    #
+    # wasabi_plot_remixes_worker(mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
+    #                     restrict_to_out_size, restrict_to_in_size, plot_multigraph, False)
+
+    #
+    # Plot only single intervals
+    #
+    fig_single, ax_single = plt.subplots()
+    wasabi_plot_remixes_worker(mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
+                        restrict_to_out_size, restrict_to_in_size, plot_multigraph, True)
+
+
+def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_file: str,
+                        analyze_values: bool = True, normalize_values: bool = True,
+                        restrict_to_out_size: int = None, restrict_to_in_size = None,
+                        plot_multigraph: bool = True, plot_only_intervals: bool=False):
     files = os.listdir(target_path) if os.path.exists(target_path) else print(
         f'Path {target_path} does not exist')
 
@@ -1722,10 +1758,11 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
                       if os.path.isdir(os.path.join(target_path, dir_name)) and
                       os.path.exists(os.path.join(target_path, dir_name, f'{tx_file}'))])
 
-    NUM_COLUMNS = 3
-    NUM_ADDITIONAL_GRAPHS = 1 + NUM_COLUMNS
-    NUM_ROWS = int((num_months + NUM_ADDITIONAL_GRAPHS) / NUM_COLUMNS + 1)
-    fig = plt.figure(figsize=(40, NUM_ROWS * 5))
+    if not plot_only_intervals:
+        NUM_COLUMNS = 3
+        NUM_ADDITIONAL_GRAPHS = 1 + NUM_COLUMNS
+        NUM_ROWS = int((num_months + NUM_ADDITIONAL_GRAPHS) / NUM_COLUMNS + 1)
+        fig = plt.figure(figsize=(40, NUM_ROWS * 5))
 
     ax_index = 1
     changing_liquidity = [0]  # Cummulative liquidity in mix from the perspective of given coinjoin (can go up and down)
@@ -1764,8 +1801,14 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
                     print(f'No coinjoins of specified value {restrict_to_out_size/SATS_IN_BTC} found in given interval, skipping')
                     continue
 
-            ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
-            ax_index += 1
+            fig_single = None
+            if plot_only_intervals:
+                fig_single, ax_to_use = plt.subplots(figsize=(20, 10))  # Figure for single plot
+            else:
+                ax_to_use = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
+                ax_index += 1
+
+            ax = ax_to_use
 
             # Plot lines as separators corresponding to days
             dates = sorted([precomp_datetime.strptime(data["coinjoins"][cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for cjtx in data["coinjoins"].keys()])
@@ -1811,16 +1854,18 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
             stay_liquidity_timecutoff.extend(stay_liquidity_timecutoff_interval)
 
             # Add fee rate into the same graph
-            PLOT_FEERATE = True
+            PLOT_FEERATE = False
             if PLOT_FEERATE:
                 ax3 = ax.twinx()
                 ax3.spines['right'].set_position(('outward', -30))  # Adjust position of the third axis
             else:
                 ax3 = None
+                ax3_single = None
+            als.plot_mining_fee_rates(f'{mix_id} {dir_name}', data, mining_fee_rates, ax3_single)
             mining_fee_rate_interval = als.plot_mining_fee_rates(f'{mix_id} {dir_name}', data, mining_fee_rates, ax3)
             mining_fee_rate.extend(mining_fee_rate_interval)
 
-            PLOT_NUM_WALLETS = False
+            PLOT_NUM_WALLETS = True
             if PLOT_NUM_WALLETS:
                 ax3 = ax.twinx()
                 ax3.spines['right'].set_position(('outward', -28))  # Adjust position of the third axis
@@ -1851,183 +1896,193 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
             padding = 0.02 * (y_range[1] - y_range[0])
             ax.set_ylim(y_range[0] - padding, y_range[1] + padding)
 
+            # Save single interval figure
+            if plot_only_intervals:
+                restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 2)}btc'
+                save_file = os.path.join(target_path, dir_name,
+                         f'{mix_id}_input_types_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
+                fig_single.savefig(f'{save_file}.png', dpi=300)
+                fig_single.savefig(f'{save_file}.pdf', dpi=300)
+
         prev_year = current_year
 
-    def plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, changing_liquidity_timecutoff, stay_liquidity, remix_liquidity, mining_fee_rate, separators_to_plot: list):
-        # Plot mining fee rate
-        PLOT_FEERATE = False
-        if PLOT_FEERATE:
-            ax.plot(mining_fee_rate, color='gray', alpha=0.3, linewidth=1, linestyle=':', label='Mining fee (90th percentil)')
-            ax.tick_params(axis='y', colors='gray', labelsize=6)
-            ax.set_ylabel('Mining fee rate sats/vB (90th percentil)', color='gray', fontsize='6', labelpad=-2)
 
-        def plot_bars_downscaled(values, downscalefactor, color, ax):
-            downscaled_values = [sum(values[i:i + downscalefactor]) for i in range(0, len(values), downscalefactor)]
-            downscaled_indices = range(0, len(values), downscalefactor)
-            ax.bar(downscaled_indices, downscaled_values, color=color, width=downscalefactor, alpha=0.2, edgecolor='none')
+        def plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, changing_liquidity_timecutoff, stay_liquidity, remix_liquidity, mining_fee_rate, separators_to_plot: list):
+            # Plot mining fee rate
+            PLOT_FEERATE = False
+            if PLOT_FEERATE:
+                ax.plot(mining_fee_rate, color='gray', alpha=0.3, linewidth=1, linestyle=':', label='Mining fee (90th percentil)')
+                ax.tick_params(axis='y', colors='gray', labelsize=6)
+                ax.set_ylabel('Mining fee rate sats/vB (90th percentil)', color='gray', fontsize='6', labelpad=-2)
 
-        # Create artificial limits if not provided
-        if restrict_to_in_size is None:
-            limit_size = (0, 1000000000000)
-            print(f'No limits for inputs value')
-        else:
-            limit_size = restrict_to_in_size
-            print(f'Limits for inputs value is {limit_size[0]} - {limit_size[1]}')
+            def plot_bars_downscaled(values, downscalefactor, color, ax):
+                downscaled_values = [sum(values[i:i + downscalefactor]) for i in range(0, len(values), downscalefactor)]
+                downscaled_indices = range(0, len(values), downscalefactor)
+                ax.bar(downscaled_indices, downscaled_values, color=color, width=downscalefactor, alpha=0.2, edgecolor='none')
 
-        # Decide on resolution of liquidity display
-        #interval_to_display = weeks_dict
-        interval_to_display = days_dict
+            # Create artificial limits if not provided
+            if restrict_to_in_size is None:
+                limit_size = (0, 1000000000000)
+                print(f'No limits for inputs value')
+            else:
+                limit_size = restrict_to_in_size
+                print(f'Limits for inputs value is {limit_size[0]} - {limit_size[1]}')
 
-        def compute_aggregated_interval_liquidity(interval_to_display):
-            liquidity = [0]
-            for interval in sorted(interval_to_display.keys()):
-                records = interval_to_display[interval]
-                mix_enter_values = [records[cjtx]['inputs'][index]['value'] for cjtx in records.keys() for index in
-                                    records[cjtx]['inputs'].keys()
-                                    if records[cjtx]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name or
-                                    records[cjtx]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name and
-                                    limit_size[0] <= records[cjtx]['inputs'][index]['value'] <= limit_size[1]]
-                liquidity.extend([sum(mix_enter_values) / SATS_IN_BTC] * len(records))
-                print(f"Interval {interval}: {sum(mix_enter_values)}sats, num_cjtxs={len(records)}")
-            return liquidity
+            # Decide on resolution of liquidity display
+            #interval_to_display = weeks_dict
+            interval_to_display = days_dict
 
-        new_liquidity = compute_aggregated_interval_liquidity(interval_to_display)
-        assert len(new_liquidity) == len(changing_liquidity), f'Incorrect enter_liquidity length: expected: {len(changing_liquidity)}, got {len(new_liquidity)}'
-        plot_bars_downscaled(new_liquidity, 1, 'gray', ax)
-        ax.set_title(f'{mix_id}: Liquidity dynamics in time')
-        #label = f'{'Fresh liquidity (btc)' if analyze_values else 'Number of inputs'} {'normalized' if normalize_values else ''}'
-        label = f'Fresh liquidity (btc)'
-        ax.set_ylabel(label, color='gray', fontsize='6')
-        ax.tick_params(axis='y', colors='gray')
+            def compute_aggregated_interval_liquidity(interval_to_display):
+                liquidity = [0]
+                for interval in sorted(interval_to_display.keys()):
+                    records = interval_to_display[interval]
+                    mix_enter_values = [records[cjtx]['inputs'][index]['value'] for cjtx in records.keys() for index in
+                                        records[cjtx]['inputs'].keys()
+                                        if records[cjtx]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name or
+                                        records[cjtx]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name and
+                                        limit_size[0] <= records[cjtx]['inputs'][index]['value'] <= limit_size[1]]
+                    liquidity.extend([sum(mix_enter_values) / SATS_IN_BTC] * len(records))
+                    print(f"Interval {interval}: {sum(mix_enter_values)}sats, num_cjtxs={len(records)}")
+                return liquidity
 
-        # Outflows
-        # out_liquidity = [input_types[MIX_EVENT_TYPE.MIX_LEAVE.name][i] for i in range(len(input_types[MIX_EVENT_TYPE.MIX_LEAVE.name]))]
-        # plot_bars_downscaled(out_liquidity, 1, 'red', ax)
+            new_liquidity = compute_aggregated_interval_liquidity(interval_to_display)
+            assert len(new_liquidity) == len(changing_liquidity), f'Incorrect enter_liquidity length: expected: {len(changing_liquidity)}, got {len(new_liquidity)}'
+            plot_bars_downscaled(new_liquidity, 1, 'gray', ax)
+            ax.set_title(f'{mix_id}: Liquidity dynamics in time')
+            #label = f'{'Fresh liquidity (btc)' if analyze_values else 'Number of inputs'} {'normalized' if normalize_values else ''}'
+            label = f'Fresh liquidity (btc)'
+            ax.set_ylabel(label, color='gray', fontsize='6')
+            ax.tick_params(axis='y', colors='gray')
 
-        # Remix ratio
-        remix_ratios_all = [input_types[MIX_EVENT_TYPE.MIX_REMIX.name][i] * 100 for i in
-                            range(len(input_types[MIX_EVENT_TYPE.MIX_REMIX.name]))]  # All remix including nonstandard
-        remix_ratios_nonstd = [input_types['MIX_REMIX_nonstd'][i] * 100 for i in
-                               range(len(input_types['MIX_REMIX_nonstd']))]  # Nonstd remixes
-        remix_ratios_std = [remix_ratios_all[i] - remix_ratios_nonstd[i] for i in
-                            range(len(remix_ratios_all))]  # Only standard remixes
-        WINDOWS_SIZE = round(len(remix_ratios_all) / 1000)  # Set windows size to get 1000 points total (unless short, then only 5)
-        WINDOWS_SIZE = 1 if WINDOWS_SIZE < 1 else WINDOWS_SIZE
-        if mix_protocol == MIX_PROTOCOL.WASABI1:
-            # Wasabi 1 ix only single output per denonimation, putting automatically (potentially large) change into next remix
-            # Compute remix rate only from standard denomination inputs as large remix fraction are these change remixes which are
-            # easily distinguishable from standard denomination inputs
-            remix_ratios_avg = [np.average(remix_ratios_std[i:i + WINDOWS_SIZE]) for i in
-                                range(0, len(remix_ratios_std), WINDOWS_SIZE)]
-        else:
-            # Consider all inputs from non-wasabi1 pools
-            remix_ratios_avg = [np.average(remix_ratios_all[i:i + WINDOWS_SIZE]) for i in
-                                range(0, len(remix_ratios_all), WINDOWS_SIZE)]
+            # Outflows
+            # out_liquidity = [input_types[MIX_EVENT_TYPE.MIX_LEAVE.name][i] for i in range(len(input_types[MIX_EVENT_TYPE.MIX_LEAVE.name]))]
+            # plot_bars_downscaled(out_liquidity, 1, 'red', ax)
 
-        ax2 = ax.twinx()
-        ax2.plot(range(0, len(remix_ratios_std), WINDOWS_SIZE), remix_ratios_avg, label=f'MIX_REMIX avg({WINDOWS_SIZE})',
-                 color='brown', linewidth=1, linestyle='--', alpha=0.5)
-        ax2.set_ylim(0, 100)  # Force whole range of yaxis
-        ax2.tick_params(axis='y', colors='brown', labelsize=6)
-        ax2.set_ylabel('Average remix rate %', color='brown', fontsize='6', labelpad=-3)
-        ax2.spines['right'].set_position(('outward', -25))  # Adjust position of the third axis
+            # Remix ratio
+            remix_ratios_all = [input_types[MIX_EVENT_TYPE.MIX_REMIX.name][i] * 100 for i in
+                                range(len(input_types[MIX_EVENT_TYPE.MIX_REMIX.name]))]  # All remix including nonstandard
+            remix_ratios_nonstd = [input_types['MIX_REMIX_nonstd'][i] * 100 for i in
+                                   range(len(input_types['MIX_REMIX_nonstd']))]  # Nonstd remixes
+            remix_ratios_std = [remix_ratios_all[i] - remix_ratios_nonstd[i] for i in
+                                range(len(remix_ratios_all))]  # Only standard remixes
+            WINDOWS_SIZE = round(len(remix_ratios_all) / 1000)  # Set windows size to get 1000 points total (unless short, then only 5)
+            WINDOWS_SIZE = 1 if WINDOWS_SIZE < 1 else WINDOWS_SIZE
+            if mix_protocol == MIX_PROTOCOL.WASABI1:
+                # Wasabi 1 ix only single output per denonimation, putting automatically (potentially large) change into next remix
+                # Compute remix rate only from standard denomination inputs as large remix fraction are these change remixes which are
+                # easily distinguishable from standard denomination inputs
+                remix_ratios_avg = [np.average(remix_ratios_std[i:i + WINDOWS_SIZE]) for i in
+                                    range(0, len(remix_ratios_std), WINDOWS_SIZE)]
+            else:
+                # Consider all inputs from non-wasabi1 pools
+                remix_ratios_avg = [np.average(remix_ratios_all[i:i + WINDOWS_SIZE]) for i in
+                                    range(0, len(remix_ratios_all), WINDOWS_SIZE)]
 
-        # Save computed remixes to file
-        restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 2)}btc'
-        save_file = os.path.join(target_path,
-                         f'{mix_id}_remixrate_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
-        als.save_json_to_file_pretty(f'{save_file}.json', {'remix_ratios_all': remix_ratios_all, 'remix_ratios_nonstd': remix_ratios_nonstd, 'remix_ratios_std': remix_ratios_std})
+            ax2 = ax.twinx()
+            ax2.plot(range(0, len(remix_ratios_std), WINDOWS_SIZE), remix_ratios_avg, label=f'MIX_REMIX avg({WINDOWS_SIZE})',
+                     color='brown', linewidth=1, linestyle='--', alpha=0.5)
+            ax2.set_ylim(0, 100)  # Force whole range of yaxis
+            ax2.tick_params(axis='y', colors='brown', labelsize=6)
+            ax2.set_ylabel('Average remix rate %', color='brown', fontsize='6', labelpad=-3)
+            ax2.spines['right'].set_position(('outward', -25))  # Adjust position of the third axis
 
-        # Plot changing liquidity in time
-        ax2 = ax.twinx()
-        changing_liquidity_btc = [item / SATS_IN_BTC for item in changing_liquidity]
-        remix_liquidity_btc = [item / SATS_IN_BTC for item in remix_liquidity]
-        stay_liquidity_btc = [item / SATS_IN_BTC for item in stay_liquidity]
-        ax2.plot(changing_liquidity_btc, color='royalblue', alpha=0.6, label='Changing liquidity (cjtx centric, MIX_ENTER - MIX_LEAVE)')
-        ax2.plot(stay_liquidity_btc, color='darkgreen', alpha=0.6, linestyle='--', label='Unmoved outputs (MIX_STAY)')
-        #ax2.plot(remix_liquidity_btc, color='black', alpha=0.6, linestyle='--', label='Cummulative remix liquidity, MIX_ENTER - MIX_LEAVE - MIX_STAY')
-        ax2.plot([0], [0], label=f'Average remix rate', color='brown', linewidth=1, linestyle='--', alpha=0.5)  # Fake plot to have correct legend record from other twinx
+            # Save computed remixes to file
+            restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 2)}btc'
+            save_file = os.path.join(target_path,
+                             f'{mix_id}_remixrate_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
+            als.save_json_to_file_pretty(f'{save_file}.json', {'remix_ratios_all': remix_ratios_all, 'remix_ratios_nonstd': remix_ratios_nonstd, 'remix_ratios_std': remix_ratios_std})
 
-        PLOT_CHAINANALYSIS_TIMECUTOFF = False
-        if PLOT_CHAINANALYSIS_TIMECUTOFF:
-            ax2.plot([a - b for a, b in zip([item / SATS_IN_BTC for item in changing_liquidity_timecutoff], [item / SATS_IN_BTC for item in stay_liquidity_timecutoff])], color='red', alpha=0.6, linestyle='-.', label='Actively remixed liquidity (Changing - Unmoved)')
-        else:
-            ax2.plot([a - b for a, b in zip(changing_liquidity_btc, stay_liquidity_btc)], color='red', alpha=0.6, linestyle='-.', label='Actively remixed liquidity (Changing - Unmoved)')
-        ax2.set_ylabel('btc in mix', color='royalblue')
-        ax2.tick_params(axis='y', colors='royalblue')
+            # Plot changing liquidity in time
+            ax2 = ax.twinx()
+            changing_liquidity_btc = [item / SATS_IN_BTC for item in changing_liquidity]
+            remix_liquidity_btc = [item / SATS_IN_BTC for item in remix_liquidity]
+            stay_liquidity_btc = [item / SATS_IN_BTC for item in stay_liquidity]
+            ax2.plot(changing_liquidity_btc, color='royalblue', alpha=0.6, label='Changing liquidity (cjtx centric, MIX_ENTER - MIX_LEAVE)')
+            ax2.plot(stay_liquidity_btc, color='darkgreen', alpha=0.6, linestyle='--', label='Unmoved outputs (MIX_STAY)')
+            #ax2.plot(remix_liquidity_btc, color='black', alpha=0.6, linestyle='--', label='Cummulative remix liquidity, MIX_ENTER - MIX_LEAVE - MIX_STAY')
+            ax2.plot([0], [0], label=f'Average remix rate', color='brown', linewidth=1, linestyle='--', alpha=0.5)  # Fake plot to have correct legend record from other twinx
 
-        ax3 = None
-        PLOT_ESTIMATED_WALLETS = False
-        if PLOT_ESTIMATED_WALLETS:
-            # TODO: Compute wallets estimation based on inputs per time interval, not directly conjoins
-            AVG_WINDOWS = 10
-            num_wallets_avg = als.compute_averages(num_wallets, AVG_WINDOWS)
-            AVG_WINDOWS_100 = 100
-            num_wallets_avg100 = als.compute_averages(num_wallets, AVG_WINDOWS_100)
-            ax3 = ax.twinx()
-            ax3.spines['right'].set_position(('outward', -28))  # Adjust position of the third axis
-            ax3.plot(num_wallets_avg, color='green', alpha=0.4, label=f'Estimated # wallets ({AVG_WINDOWS} avg)')
-            ax3.plot(num_wallets_avg100, color='green', alpha=0.8, label=f'Estimated # wallets ({AVG_WINDOWS_100} avg)')
-            ax3.set_ylabel('Estimated number of active wallets', color='green')
-            ax3.tick_params(axis='y', colors='green')
+            PLOT_CHAINANALYSIS_TIMECUTOFF = False
+            if PLOT_CHAINANALYSIS_TIMECUTOFF:
+                ax2.plot([a - b for a, b in zip([item / SATS_IN_BTC for item in changing_liquidity_timecutoff], [item / SATS_IN_BTC for item in stay_liquidity_timecutoff])], color='red', alpha=0.6, linestyle='-.', label='Actively remixed liquidity (Changing - Unmoved)')
+            else:
+                ax2.plot([a - b for a, b in zip(changing_liquidity_btc, stay_liquidity_btc)], color='red', alpha=0.6, linestyle='-.', label='Actively remixed liquidity (Changing - Unmoved)')
+            ax2.set_ylabel('btc in mix', color='royalblue')
+            ax2.tick_params(axis='y', colors='royalblue')
 
-        # Plot lines as separators corresponding to months
-        for pos in new_month_indices:
-            if pos[0] in separators_to_plot:
-                PLOT_DAYS_MONTHS = False
-                if pos[0] == 'day' or pos[0] == 'month' and PLOT_DAYS_MONTHS:
-                    ax2.axvline(x=pos[1], color='gray', linewidth=0.5, alpha=0.1, linestyle='--')
-                if pos[0] == 'year':
-                    ax2.axvline(x=pos[1], color='gray', linewidth=1, alpha=0.4, linestyle='--')
-        ax2.set_xticks([x[1] for x in new_month_indices])
-        labels = []
-        prev_year_offset = -10000
-        for x in new_month_indices:
-            if x[0] == 'year':
-                if x[1] - prev_year_offset > 1000:
-                    labels.append(f'{x[2][0:4]}')
-                    prev_year_offset = x[1]
+            ax3 = None
+            PLOT_ESTIMATED_WALLETS = False
+            if PLOT_ESTIMATED_WALLETS:
+                # TODO: Compute wallets estimation based on inputs per time interval, not directly conjoins
+                AVG_WINDOWS = 10
+                num_wallets_avg = als.compute_averages(num_wallets, AVG_WINDOWS)
+                AVG_WINDOWS_100 = 100
+                num_wallets_avg100 = als.compute_averages(num_wallets, AVG_WINDOWS_100)
+                ax3 = ax.twinx()
+                ax3.spines['right'].set_position(('outward', -28))  # Adjust position of the third axis
+                ax3.plot(num_wallets_avg, color='green', alpha=0.4, label=f'Estimated # wallets ({AVG_WINDOWS} avg)')
+                ax3.plot(num_wallets_avg100, color='green', alpha=0.8, label=f'Estimated # wallets ({AVG_WINDOWS_100} avg)')
+                ax3.set_ylabel('Estimated number of active wallets', color='green')
+                ax3.tick_params(axis='y', colors='green')
+
+            # Plot lines as separators corresponding to months
+            for pos in new_month_indices:
+                if pos[0] in separators_to_plot:
+                    PLOT_DAYS_MONTHS = False
+                    if pos[0] == 'day' or pos[0] == 'month' and PLOT_DAYS_MONTHS:
+                        ax2.axvline(x=pos[1], color='gray', linewidth=0.5, alpha=0.1, linestyle='--')
+                    if pos[0] == 'year':
+                        ax2.axvline(x=pos[1], color='gray', linewidth=1, alpha=0.4, linestyle='--')
+            ax2.set_xticks([x[1] for x in new_month_indices])
+            labels = []
+            prev_year_offset = -10000
+            for x in new_month_indices:
+                if x[0] == 'year':
+                    if x[1] - prev_year_offset > 1000:
+                        labels.append(f'{x[2][0:4]}')
+                        prev_year_offset = x[1]
+                    else:
+                        labels.append('')
                 else:
                     labels.append('')
-            else:
-                labels.append('')
-        ax2.set_xticklabels(labels, rotation=45, fontsize=6)
+            ax2.set_xticklabels(labels, rotation=45, fontsize=6)
 
-        # if ax:
-        #     ax.legend(loc='center left')
-        if ax2:
-            if mix_protocol in [MIX_PROTOCOL.WASABI2]:
-                ax2.legend(loc='upper left', fontsize=LEGEND_FONT_SIZE, bbox_to_anchor=(0.01, 0.85), borderaxespad=0)
-            else:
-                ax2.legend(loc='upper left', fontsize=LEGEND_FONT_SIZE)
-        if ax3:
-            ax3.legend()
+            # if ax:
+            #     ax.legend(loc='center left')
+            if ax2:
+                if mix_protocol in [MIX_PROTOCOL.WASABI2]:
+                    ax2.legend(loc='upper left', fontsize=LEGEND_FONT_SIZE, bbox_to_anchor=(0.01, 0.85), borderaxespad=0)
+                else:
+                    ax2.legend(loc='upper left', fontsize=LEGEND_FONT_SIZE)
+            if ax3:
+                ax3.legend()
 
-    # Save input_types into json
-    PLOT_PLOTLY = False
-    if PLOT_PLOTLY:
-        plotly_data = {'time': list(range(0, len(input_types[MIX_EVENT_TYPE.MIX_REMIX.name])))}
-        for input_type in input_types.keys():
-            if input_type in [MIX_EVENT_TYPE.MIX_ENTER.name, MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name, MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name, 'MIX_REMIX_1', 'MIX_REMIX_2', 'MIX_REMIX_3-5', 'MIX_REMIX_6-19', 'MIX_REMIX_20+', 'MIX_REMIX_1000-1999', 'MIX_REMIX_2000+', 'MIX_REMIX_nonstd']:
-                plotly_data[input_type] = [value.item() for value in input_types[input_type]]
-        save_file = os.path.join(target_path, 'plotly_data.json')
-        als.save_json_to_file(save_file, plotly_data)
+    if not plot_only_intervals:
+        # Save input_types into json
+        PLOT_PLOTLY = False
+        if PLOT_PLOTLY:
+            plotly_data = {'time': list(range(0, len(input_types[MIX_EVENT_TYPE.MIX_REMIX.name])))}
+            for input_type in input_types.keys():
+                if input_type in [MIX_EVENT_TYPE.MIX_ENTER.name, MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name, MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name, 'MIX_REMIX_1', 'MIX_REMIX_2', 'MIX_REMIX_3-5', 'MIX_REMIX_6-19', 'MIX_REMIX_20+', 'MIX_REMIX_1000-1999', 'MIX_REMIX_2000+', 'MIX_REMIX_nonstd']:
+                    plotly_data[input_type] = [value.item() for value in input_types[input_type]]
+            save_file = os.path.join(target_path, 'plotly_data.json')
+            als.save_json_to_file(save_file, plotly_data)
 
-    # Add additional cummulative plots for all coinjoin in one
-    ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
-    ax_index += 1
-    plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, changing_liquidity_timecutoff, stay_liquidity, remix_liquidity, mining_fee_rate, ['month', 'year'])
+        # Add additional cummulative plots for all coinjoin in one
+        ax = fig.add_subplot(NUM_ROWS, NUM_COLUMNS, ax_index, axes_class=AA.Axes)  # Get next subplot
+        ax_index += 1
+        plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, changing_liquidity_timecutoff, stay_liquidity, remix_liquidity, mining_fee_rate, ['month', 'year'])
 
-    # Finalize multigraph graph
-    if plot_multigraph:
-        plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
-        restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 2)}btc'
-        save_file = os.path.join(target_path, f'{mix_id}_input_types_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
-        plt.savefig(f'{save_file}.png', dpi=300)
-        plt.savefig(f'{save_file}.pdf', dpi=300)
-        # with open(f'{save_file}.html', "w") as f:
-        #     f.write(mpld3.fig_to_html(plt.gcf()))
-    plt.close()
+        # Finalize multigraph graph
+        if plot_multigraph:
+            plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
+            restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 2)}btc'
+            save_file = os.path.join(target_path, f'{mix_id}_input_types_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
+            plt.savefig(f'{save_file}.png', dpi=300)
+            plt.savefig(f'{save_file}.pdf', dpi=300)
+            # with open(f'{save_file}.html', "w") as f:
+            #     f.write(mpld3.fig_to_html(plt.gcf()))
+        plt.close()
 
     # Save generate and save cummulative results separately
     fig = plt.figure(figsize=(10, 3))

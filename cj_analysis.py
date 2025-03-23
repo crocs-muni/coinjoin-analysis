@@ -487,20 +487,34 @@ def plot_num_wallets(mix_id: str, data: dict, ax):
     coinjoins = data['coinjoins']
     sorted_cj_time = sort_coinjoins(coinjoins, SORT_COINJOINS_BY_RELATIVE_ORDER)
 
-    # For each coinjoin find the closest fee rate record and plot it
-    AVG_NUM_INPUTS = 1.765  # value taken from simulations for all distributions
-    num_wallets = [len(coinjoins[cj['txid']]['inputs']) / AVG_NUM_INPUTS for cj in sorted_cj_time]
+    # Naive approach: For each coinjoin, compute as number of inputs divided by average inputs per wallet
+    #AVG_NUM_INPUTS = 1.765  # value taken from simulations for all distributions
+    AVG_NUM_INPUTS = 3.18  # value taken from simulations for all distributions
+    num_wallets_naive = [len(coinjoins[cj['txid']]['inputs']) / AVG_NUM_INPUTS for cj in sorted_cj_time]
 
-    # Alternative plot:
+    # Load from other computed option
+    num_wallets_predicted = [coinjoins[cj['txid']].get('num_wallets_predicted', -100) for cj in sorted_cj_time]
+    # Set value for missing ones to nearby value
+    last_val = 0
+    for index in range(0, len(num_wallets_predicted)):
+        if num_wallets_predicted[index] == -100:
+            num_wallets_predicted[index] = last_val
+        else:
+            last_val = num_wallets_predicted[index]
 
     if ax:
         AVG_WINDOWS = 10
-        num_wallets_avg = compute_averages(num_wallets, AVG_WINDOWS)
-        ax.plot(num_wallets_avg, color='green', alpha=0.2, linewidth=1, linestyle='-')
-        ax.tick_params(axis='y', colors='green', labelsize=6)
-        ax.set_ylabel('Estimated number of active wallets', color='green', fontsize='6')
+        num_wallets_avg = compute_averages(num_wallets_naive, AVG_WINDOWS)
+        ax.plot(num_wallets_avg, color='red', alpha=0.2, linewidth=1, linestyle='-')
+        ax.tick_params(axis='y', colors='red', labelsize=6)
+        #ax.set_ylabel('Estimated number of active wallets (naive)', color='red', fontsize='6')
 
-    return num_wallets
+        num_wallets_avg = compute_averages(num_wallets_predicted, AVG_WINDOWS)
+        ax.plot(num_wallets_avg, color='green', alpha=0.4, linewidth=1, linestyle='-')
+        ax.tick_params(axis='y', colors='green', labelsize=6)
+        ax.set_ylabel('Estimated number of active wallets (model)', color='green', fontsize='6')
+
+    return num_wallets_predicted
 
 
 def compute_cjtxs_relative_ordering(coinjoins):
