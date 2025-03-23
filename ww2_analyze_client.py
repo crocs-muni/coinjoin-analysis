@@ -1,22 +1,18 @@
 import copy
 import logging
-
-# Suppress DEBUG logs from a specific library
-logging.getLogger("matplotlib").setLevel(logging.WARNING)
-
 import math
 import os
 from itertools import chain
-
-import orjson
 import seaborn as sns
 import numpy as np
 from matplotlib import pyplot as plt
-
 import parse_dumplings as dmp
 import cj_analysis as als
-
 from collections import defaultdict
+
+
+# Suppress DEBUG logs from a specific library
+logging.getLogger("matplotlib").setLevel(logging.WARNING)
 
 SATS_IN_BTC = 100000000
 
@@ -147,6 +143,32 @@ def find_highest_scores(root_folder, mix_name: str):
     return dict(highest_scores)  # Convert back to regular dictionary
 
 
+def find_input_index_for_output(coinjoins: dict, prev_txid: str, prev_vout_index: str, prev_value: int, next_txid: str):
+    # NOTE: tx['inputs'][index] refer to index within outputs from funding transaction (vout),
+    # not vin index of this transaction
+    spending_index = None
+    if prev_txid in coinjoins['coinjoins'].keys():  # Find in coinjoin txs, extract from 'spend_by_tx'
+        spending_txid, spending_index = als.extract_txid_from_inout_string(
+            coinjoins['coinjoins'][prev_txid]['outputs'][prev_vout_index]['spend_by_tx'])
+    elif 'premix' in coinjoins and prev_txid in coinjoins[
+        'premix']:  # Find in remix txs, extract from 'spend_by_tx'
+        spending_txid, spending_index = als.extract_txid_from_inout_string(
+            coinjoins['premix'][prev_txid]['outputs'][prev_vout_index]['spend_by_tx'])
+    else:  # Dirty heuristics - pick first input which has same 'value' in sats
+        if next_txid in coinjoins['coinjoins']:
+            for in_index in coinjoins['coinjoins'][next_txid]['inputs']:
+                if prev_value == coinjoins['coinjoins'][next_txid]['inputs'][in_index]['value']:
+                    logging.debug(f'Dirty heuristics: Input {in_index} established for {next_txid}')
+                    spending_index = in_index
+                    break
+        else:
+            logging.debug(f'{next_txid} not in coinjoins, settings output to 0')
+            spending_index = 0
+    assert spending_index is not None, f'Spending index for {prev_txid}:{index} not found'
+
+    return spending_index
+
+
 def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, target_as: int, experiment_start_date: str):
     target_path = os.path.join(target_base_path, f'{mix_name}_history.json')
     history_all = als.load_json_from_file(target_path)['result']
@@ -161,7 +183,8 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
             coin['anonymityScore'] = intermediate_coins_max_score[coin['address']] if coin['address'] in intermediate_coins_max_score else 1
 
     target_path = os.path.join(target_base_path, f'coinjoin_tx_info.json')
-    coinjoins = als.load_json_from_file(target_path)['coinjoins']
+    coinjoins_all = als.load_json_from_file(target_path)
+    coinjoins = coinjoins_all['coinjoins']
     # target_path = os.path.join(target_base_path, f'logww2.json')
     # coord_logs = als.load_json_from_file(target_path)
 
@@ -178,7 +201,9 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
             if coin['txid'] == cjtx['tx']:
                 cjtx['outputs'][str(coin['index'])] = coin
             if coin['spentBy'] == cjtx['tx']:
-                cjtx['inputs'][str(coin['index'])] = coin  # BUGBUG: We do not know correct vin index
+                # We do not know correct vin index - need to search for in subsequent transaction
+                input_index = find_input_index_for_output(coinjoins_all, coin['txid'], str(coin['index']), coin['amount'], coin['spentBy'])
+                cjtx['inputs'][str(input_index)] = coin
 
     # If last tx is coinjoin, add one artificial non-coinjoin one
     if history[-1]['islikelycoinjoin'] is True:
@@ -197,6 +222,7 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
     session_size_inputs = 0
     for tx in history:
         if tx['islikelycoinjoin'] is True:
+            txid = tx['tx']
             # Inside coinjoin session, append
             record = {'txid': tx['tx'], 'inputs': {}, 'outputs': {}, 'round_id': tx['tx'], 'is_blame_round': False}
             record['round_start_time'] = als.precomp_datetime.fromisoformat(tx['datetime']).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
@@ -240,6 +266,8 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
 
 
             session_funding_tx = tx
+
+    #
 
     # Compute basic statistics
     stats = {}
@@ -490,9 +518,13 @@ def analyse_prison_logs(target_path: str):
 def plot_cj_heatmap(mfig: Multifig, x, y, x_label, y_label, title):
     heatmap_size = (max(x), max(y))
     heatmap, xedges, yedges = np.histogram2d(x, y, bins=heatmap_size)
-    #plt.figure(figsize=(8, 6))
+
     ax = mfig.add_subplot()
-    sns.heatmap(heatmap.T, cmap='viridis', annot=True, fmt='.0f', cbar=True, ax=ax)
+    #sns.heatmap(heatmap.T, cmap='viridis', annot=True, fmt='.0f', cbar=True, ax=ax)
+    heatmap_percentage = (heatmap / np.sum(heatmap)) * 100
+    sns.heatmap(heatmap_percentage.T, cmap='viridis', annot=True, fmt='.1f', cbar=True, ax=ax)
+
+
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
     ax.set_xticks(np.arange(len(xedges) - 1) + 0.5)
@@ -522,7 +554,7 @@ def full_analyze_as38_202503(base_path: str):
     problematic_sessions = ['mix7 0.1btc | 3 cjs | txid: 3493c971d']  # Failed experiments to be removed from processing
 
     return analyze_ww2_artifacts(target_path, experiment_start_cut_date, experiment_target_anonscore,
-                          ['mix6', 'mix7'], problematic_sessions, -1)
+                          ['mix6', 'mix7'], problematic_sessions, -1)  # TODO: once as38 experimen is finisihed, set number of expected sessions
 
 
 def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, experiment_target_anonscore: int,
@@ -656,7 +688,7 @@ def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, expe
     mfig.plt.savefig(f'{save_file}.pdf', dpi=300)
     mfig.plt.close()
 
-    return all_stats
+    return all_stats, all_cjs
 
 
 def plot_ww2mix_stats(mfig, all_stats: dict, experiment_label: str, experiment_target_anonscore: str, color: str):
