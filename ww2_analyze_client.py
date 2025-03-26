@@ -148,6 +148,7 @@ def find_input_index_for_output(coinjoins: dict, prev_txid: str, prev_vout_index
     # not vin index of this transaction
     spending_index = None
     if prev_txid in coinjoins['coinjoins'].keys():  # Find in coinjoin txs, extract from 'spend_by_tx'
+        assert 'spend_by_tx' in coinjoins['coinjoins'][prev_txid]['outputs'][prev_vout_index], 'Missing newest coinjoin_tx_info.json (parse_dumplings.py --action process_dumplings ; then folder with the target month for experiment and coordinator)).'
         spending_txid, spending_index = als.extract_txid_from_inout_string(
             coinjoins['coinjoins'][prev_txid]['outputs'][prev_vout_index]['spend_by_tx'])
     elif 'premix' in coinjoins and prev_txid in coinjoins[
@@ -595,9 +596,18 @@ def full_analyze_as38_202503(base_path: str):
     experiment_start_cut_date = '2025-03-09T00:02:49+00:00'  # AS=38 experiment start time
     experiment_target_anonscore = 38
     problematic_sessions = ['mix7 0.1btc | 3 cjs | txid: 3493c971d']  # Failed experiments to be removed from processing
+    wallets_names = ['mix6', 'mix7']
+
+    # Generate download scripts for wallet transactions
+    history_all = []
+    for wallet_name in wallets_names:
+        file_path = os.path.join(target_path, f'{wallet_name}_history.json')
+        history_all.extend(als.load_json_from_file(file_path)['result'])
+    cjtxs = [item['tx'] for item in history_all]
+    create_download_script(cjtxs, 'download_as38.sh')
 
     return analyze_ww2_artifacts(target_path, experiment_start_cut_date, experiment_target_anonscore,
-                          ['mix6', 'mix7'], problematic_sessions, -1)  # TODO: once as38 experimen is finisihed, set number of expected sessions
+                          wallets_names, problematic_sessions, -1)  # TODO: once as38 experimen is finisihed, set number of expected sessions
 
 
 def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, experiment_target_anonscore: int,
