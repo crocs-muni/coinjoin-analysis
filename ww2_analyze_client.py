@@ -691,9 +691,16 @@ def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, expe
     ax = mfig.add_subplot()
     data_mfee = [all_cjs['sessions'][session_label]['coinjoins'][cjtxid]['wallet_fair_mfee'] for session_label in all_cjs['sessions'].keys() for cjtxid in all_cjs['sessions'][session_label]['coinjoins'].keys()]
     data_cfee = [all_cjs['sessions'][session_label]['coinjoins'][cjtxid]['wallet_hidden_cfee_paid'] for session_label in all_cjs['sessions'].keys() for cjtxid in all_cjs['sessions'][session_label]['coinjoins'].keys()]
+    data_cfee_small = [value for value in data_cfee if value < 10000]
+    data_cfee
     print(f'Mining fee sum={sum(data_mfee)}')
     print(f'Hidden cfee (sum={sum(data_cfee)}): {sorted(data_cfee)}')
-    ax.hist(data_cfee, bins=30, edgecolor='black', alpha=0.7)
+    ax.hist(data_mfee, bins=30, color='green', edgecolor='black', alpha=0.5, label=f'Fair mining fee: {sum(data_mfee)} sats')
+    ax.hist(data_cfee_small, bins=30, color='red', edgecolor='black', alpha=0.5, label=f'Hidden coord. fee: {sum(data_cfee)} sats')
+    ax.set_xlabel('Hidden cfee (sats)')
+    ax.set_ylabel('Occurence')
+    ax.set_title('Distribution of hidden coordination fee')
+    ax.legend()
     #ax.set_title(title)
 
     sessions_lengths = [len(all_cjs['sessions'][session]['coinjoins']) for session in all_cjs['sessions'].keys()]
