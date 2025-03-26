@@ -1722,21 +1722,23 @@ def wasabi2_analyse_remixes(mix_id: str, target_path: str):
 
 def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_file: str,
                         analyze_values: bool = True, normalize_values: bool = True,
-                        restrict_to_out_size: int = None, restrict_to_in_size = None,
-                        plot_multigraph: bool = True):
+                        restrict_to_out_size: int = None, restrict_to_in_size: int = None,
+                        plot_multigraph: bool = True, plot_only_intervals: bool = False):
 
-    #
-    # Plot all graphs together
-    #
-    # wasabi_plot_remixes_worker(mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
-    #                     restrict_to_out_size, restrict_to_in_size, plot_multigraph, False)
+    if plot_only_intervals:
+        #
+        # Plot only single intervals
+        #
+        fig_single, ax_single = plt.subplots()
+        wasabi_plot_remixes_worker(mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
+                            restrict_to_out_size, restrict_to_in_size, plot_multigraph, True)
+    else:
+        #
+        # Plot all graphs together
+        #
+        wasabi_plot_remixes_worker(mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
+                            restrict_to_out_size, restrict_to_in_size, plot_multigraph, False)
 
-    #
-    # Plot only single intervals
-    #
-    fig_single, ax_single = plt.subplots()
-    wasabi_plot_remixes_worker(mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
-                        restrict_to_out_size, restrict_to_in_size, plot_multigraph, True)
 
 
 def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_file: str,
@@ -3831,7 +3833,7 @@ if __name__ == "__main__":
             shutil.copyfile(os.path.join(target_path, mix_origin_name, 'false_cjtxs.json'),
                             os.path.join(target_path, interval_name, 'false_cjtxs.json'))
             wasabi_plot_remixes(interval_name, MIX_PROTOCOL.WASABI1, os.path.join(target_path, interval_name),
-                                'coinjoin_tx_info.json', True, False)
+                                'coinjoin_tx_info.json', True, False, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
 
         if op.CJ_TYPE == CoinjoinType.WW1:
             target_load_path = os.path.join(target_path, 'wasabi1')
