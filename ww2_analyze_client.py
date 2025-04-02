@@ -6,6 +6,8 @@ from itertools import chain
 import seaborn as sns
 import numpy as np
 from matplotlib import pyplot as plt
+from scipy.interpolate import CubicSpline
+
 import parse_dumplings as dmp
 import cj_analysis as als
 from collections import defaultdict
@@ -16,6 +18,7 @@ logging.getLogger("matplotlib").setLevel(logging.WARNING)
 
 SATS_IN_BTC = 100000000
 
+FAIL_ON_CHECKS = False
 
 class Multifig:
     num_rows = 1
@@ -374,6 +377,7 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
     stats['observed_remix_liquidity_ratio'] = {}
     stats['observed_remix_liquidity_ratio_cumul'] = {}  # Remix liquidity based on value of inputs
     stats['observed_remix_inputs_ratio_cumul'] = {}     # unused now, remix liquidity based on number of inputs
+    stats['anonscore_coins_distribution'] = {}
     for session_label in cjtxs['sessions'].keys():
         session_coins = {}
         anon_percentage_status_list = []
@@ -381,6 +385,7 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
         observed_remix_liquidity_ratio_list = []
         observed_remix_liquidity_ratio_cumul_list = []
         observed_remix_inputs_ratio_cumul_list = []
+        anonscore_coins_distribution_list = []
         session_size_inputs = cjtxs['sessions'][session_label]['funding_tx']['value']
         assert session_size_inputs > 0, f'Unexpected negative funding tx size of {session_size_inputs}'
         for cjtxid in cjtxs['sessions'][session_label]['coinjoins'].keys():
@@ -446,6 +451,11 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
             else:
                 observed_remix_liquidity_ratio_cumul_list.append(observed_remix_liquidity_ratio_cumul_list[-1] + observed_remix_liquidity_ratio)
 
+            #
+            # Compute list of anonscores for coinjoin round in a session
+            #
+            anonscore_coins_distribution_list.append([session_coins[address]['anon_score'] for address in session_coins.keys()])
+
         # Store computed data
         if len(anon_percentage_status_list) > 0:
             assert session_label not in stats['anon_percentage_status'], f'Duplicate session label {session_label}'
@@ -457,6 +467,9 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
             assert session_label not in stats['observed_remix_liquidity_ratio'], f'Duplicate session label {session_label}'
             stats['observed_remix_liquidity_ratio'][session_label] = observed_remix_liquidity_ratio_list
             stats['observed_remix_liquidity_ratio_cumul'][session_label] = observed_remix_liquidity_ratio_cumul_list
+        if len(anonscore_coins_distribution_list) > 0:
+            assert session_label not in stats['anonscore_coins_distribution'], f'Duplicate session label {session_label}'
+            stats['anonscore_coins_distribution'][session_label] = anonscore_coins_distribution_list
 
         # Print finalized info
         session = cjtxs['sessions'][session_label]
@@ -765,6 +778,22 @@ def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, expe
     ax.set_title('Distribution of hidden coordination fee')
     ax.legend()
     #ax.set_title(title)
+
+
+    # Plot histogram of anonscores at the last round of session (when all coins are mixed)
+    ax = mfig.add_subplot()
+    data_anonscores = []
+    for session_label in all_stats['anonscore_coins_distribution'].keys():
+        data_anonscores.extend(all_stats['anonscore_coins_distribution'][session_label][-1])
+    #num_bins = math.ceil(max(data_anonscores)) - math.floor(min(data_anonscores))
+    bins = np.arange(min(data_anonscores), max(data_anonscores) + 1, 1)
+    ax.hist(data_anonscores, bins=bins, color='green', edgecolor='black', alpha=0.5, label=f'Anonscore frequency')
+    ax.axvline(experiment_target_anonscore, color='r', linestyle='--', label=f"Target anonscore={experiment_target_anonscore}")
+    ax.set_xlabel('Anonscore')
+    ax.set_ylabel('# occurences')
+    ax.set_title('Distribution of anonscores at the end of mixing sessions')
+    ax.legend()
+
 
     sessions_lengths = [len(all_cjs['sessions'][session]['coinjoins']) for session in all_cjs['sessions'].keys()]
     print(f'Total sessions={len(all_cjs['sessions'].keys())}, total coinjoin txs={sum(sessions_lengths)}')
