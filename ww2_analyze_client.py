@@ -632,8 +632,12 @@ def plot_cj_heatmap(mfig: Multifig, x, y, x_label, y_label, title):
     ax = mfig.add_subplot()
     #sns.heatmap(heatmap.T, cmap='viridis', annot=True, fmt='.0f', cbar=True, ax=ax)
     heatmap_percentage = (heatmap / np.sum(heatmap)) * 100
-    sns.heatmap(heatmap_percentage.T, cmap='viridis', annot=True, fmt='.1f', cbar=True, ax=ax)
+    #sns.set_style("whitegrid")
+    sns.set_style("white")
+#    sns.heatmap(heatmap_percentage.T, cmap='viridis', annot=True, fmt='.1f', cbar=True, ax=ax)
+    sns.heatmap(heatmap_percentage.T, cmap='coolwarm', annot=True, fmt='.1f', cbar=True, ax=ax, linecolor='white')
 
+    ax.invert_yaxis()
 
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
@@ -760,23 +764,21 @@ def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, expe
     for session in all_stats['num_inputs'].keys():
         x.extend(all_stats['num_inputs'][session])
         y.extend(all_stats['num_outputs'][session])
-    plot_cj_heatmap(mfig, x, y, 'number of inputs', 'number of outputs','Occurence frequency of inputs to outputs pairs')
+    plot_cj_heatmap(mfig, x, y, 'number of inputs', 'number of outputs','Frequency of inputs to outputs pairs')
 
     # Plot histogram of hidden coordination fees (cfee)
     ax = mfig.add_subplot()
     data_mfee = [all_cjs['sessions'][session_label]['coinjoins'][cjtxid]['wallet_fair_mfee'] for session_label in all_cjs['sessions'].keys() for cjtxid in all_cjs['sessions'][session_label]['coinjoins'].keys()]
     data_cfee = [all_cjs['sessions'][session_label]['coinjoins'][cjtxid]['wallet_hidden_cfee_paid'] for session_label in all_cjs['sessions'].keys() for cjtxid in all_cjs['sessions'][session_label]['coinjoins'].keys()]
     data_cfee_small = [value for value in data_cfee if value < 10000]
-    data_cfee
     print(f'Mining fee sum={sum(data_mfee)}')
     print(f'Hidden cfee (sum={sum(data_cfee)}): {sorted(data_cfee)}')
     ax.hist(data_mfee, bins=30, color='green', edgecolor='black', alpha=0.5, label=f'Fair mining fee: {sum(data_mfee)} sats')
-    ax.hist(data_cfee_small, bins=30, color='red', edgecolor='black', alpha=0.5, label=f'Hidden coord. fee: {sum(data_cfee)} sats')
+    ax.hist(data_cfee_small, bins=100, color='red', edgecolor='black', alpha=0.5, label=f'Hidden coord. fee: {sum(data_cfee)} sats')
     ax.set_xlabel('Hidden cfee (sats)')
-    ax.set_ylabel('Occurence')
+    ax.set_ylabel('# occurences')
     ax.set_title('Distribution of hidden coordination fee')
     ax.legend()
-    #ax.set_title(title)
 
 
     # Plot histogram of anonscores at the last round of session (when all coins are mixed)
