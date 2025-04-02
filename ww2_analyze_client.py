@@ -52,9 +52,9 @@ def plot_cj_anonscores(mfig: Multifig, data: dict, title: str, anon_score: str, 
 
 
 def plot_cj_anonscores_ax(ax, data: dict, title: str, anon_score: str, y_label: str, line_color: str, show_txid: bool = False):
-    #fig, ax = plt.subplots(figsize=(10, 5))
     size_01_used = False
     size_02_used = False
+    max_y = -1
     for cj_session in data.keys():
         line_style = ':'
         if cj_session.find('0.1btc') != -1:
@@ -68,22 +68,64 @@ def plot_cj_anonscores_ax(ax, data: dict, title: str, anon_score: str, y_label: 
             cj_label = cj_label[0:cj_session.find('txid:')]
         x_range = range(1, len(data[cj_session]) + 1)
         ax.plot(x_range, data[cj_session], color=line_color, linestyle=line_style, alpha=0.15)
+        max_y = max(max(data[cj_session]), max_y)
     if size_01_used:
         ax.plot([1], [1], color=line_color, label=f'Input size 0.1 btc (as={anon_score})', linestyle='solid', alpha=0.5)
     if size_02_used:
         ax.plot([1], [1], color=line_color, label=f'Input size 0.2 btc (as={anon_score})', linestyle=':', alpha=0.5)
     ax.set_xticks(np.arange(1, 20, 2))
+    ax.set_yticks(np.linspace(0, max_y, num=5))
 
     def compute_average_at_index(lists, index):
+        """
+        Returns average value at specific index and number of valyes present at that index
+        :param lists:
+        :param index:
+        :return:
+        """
         values = [lists[lst][index] for lst in lists.keys() if index < len(lists[lst])]
         if not values:
             return 0
-        return sum(values) / len(values)
+        return (sum(values) / len(values), len(values))
 
     max_index = max([len(data[cj_session]) for cj_session in data.keys()])
-    avg_data = [compute_average_at_index(data, index) for index in range(0, max_index)]
-    ax.plot(range(1, len(avg_data) + 1), avg_data, label=f'Average (as={anon_score})', linestyle='solid',
-            linewidth=7, alpha=0.7, color=line_color)
+    avg_data = [compute_average_at_index(data, index)[0] for index in range(0, max_index)]
+    num_at_index_data = [compute_average_at_index(data, index)[1] for index in range(0, max_index)]
+    x_vals = range(1, len(avg_data) + 1)
+
+    PLOT_BASIC_AVERAGE = True
+    if PLOT_BASIC_AVERAGE:
+        ax.plot(range(1, len(avg_data) + 1), avg_data, label=f'Average (as={anon_score})', linestyle='solid',
+                linewidth=7, alpha=0.7, color=line_color)
+    else:
+        values_at_index = {}
+        # Populate dictionary with values at each index
+        for cj_session in data.keys():
+            for i, value in enumerate(data[cj_session]):
+                if i not in values_at_index:
+                    values_at_index[i] = []
+                values_at_index[i].append(value)
+
+        x_vals = np.array(sorted(values_at_index.keys()))
+
+        # Interpolate the average line for smoothing
+        x_smooth = np.linspace(x_vals.min(), x_vals.max(), 1000)  # More points for smoothness
+        cs = CubicSpline(x_vals, avg_data)  # Cubic interpolation function
+        y_smooth = cs(x_smooth)  # Get smooth values
+
+        # Interpolate line thickness based on data points at each index
+        smoothed_widths = np.interp(x_smooth, x_vals, num_at_index_data)  # No normalization
+
+        # Plot smoothed averaged line with varying thickness
+        for i in range(len(x_smooth) - 1):
+            ax.plot(
+                [x_smooth[i], x_smooth[i + 1]],  # X range
+                [y_smooth[i], y_smooth[i + 1]],  # Y range
+                color=line_color,
+                alpha=0.5,
+                linewidth=float(smoothed_widths[i])  # Use raw number of lists for thickness
+            )
+
 
     ax.legend(loc="best", fontsize='8')
     ax.set_title(title)
