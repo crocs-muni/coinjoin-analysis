@@ -56,13 +56,15 @@ def plot_cj_anonscores_ax(ax, data: dict, title: str, anon_score: str, y_label: 
     size_02_used = False
     max_y = -1
     for cj_session in data.keys():
-        line_style = ':'
+        line_style = '-.'
         if cj_session.find('0.1btc') != -1:
             line_style = 'solid'
             size_01_used = True
-        if cj_session.find('0.2btc') != -1:
+        elif cj_session.find('0.2btc') != -1:
             line_style = ':'
             size_02_used = True
+        else:
+            assert False, f'Unexpected session type found for {cj_session}'
         cj_label = cj_session
         if not show_txid and cj_session.find('txid:'):
             cj_label = cj_label[0:cj_session.find('txid:')]
@@ -172,6 +174,7 @@ def find_highest_scores(root_folder, mix_name: str):
             try:
                 # Read JSON file
                 with open(file_path, "r", encoding="utf-8") as f:
+                    #logging.debug(f'Reading from {file_path}')
                     coin_data = als.load_json_from_file(file_path)['result']
 
                 # Update highest scores for each coin address
@@ -190,7 +193,11 @@ def find_input_index_for_output(coinjoins: dict, prev_txid: str, prev_vout_index
     # not vin index of this transaction
     spending_index = None
     if prev_txid in coinjoins['coinjoins'].keys():  # Find in coinjoin txs, extract from 'spend_by_tx'
-        assert 'spend_by_tx' in coinjoins['coinjoins'][prev_txid]['outputs'][prev_vout_index], 'Missing newest coinjoin_tx_info.json (parse_dumplings.py --action process_dumplings ; then folder with the target month for experiment and coordinator)).'
+        assert 'spend_by_tx' in coinjoins['coinjoins'][prev_txid]['outputs'][prev_vout_index], f'Missing newest coinjoin_tx_info.json (parse_dumplings.py --action process_dumplings ; then folder with the target month for experiment and coordinator)). The problematic transaction is {prev_txid}'
+        # if 'spend_by_tx' not in coinjoins['coinjoins'][prev_txid]['outputs'][prev_vout_index]:
+        #     logging.debug(f'{coinjoins['coinjoins'][prev_txid]['outputs'][prev_vout_index]} does not have spend_by_tx, setting output to 0')
+        #     spending_index = 0
+        # else:
         spending_txid, spending_index = als.extract_txid_from_inout_string(
             coinjoins['coinjoins'][prev_txid]['outputs'][prev_vout_index]['spend_by_tx'])
     elif 'premix' in coinjoins and prev_txid in coinjoins[
@@ -205,9 +212,9 @@ def find_input_index_for_output(coinjoins: dict, prev_txid: str, prev_vout_index
                     spending_index = in_index
                     break
         else:
-            logging.debug(f'{next_txid} not in coinjoins, settings output to 0')
+            logging.debug(f'{next_txid} not in coinjoins, setting output to 0')
             spending_index = 0
-    assert spending_index is not None, f'Spending index for {prev_txid}:{index} not found'
+    assert spending_index is not None, f'Spending index for {prev_txid} not found'
 
     return spending_index
 
@@ -263,7 +270,8 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
     cjtxs = {'sessions': {}}
     session_cjtxs = {}
     session_size_inputs = 0
-    for tx in history:
+    for index in range(0, len(history)):
+        tx = history[index]
         if tx['islikelycoinjoin'] is True:
             txid = tx['tx']
             # Inside coinjoin session, append
@@ -329,31 +337,34 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
                 record['wallet_fair_mfee'] = wallet_fair_mfee_sats
                 record['wallet_fee_paid'] = -tx['amount']
                 record['wallet_hidden_cfee_paid'] = hidden_cfee
-
+            else:
+                logging.warning(f'{tx_file_path} is missing')
             session_cjtxs[txid] = record
         else:
-            # Non-coinjoin transaction detected (assume initial or final merge)
-
-            # If initial funding tx, then extract input liquidity into session_size_inputs
-            if len(tx['outputs']) == 1 and tx['outputs'][list(tx['outputs'].keys())[0]]['amount'] > 0:
-                session_size_inputs = tx['outputs'][list(tx['outputs'].keys())[0]]['amount']
-
-            # If final merge transaction detected (some coinjoin txs already detected, use it)
+            # Non-coinjoin transaction detected (either initial funding one at the start of session, or start of of next session )
             if len(session_cjtxs) > 0:
-                assert len(session_funding_tx['outputs'].keys()) == 1, f'Funding tx has unexpected number of outputs of {len(session_funding_tx['outputs'].keys())}'
-                norm_tx = {'txid': session_funding_tx['tx'], 'label': session_funding_tx['label'], 'broadcast_time': session_funding_tx['datetime'], 'value': session_funding_tx['outputs']['0']['amount']}
+                # We hit first non-coinjoin transaction after session => end of session
+                assert len(session_funding_tx[
+                               'outputs'].keys()) == 1, f'Funding tx {session_funding_tx['tx']} has unexpected number of outputs of {len(session_funding_tx['outputs'].keys())}'
+                norm_tx = {'txid': session_funding_tx['tx'], 'label': session_funding_tx['label'],
+                           'broadcast_time': session_funding_tx['datetime'],
+                           'value': session_funding_tx['outputs']['0']['amount']}
                 session_label = get_session_label(mix_name, session_size_inputs, session_cjtxs, norm_tx)
-
+                print(f'{session_label}: {session_size_inputs}')
                 als.remove_link_between_inputs_and_outputs(session_cjtxs)
                 als.compute_link_between_inputs_and_outputs(session_cjtxs, [cjtxid for cjtxid in session_cjtxs.keys()])
 
                 cjtxs['sessions'][session_label] = {'coinjoins': session_cjtxs, 'funding_tx': norm_tx}
                 session_cjtxs = {}
+                session_size_inputs = 0
+                session_funding_tx = None
 
+            # Non-coinjoin trasaction, potentially initial funding tx, then extract input liquidity into session_size_inputs
+            if len(tx['outputs']) == 1 and tx['outputs'][list(tx['outputs'].keys())[0]]['amount'] > 0:
+                #if tx['outputs'][list(tx['outputs'].keys())[0]]['amount'] > session_size_inputs:
+                session_size_inputs = tx['outputs'][list(tx['outputs'].keys())[0]]['amount']
+                session_funding_tx = tx
 
-            session_funding_tx = tx
-
-    #
 
     # Compute basic statistics
     stats = {}
