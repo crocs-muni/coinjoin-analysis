@@ -3488,6 +3488,23 @@ if __name__ == "__main__":
 
     DEBUG = False
     if DEBUG:
+        op.PLOT_REMIXES_SINGLE_INTERVAL = True
+        for mix_id in ['wasabi2_zksnacks']:
+            # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+            #                     'coinjoin_tx_info.json', True, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+            #                     'coinjoin_tx_info.json', True, False, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+            #                     'coinjoin_tx_info.json', False, False, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+                                'coinjoin_tx_info.json', False, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+
+            #print(f'{als.avg_output_ratio}')
+            als.save_json_to_file_pretty(os.path.join(target_path, mix_id, f'{mix_id}_wallets_avg_output_ratio.json'), als.avg_output_ratio)
+            print(
+                f"Output wallet ratio: median={round(np.median(als.avg_output_ratio['all']), 2)}, average={round(np.average(als.avg_output_ratio['all']), 2)}, min={min(als.avg_output_ratio['all'])}, max={max(als.avg_output_ratio['all'])}")
+
+        exit(42)
         for mix_id in ['wasabi2_zksnacks', 'wasabi2']:
             target_base_path = os.path.join(target_path, mix_id)
             if os.path.exists(target_base_path):
