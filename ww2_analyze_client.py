@@ -651,9 +651,13 @@ def full_analyze_as25_202405(base_path: str):
     experiment_start_cut_date = '2024-05-14T19:02:49+00:00'  # AS=25 experiment start time
     experiment_target_anonscore = 25
     problematic_sessions = ['mix1 0.1btc | 12 cjs | txid: 34']  # Failed experiments to be removed from processing
+    wallets_names = ['mix1', 'mix2', 'mix3']
+
+    # Generate download scripts for wallet transactions
+    create_download_script(wallets_names, target_path, 'download_as25.sh')
 
     return analyze_ww2_artifacts(target_path, experiment_start_cut_date, experiment_target_anonscore,
-                          ['mix1', 'mix2', 'mix3'], problematic_sessions, 23)
+                          wallets_names, problematic_sessions, 23)
 
 
 def full_analyze_as38_202503(base_path: str):
@@ -665,12 +669,7 @@ def full_analyze_as38_202503(base_path: str):
     wallets_names = ['mix6', 'mix7']
 
     # Generate download scripts for wallet transactions
-    history_all = []
-    for wallet_name in wallets_names:
-        file_path = os.path.join(target_path, f'{wallet_name}_history.json')
-        history_all.extend(als.load_json_from_file(file_path)['result'])
-    cjtxs = [item['tx'] for item in history_all]
-    create_download_script(cjtxs, 'download_as38.sh')
+    create_download_script(wallets_names, target_path, 'download_as38.sh')
 
     return analyze_ww2_artifacts(target_path, experiment_start_cut_date, experiment_target_anonscore,
                           wallets_names, problematic_sessions, -1)  # TODO: once as38 experimen is finisihed, set number of expected sessions
@@ -882,13 +881,19 @@ def plot_ww2mix_stats(mfig, all_stats: dict, experiment_label: str, experiment_t
                        experiment_target_anonscore, 'Privacy gain', color)
 
 
-def create_download_script(cjtxs: dict, file_name: str):
+def create_download_script(wallets_names: list, target_path: str, file_name: str):
     """
     Generate download script for hex versions of provided transactions.
     :param all_cjtxs: list of cjtxs to download
     :param file_name: output name of download sript with all generated commands
     :return:
     """
+    history_all = []
+    for wallet_name in wallets_names:
+        file_path = os.path.join(target_path, f'{wallet_name}_history.json')
+        history_all.extend(als.load_json_from_file(file_path)['result'])
+    cjtxs = [item['tx'] for item in history_all]
+
     curl_lines = []
     for cjtx in cjtxs:
         curl_str = "curl --user user:password --data-binary \'{\"jsonrpc\": \"1.0\", \"id\": \"curltest\", \"method\": \"getrawtransaction\", \"params\": [\"" + cjtx + "\", true]}\' -H \'Content-Type: application/json\' http://127.0.0.1:8332/" + f" > {cjtx}.json\n"
@@ -907,12 +912,6 @@ if __name__ == "__main__":
     base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\mn1\\'
     all38_stats, all38 = full_analyze_as38_202503(base_path)
     all25_stats, all25 = full_analyze_as25_202405(base_path)
-
-    # Create download script for full transactions download
-    cjtxs = [cjtx for session in all25['sessions'].keys() for cjtx in all25['sessions'][session]['coinjoins'].keys()]
-    create_download_script(cjtxs, 'download_as25.sh')
-    cjtxs = [cjtx for session in all38['sessions'].keys() for cjtx in all38['sessions'][session]['coinjoins'].keys()]
-    create_download_script(cjtxs, 'download_as38.sh')
 
     NUM_COLUMNS = 2  # 4
     NUM_ROWS = 6     # 5
