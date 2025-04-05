@@ -3490,10 +3490,12 @@ if __name__ == "__main__":
     #   Fixed by not setting virtual block time too far away
     # WARNING: SW 100k pool does not match exactly mix_stay and active liqudity at the end - likely reason are neglected mining fees
 
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
-        op.PLOT_REMIXES_SINGLE_INTERVAL = True
-        for mix_id in ['wasabi2_zksnacks']:
+
+        op.PLOT_REMIXES_SINGLE_INTERVAL = False
+        #        for mix_id in ['wasabi2_zksnacks']:
+        for mix_id in ['wasabi2_kruw']:
             # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
             #                     'coinjoin_tx_info.json', True, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
             # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
@@ -3503,12 +3505,44 @@ if __name__ == "__main__":
             wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
                                 'coinjoin_tx_info.json', False, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
 
-            #print(f'{als.avg_output_ratio}')
-            als.save_json_to_file_pretty(os.path.join(target_path, mix_id, f'{mix_id}_wallets_avg_output_ratio.json'), als.avg_output_ratio)
-            print(
-                f"Output wallet ratio: median={round(np.median(als.avg_output_ratio['all']), 2)}, average={round(np.average(als.avg_output_ratio['all']), 2)}, min={min(als.avg_output_ratio['all'])}, max={max(als.avg_output_ratio['all'])}")
+            # print(f'{als.avg_output_ratio}')
+            if len(als.avg_output_ratio['all']) > 0:
+                als.avg_output_ratio['all_median'] = np.median(als.avg_output_ratio['all'])
+                als.avg_output_ratio['all_average'] = np.average(als.avg_output_ratio['all'])
+                als.avg_output_ratio['all_min'] = min(als.avg_output_ratio['all'])
+                als.avg_output_ratio['all_max'] = max(als.avg_output_ratio['all'])
+                als.save_json_to_file_pretty(
+                    os.path.join(target_path, mix_id, f'{mix_id}_wallets_avg_output_ratio.json'), als.avg_output_ratio)
+                print(
+                    f"Output wallet ratio: median={round(np.median(als.avg_output_ratio['all']), 2)}, average={round(np.average(als.avg_output_ratio['all']), 2)}, min={min(als.avg_output_ratio['all'])}, max={max(als.avg_output_ratio['all'])}")
 
         exit(42)
+
+        bybit_hack = als.load_json_from_file(os.path.join(target_path, 'bybit_hack-address.json'))
+        bybit_hack_addresses = {addr: 1 for addr in bybit_hack['0221']['btc']}
+
+        # Detect bybit addresses coordinator
+        bybit_03 = als.detect_bybit_hack(target_path, 'wasabi2_kruw/2025-03-01 00-00-00--2025-04-01 00-00-00_unknown-static-100-1utxo', bybit_hack_addresses)
+        bybit_04 = als.detect_bybit_hack(target_path, 'wasabi2_kruw/2025-04-01 00-00-00--2025-05-01 00-00-00_unknown-static-100-1utxo', bybit_hack_addresses)
+
+        data = bybit_03 | bybit_04
+        als.save_json_to_file_pretty(os.path.join(target_path, 'bybit_hack-txs.json'), data)
+        print(f"Total detected mixed: {round(sum([data[address]['value'] for address in data.keys()]) / SATS_IN_BTC, 2)} btc")
+
+        exit(42)
+
+
+        address_out = als.get_address('0014194311ad28daaedfd1346bdf6cb2603b848f5701', 'TxWitnessV0Keyhash')
+        expected = 'bc1qr9p3rtfgm2hdl5f5d00kevnq8wzg74cpzuzj2m'
+        assert address_out == expected, f'{expected} expected, but {address_out} obtained'
+
+        address_in = als.get_address('0014ba5241b6abf4fbbaaf5b99b855e645bb464f18a7', 'TxWitnessV0Keyhash')
+        expected = 'bc1qhffyrd4t7nam4t6mnxu9tej9hdry7x98mdn4a9'
+        assert address_in == expected, f'{expected} expected, but {address_in} obtained'
+
+
+        exit(42)
+
         for mix_id in ['wasabi2_zksnacks', 'wasabi2']:
             target_base_path = os.path.join(target_path, mix_id)
             if os.path.exists(target_base_path):
