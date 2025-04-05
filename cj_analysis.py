@@ -496,30 +496,45 @@ def plot_mining_fee_rates(mix_id: str, data: dict, mining_fees: dict, ax):
     return fee_rates
 
 
+def  get_wallets_prediction_ratios(mix_id: str):
+    # AVG_NUM_INPUTS = 1.765  # value taken from simulations for all distributions
+    # AVG_NUM_INPUTS = 3.18  # value taken from simulations for all distributions
+
+    # Default values (if not more specific found)
+    AVG_NUM_INPUTS = 3.65  # real value taken from kruw.io as38 experiment (use for kruw)
+    AVG_NUM_OUTPUTS = 4.05  # synthetic value minimizing euclidean distance between output and input factors for kruw.io
+
+    # kruw.io
+    if 'kruw' in mix_id:
+        AVG_NUM_INPUTS = 3.65  # real value taken from kruw.io as38 experiment (use for kruw)
+        #AVG_NUM_OUTPUTS = 4.92 # real value taken from kruw.io as38 experiment (use for kruw)
+        AVG_NUM_OUTPUTS = 4.04 #  synthetic value minimizing euclidean distance for  kruw.io for interval 02/2025
+        #AVG_NUM_OUTPUTS = 4.45  # synthetic value minimizing euclidean distance for  kruw.io for interval 03/2025
+
+    # zksnacks
+    if 'zksnacks' in mix_id:
+        AVG_NUM_INPUTS = 2.72  # real value taken from zksnacks as25 experiment (use for zksnacks)
+        #AVG_NUM_OUTPUTS = 4.17 # real value taken from zksnacks as25 experiment (use for zksnacks)
+        AVG_NUM_OUTPUTS = 2.91 # synthetic median value minimizing euclidean distance between output and input factors for zksnacks
+
+    return AVG_NUM_INPUTS, AVG_NUM_OUTPUTS
+
+
 def plot_num_wallets(mix_id: str, data: dict, ax):
     coinjoins = data['coinjoins']
     sorted_cj_time = sort_coinjoins(coinjoins, SORT_COINJOINS_BY_RELATIVE_ORDER)
 
-    FIND_SYNTHETIC_RATIO = True
-
     if mix_id not in avg_output_ratio:
-        avg_output_ratio['per_interval'][mix_id] = []
+        avg_output_ratio['per_interval'][mix_id] = {}
 
     # Naive approach: For each coinjoin, compute as number of inputs divided by average inputs per wallet
-    #AVG_NUM_INPUTS = 1.765  # value taken from simulations for all distributions
-    #AVG_NUM_INPUTS = 3.18  # value taken from simulations for all distributions
-    # kruw.io
-    AVG_NUM_INPUTS = 3.65  # real value taken from kruw.io as38 experiment (use for kruw)
-    #AVG_NUM_OUTPUTS = 4.92 # real value taken from kruw.io as38 experiment (use for kruw)
-    AVG_NUM_OUTPUTS = 4.05 # synthetic value minimizing euclidean distance between output and input factors for kruw.io
-
-    # zksnacks
-    AVG_NUM_INPUTS = 2.72  # real value taken from zksnacks as25 experiment (use for zksnacks)
-    AVG_NUM_OUTPUTS = 4.17 # real value taken from zksnacks as25 experiment (use for zksnacks)
-    AVG_NUM_OUTPUTS = 2.91 # synthetic median value minimizing euclidean distance between output and input factors for zksnacks
+    AVG_NUM_INPUTS, AVG_NUM_OUTPUTS = get_wallets_prediction_ratios(mix_id)
 
     # Find heuristically the AVG_NUM_INPUTS and AVG_NUM_OUTPUTS to minimize difference between computed number of inputs and outputs
+    FIND_SYNTHETIC_RATIO = False
     if FIND_SYNTHETIC_RATIO:
+        avg_output_ratio['factor_inputs_wallets'] = AVG_NUM_INPUTS
+
         X = np.array([len(coinjoins[cj['txid']]['inputs']) for cj in sorted_cj_time])
         Y = np.array([len(coinjoins[cj['txid']]['outputs']) for cj in sorted_cj_time])
 
@@ -536,8 +551,10 @@ def plot_num_wallets(mix_id: str, data: dict, ax):
         x1_opt, y1_opt = result.x
         AVG_NUM_OUTPUTS = AVG_NUM_INPUTS * (y1_opt / x1_opt)
         print(f"Ratio y1/x1: {y1_opt / x1_opt}, Optimal x1: {x1_opt}, Optimal y1: {y1_opt}")
-        print(f"AVG_NUM_INPUTS = {AVG_NUM_INPUTS}, AVG_NUM_OUTPUTS = {AVG_NUM_OUTPUTS}")
-        avg_output_ratio['per_interval'][mix_id].append(AVG_NUM_OUTPUTS)
+        print(f"AVG_NUM_INPUTS = {AVG_NUM_INPUTS} factor => AVG_NUM_OUTPUTS = {AVG_NUM_OUTPUTS} factor after scaling")
+        avg_output_ratio['per_interval'][mix_id]['ratio_factor_outputs_inputs_wallets'] = y1_opt / x1_opt
+        avg_output_ratio['per_interval'][mix_id]['factor_inputs_wallets'] = AVG_NUM_INPUTS
+        avg_output_ratio['per_interval'][mix_id]['factor_outputs_wallets'] = AVG_NUM_OUTPUTS
         avg_output_ratio['all'].extend([AVG_NUM_OUTPUTS] * len(sorted_cj_time))
 
     num_wallets_naive_inputs = [len(coinjoins[cj['txid']]['inputs']) / AVG_NUM_INPUTS for cj in sorted_cj_time]
@@ -554,18 +571,35 @@ def plot_num_wallets(mix_id: str, data: dict, ax):
             last_val = num_wallets_predicted[index]
 
     if ax:
-        AVG_WINDOWS = 10
+        #AVG_WINDOWS = 10
+        AVG_WINDOWS = 5
+        COLOR_WALLETS_INPUTS = 'red'
+        #COLOR_WALLETS_OUTPUTS = 'magenta'
+        COLOR_WALLETS_OUTPUTS = 'green'
         num_wallets_avg_inputs = compute_averages(num_wallets_naive_inputs, AVG_WINDOWS)
-        ax.plot(num_wallets_avg_inputs, color='red', alpha=0.4, linewidth=2, linestyle='-')
+        num_wallets_avg_inputs = np.array(num_wallets_avg_inputs)
+        ax.plot(num_wallets_avg_inputs, color=COLOR_WALLETS_INPUTS, alpha=0.4, linewidth=2, linestyle='-',
+                label=f'Predicted wallets (inputs, avg={AVG_WINDOWS}, factor={round(AVG_NUM_INPUTS, 2)})')
         num_wallets_avg_outputs = compute_averages(num_wallets_naive_outputs, AVG_WINDOWS)
-        ax.plot(num_wallets_avg_outputs, color='magenta', alpha=0.4, linewidth=2, linestyle='-')
-        ax.tick_params(axis='y', colors='red', labelsize=6)
-        #ax.set_ylabel('Estimated number of active wallets (naive)', color='red', fontsize='6')
+        num_wallets_avg_outputs = np.array(num_wallets_avg_outputs)
+        ax.plot(num_wallets_avg_outputs, color=COLOR_WALLETS_OUTPUTS, alpha=0.4, linewidth=2, linestyle='-',
+                label=f'Predicted wallets (outputs, avg={AVG_WINDOWS}, factor={round(AVG_NUM_OUTPUTS, 2)})')
+        ax.tick_params(axis='y', colors=COLOR_WALLETS_INPUTS, labelsize=6)
+        x = range(0, len(num_wallets_avg_inputs))
+        ax.fill_between(x, num_wallets_avg_inputs, num_wallets_avg_outputs, where=num_wallets_avg_inputs>num_wallets_avg_outputs, interpolate=True, color=COLOR_WALLETS_INPUTS, alpha=0.3)
+        ax.fill_between(x, num_wallets_avg_inputs, num_wallets_avg_outputs, where=num_wallets_avg_outputs>num_wallets_avg_inputs, interpolate=True, color=COLOR_WALLETS_OUTPUTS, alpha=0.3)
+        max_wallets_y = max(max(num_wallets_avg_outputs), max(num_wallets_avg_inputs))
+        ax.set_yticks(np.arange(0, max_wallets_y + round(max_wallets_y * 0.1), step=10))
 
-        num_wallets_avg_predicted = compute_averages(num_wallets_predicted, AVG_WINDOWS)
-        ax.plot(num_wallets_avg_predicted, color='green', alpha=0.4, linewidth=1, linestyle='-')
-        ax.tick_params(axis='y', colors='green', labelsize=6)
-        ax.set_ylabel('Estimated number of active wallets (model)', color='green', fontsize='6')
+        #ax.set_ylabel('Estimated number of active wallets (naive)', color='red', fontsize='6')
+        PLOT_WALLETS_PREDICTED = False
+        if PLOT_WALLETS_PREDICTED:
+            num_wallets_avg_predicted = compute_averages(num_wallets_predicted, AVG_WINDOWS)
+            ax.plot(num_wallets_avg_predicted, color='green', alpha=0.4, linewidth=1, linestyle='-', label='Predicted wallets (model)')
+            ax.tick_params(axis='y', colors='green', labelsize=6)
+            ax.set_ylabel('Estimated number of active wallets (model)', color='green', fontsize='6')
+
+        ax.legend()
 
     return num_wallets_predicted
 
