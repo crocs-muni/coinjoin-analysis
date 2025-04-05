@@ -10,7 +10,12 @@ from datetime import datetime, timedelta
 from enum import Enum
 import re
 import math
-from bitcoin.core import CTransaction, CMutableTransaction, CTxWitness
+
+from bitcoin import SelectParams
+from bitcoin.core import CTransaction, CMutableTransaction, CTxWitness, CScript, x
+from bitcoin.core.script import OP_HASH160, OP_EQUAL
+from bitcoin.wallet import P2WPKHBitcoinAddress, CBitcoinAddressError, P2SHBitcoinAddress
+
 from scipy.optimize import minimize
 
 
@@ -1320,3 +1325,65 @@ def compute_partial_vsize(tx_hex: str, input_indices: list[int], output_indices:
     filtered_vsize = math.ceil(filtered_weight / 4)
 
     return filtered_vsize, orig_vsize
+
+
+def get_address(script: str, script_type: str):
+    try:
+        SelectParams('mainnet')
+        if script_type.strip().lower() == 'unknown':
+            return None
+
+        scriptPubKey = CScript(x(script))
+        if script_type == 'TxWitnessV0Keyhash':
+            return str(P2WPKHBitcoinAddress.from_scriptPubKey(scriptPubKey))
+
+        if script_type == 'TxScripthash':
+            if (len(scriptPubKey) == 3 and
+                    scriptPubKey[0] == OP_HASH160 and
+                    scriptPubKey[2] == OP_EQUAL):
+                hash160 = scriptPubKey[1]
+                return str(P2SHBitcoinAddress.from_scriptPubKey(hash160))
+
+        # If no previous types were hit, return default type
+        return str(P2WPKHBitcoinAddress.from_scriptPubKey(scriptPubKey))
+    except CBitcoinAddressError as e:
+        logging.error(f'{script_type}: {e}')
+        return None
+
+
+def detect_bybit_hack(target_path: str, interval: str, bybit_hack_addresses: dict):
+    results = {}
+    data = load_coinjoins_from_file(os.path.join(target_path, interval), {}, True)
+    sorted_cjtxs = sort_coinjoins(data["coinjoins"], True)
+
+    print('Bybit hack address detected')
+    mixed_values = []
+    for tx in sorted_cjtxs:
+        cjtx = tx['txid']
+        for index in data['coinjoins'][cjtx]['inputs'].keys():
+            script_type = data['coinjoins'][cjtx]['inputs'][index]['script_type']
+            address = get_address(data['coinjoins'][cjtx]['inputs'][index]['script'], script_type)
+            # print(address)
+            if address in bybit_hack_addresses:
+                mixed_values.append(data['coinjoins'][cjtx]['inputs'][index]['value'])
+                if address not in results:
+                    results[address] = {}
+                results[address].update({'txid': cjtx, 'input_index': index,
+                                         'value': data['coinjoins'][cjtx]['inputs'][index]['value'],
+                                         'broadcast_time': data['coinjoins'][cjtx]['broadcast_time']})
+                print(
+                    f'  {cjtx}:input[{index}]: {data['coinjoins'][cjtx]['inputs'][index]['value'] / float(SATS_IN_BTC)} btc')
+                print(f'    {data['coinjoins'][cjtx]['broadcast_time']}')
+
+        for index in data['coinjoins'][cjtx]['outputs'].keys():
+            script_type = data['coinjoins'][cjtx]['outputs'][index]['script_type']
+            address = get_address(data['coinjoins'][cjtx]['outputs'][index]['script'], script_type)
+            # print(address)
+            if address in bybit_hack_addresses:
+                if address not in results:
+                    results[address] = {}
+                results[address].update({'txid': cjtx, 'output_index': index, 'value': data['coinjoins'][cjtx]['inputs'][index]['value']})
+                print(
+                    f'  {cjtx}:output[{index}]: {data['coinjoins'][cjtx]['outputs'][index]['value'] / float(SATS_IN_BTC)} btc')
+
+    return results
