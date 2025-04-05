@@ -3492,8 +3492,7 @@ if __name__ == "__main__":
 
     DEBUG = True
     if DEBUG:
-
-        op.PLOT_REMIXES_SINGLE_INTERVAL = False
+        op.PLOT_REMIXES_SINGLE_INTERVAL = True
         #        for mix_id in ['wasabi2_zksnacks']:
         for mix_id in ['wasabi2_kruw']:
             # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
@@ -3506,15 +3505,15 @@ if __name__ == "__main__":
                                 'coinjoin_tx_info.json', False, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
 
             # print(f'{als.avg_output_ratio}')
-            if len(als.avg_output_ratio['all']) > 0:
-                als.avg_output_ratio['all_median'] = np.median(als.avg_output_ratio['all'])
-                als.avg_output_ratio['all_average'] = np.average(als.avg_output_ratio['all'])
-                als.avg_output_ratio['all_min'] = min(als.avg_output_ratio['all'])
-                als.avg_output_ratio['all_max'] = max(als.avg_output_ratio['all'])
+            if len(als.avg_input_ratio['all']) > 0:
+                als.avg_input_ratio['all_median'] = np.median(als.avg_input_ratio['all'])
+                als.avg_input_ratio['all_average'] = np.average(als.avg_input_ratio['all'])
+                als.avg_input_ratio['all_min'] = min(als.avg_input_ratio['all'])
+                als.avg_input_ratio['all_max'] = max(als.avg_input_ratio['all'])
                 als.save_json_to_file_pretty(
-                    os.path.join(target_path, mix_id, f'{mix_id}_wallets_avg_output_ratio.json'), als.avg_output_ratio)
+                    os.path.join(target_path, mix_id, f'{mix_id}_wallets_avg_inoutput_ratios.json'), als.avg_input_ratio)
                 print(
-                    f"Output wallet ratio: median={round(np.median(als.avg_output_ratio['all']), 2)}, average={round(np.average(als.avg_output_ratio['all']), 2)}, min={min(als.avg_output_ratio['all'])}, max={max(als.avg_output_ratio['all'])}")
+                    f"Input wallet ratio: median={round(np.median(als.avg_input_ratio['all']), 2)}, average={round(np.average(als.avg_input_ratio['all']), 2)}, min={min(als.avg_input_ratio['all'])}, max={max(als.avg_input_ratio['all'])}")
 
         exit(42)
 

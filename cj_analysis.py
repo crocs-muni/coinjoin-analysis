@@ -23,7 +23,7 @@ SATS_IN_BTC = 100000000
 
 SORT_COINJOINS_BY_RELATIVE_ORDER = True  # If True then relative ordering of transactions based on remix connections
 
-avg_output_ratio = {'all': [], 'per_interval': {}}
+avg_input_ratio = {'all': [], 'per_interval': {}}
 
 class CJ_LOG_TYPES(Enum):
     ROUND_STARTED = 'ROUND_STARTED'
@@ -497,6 +497,9 @@ def plot_mining_fee_rates(mix_id: str, data: dict, mining_fees: dict, ax):
 
 
 def  get_wallets_prediction_ratios(mix_id: str):
+    # NOTE: Based on real wallet experiments, average number of outputs (AVG_NUM_OUTPUTS) is significantly more
+    # independent of number of coins in wallet and stable => take it as fixed point and compute synthetic value for AVG_NUM_INPUTS
+
     # AVG_NUM_INPUTS = 1.765  # value taken from simulations for all distributions
     # AVG_NUM_INPUTS = 3.18  # value taken from simulations for all distributions
 
@@ -506,16 +509,19 @@ def  get_wallets_prediction_ratios(mix_id: str):
 
     # kruw.io
     if 'kruw' in mix_id:
-        AVG_NUM_INPUTS = 3.65  # real value taken from kruw.io as38 experiment (use for kruw)
-        #AVG_NUM_OUTPUTS = 4.92 # real value taken from kruw.io as38 experiment (use for kruw)
-        AVG_NUM_OUTPUTS = 4.04 #  synthetic value minimizing euclidean distance for  kruw.io for interval 02/2025
-        #AVG_NUM_OUTPUTS = 4.45  # synthetic value minimizing euclidean distance for  kruw.io for interval 03/2025
+        AVG_NUM_OUTPUTS = 4.92 # real value taken from kruw.io as38 experiment (use for kruw)
+        #AVG_NUM_OUTPUTS = 4.04 #  synthetic value minimizing euclidean distance for  kruw.io for interval 02/2025 if AVG_NUM_INPUTS = 3.65
+        #AVG_NUM_OUTPUTS = 4.45  # synthetic value minimizing euclidean distance for  kruw.io for interval 03/2025 if AVG_NUM_INPUTS = 3.65
+
+        #AVG_NUM_INPUTS = 3.65  # real value taken from kruw.io as38 experiment (use for kruw)
+        AVG_NUM_INPUTS = 4.44 #  synthetic value minimizing euclidean distance for  kruw.io for interval 02/2025 if AVG_NUM_OUTPUTS = 4.92
+        #AVG_NUM_INPUTS = 4.03 #  synthetic value minimizing euclidean distance for  kruw.io for interval 03/2025 if AVG_NUM_OUTPUTS = 4.92
 
     # zksnacks
     if 'zksnacks' in mix_id:
+        AVG_NUM_OUTPUTS = 4.17 # real value taken from zksnacks as25 experiment (use for zksnacks)
         AVG_NUM_INPUTS = 2.72  # real value taken from zksnacks as25 experiment (use for zksnacks)
-        #AVG_NUM_OUTPUTS = 4.17 # real value taken from zksnacks as25 experiment (use for zksnacks)
-        AVG_NUM_OUTPUTS = 2.91 # synthetic median value minimizing euclidean distance between output and input factors for zksnacks
+#        AVG_NUM_OUTPUTS = 2.91 # synthetic median value minimizing euclidean distance between output and input factors for zksnacks if AVG_NUM_INPUTS = 2.72
 
     return AVG_NUM_INPUTS, AVG_NUM_OUTPUTS
 
@@ -524,8 +530,8 @@ def plot_num_wallets(mix_id: str, data: dict, ax):
     coinjoins = data['coinjoins']
     sorted_cj_time = sort_coinjoins(coinjoins, SORT_COINJOINS_BY_RELATIVE_ORDER)
 
-    if mix_id not in avg_output_ratio:
-        avg_output_ratio['per_interval'][mix_id] = {}
+    if mix_id not in avg_input_ratio:
+        avg_input_ratio['per_interval'][mix_id] = {}
 
     # Naive approach: For each coinjoin, compute as number of inputs divided by average inputs per wallet
     AVG_NUM_INPUTS, AVG_NUM_OUTPUTS = get_wallets_prediction_ratios(mix_id)
@@ -533,7 +539,8 @@ def plot_num_wallets(mix_id: str, data: dict, ax):
     # Find heuristically the AVG_NUM_INPUTS and AVG_NUM_OUTPUTS to minimize difference between computed number of inputs and outputs
     FIND_SYNTHETIC_RATIO = False
     if FIND_SYNTHETIC_RATIO:
-        avg_output_ratio['factor_inputs_wallets'] = AVG_NUM_INPUTS
+        avg_input_ratio['factor_inputs_wallets'] = AVG_NUM_INPUTS
+        avg_input_ratio['factor_outputs_wallets'] = AVG_NUM_outPUTS
 
         X = np.array([len(coinjoins[cj['txid']]['inputs']) for cj in sorted_cj_time])
         Y = np.array([len(coinjoins[cj['txid']]['outputs']) for cj in sorted_cj_time])
@@ -549,13 +556,14 @@ def plot_num_wallets(mix_id: str, data: dict, ax):
         result = minimize(objective, initial_guess, method='Nelder-Mead')
         # Optimal values
         x1_opt, y1_opt = result.x
-        AVG_NUM_OUTPUTS = AVG_NUM_INPUTS * (y1_opt / x1_opt)
+        #AVG_NUM_OUTPUTS = AVG_NUM_INPUTS * (y1_opt / x1_opt)
+        AVG_NUM_INPUTS = AVG_NUM_OUTPUTS * (x1_opt / y1_opt)
         print(f"Ratio y1/x1: {y1_opt / x1_opt}, Optimal x1: {x1_opt}, Optimal y1: {y1_opt}")
-        print(f"AVG_NUM_INPUTS = {AVG_NUM_INPUTS} factor => AVG_NUM_OUTPUTS = {AVG_NUM_OUTPUTS} factor after scaling")
-        avg_output_ratio['per_interval'][mix_id]['ratio_factor_outputs_inputs_wallets'] = y1_opt / x1_opt
-        avg_output_ratio['per_interval'][mix_id]['factor_inputs_wallets'] = AVG_NUM_INPUTS
-        avg_output_ratio['per_interval'][mix_id]['factor_outputs_wallets'] = AVG_NUM_OUTPUTS
-        avg_output_ratio['all'].extend([AVG_NUM_OUTPUTS] * len(sorted_cj_time))
+        print(f"AVG_NUM_OUTPUTS = {AVG_NUM_OUTPUTS} factor => AVG_NUM_INPUTS = {AVG_NUM_INPUTS} factor after scaling")
+        avg_input_ratio['per_interval'][mix_id]['ratio_factor_outputs_inputs_wallets'] = y1_opt / x1_opt
+        avg_input_ratio['per_interval'][mix_id]['factor_inputs_wallets'] = AVG_NUM_INPUTS
+        avg_input_ratio['per_interval'][mix_id]['factor_outputs_wallets'] = AVG_NUM_OUTPUTS
+        avg_input_ratio['all'].extend([AVG_NUM_INPUTS] * len(sorted_cj_time))
 
     num_wallets_naive_inputs = [len(coinjoins[cj['txid']]['inputs']) / AVG_NUM_INPUTS for cj in sorted_cj_time]
     num_wallets_naive_outputs = [len(coinjoins[cj['txid']]['outputs']) / AVG_NUM_OUTPUTS for cj in sorted_cj_time]
