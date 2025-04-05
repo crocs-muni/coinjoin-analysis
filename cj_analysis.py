@@ -376,6 +376,7 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liquidit
                                for cjtx in sorted_cj_time]
 
     INTERVAL_LENGTH = 3 * 30 * 24 * 3600  # 3 months == 3 * 30 * 24 * 3600
+    INTERVAL_LENGTH = 30 * 24 * 3600  # 1 month == * 30 * 24 * 3600
     # Outputs leaving mix `fast` after its mixing (within 0-INTERVAL_LENGTH seconds)
     mix_leave_timecutoff_before = [sum([coinjoins[cjtx['txid']]['outputs'][index]['value'] for index in coinjoins[cjtx['txid']]['outputs'].keys()
                                     if coinjoins[cjtx['txid']]['outputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_LEAVE.name and
@@ -405,7 +406,7 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liquidit
     curr_liquidity = initial_liquidity[0]  # Take last cummulative liquidity (MIX_ENTERxxx - MIX_LEAVE) from previous interval
     curr_liquidity_timecutoff = initial_liquidity[3]
     assert len(mix_enter) == len(mix_leave) == len(mix_remixfriend) == len(mix_remixfriend_ww1) == len(mix_stay), logging.error(f'Mismatch in length of input/out sum arrays: {len(mix_enter)} vs. {len(mix_leave)}')
-    # Change in liquidity as observed by each coinjoin (increase directly when mix_enter, decrease directly even when mix_leave happens later)
+    # Change in liquidity as observed by each coinjoin (increase directly when mix_enter, decrease directly even when mix_leave happens later in wall time)
     for index in range(0, len(mix_enter)):
         liquidity_step = mix_enter[index] + mix_remixfriend[index] + mix_remixfriend_ww1[index] - mix_leave[index]
         # Print significant changes in liquidity for easier debugging
@@ -416,8 +417,9 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liquidit
         curr_liquidity = curr_liquidity + liquidity_step
         cjtx_cummulative_liquidity.append(curr_liquidity)
 
+        # Same computation, but assume as leaving only mix_leave_timecutoff value
         # time-limited value (< INTERVAL_LENGTH)
-        curr_liquidity_timecutoff = curr_liquidity_timecutoff + liquidity_step + mix_leave[index] - mix_leave_timecutoff_before[index]  # Same computation, but assume as leaving only mix_leave_timecutoff value
+        curr_liquidity_timecutoff = curr_liquidity_timecutoff + liquidity_step + mix_leave[index] - mix_leave_timecutoff_before[index]
         cjtx_cummulative_liquidity_timecutoff.append(curr_liquidity_timecutoff)
 
     # Cumulative liquidity never remixed or leaving mix (MIX_STAY coins)
@@ -453,7 +455,9 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liquidit
         ax.plot(liquidity_btc, color='royalblue', alpha=0.6)
         #ax.plot(stay_liquidity_btc, color='royalblue', alpha=0.6, linestyle='--')
         #ax.plot(remix_liquidity_btc, color='black', alpha=0.6, linestyle='--')
-        #ax.plot(liquidity_timecutoff_btc, color='black', alpha=0.6, linestyle='--')
+        PLOT_LEAVE_TIMECUTOFF = False
+        if PLOT_LEAVE_TIMECUTOFF:
+            ax.plot(liquidity_timecutoff_btc, color='blue', alpha=0.6, linestyle='--')
 
         ax.set_ylabel('btc in mix', color='royalblue')
         ax.tick_params(axis='y', colors='royalblue')
