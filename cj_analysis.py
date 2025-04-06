@@ -1394,12 +1394,12 @@ def get_address(script: str, script_type: str):
         # If no previous types were hit, return default type
         return str(P2WPKHBitcoinAddress.from_scriptPubKey(scriptPubKey))
     except CBitcoinAddressError as e:
-        logging.error(f'{script_type}: {e}')
+        #logging.error(f'{script_type}: {e}')
         return None
 
 
 def detect_bybit_hack(target_path: str, interval: str, bybit_hack_addresses: dict):
-    results = {}
+    results = {'hits': {}}
     data = load_coinjoins_from_file(os.path.join(target_path, interval), {}, True)
     sorted_cjtxs = sort_coinjoins(data["coinjoins"], True)
 
@@ -1413,9 +1413,9 @@ def detect_bybit_hack(target_path: str, interval: str, bybit_hack_addresses: dic
             # print(address)
             if address in bybit_hack_addresses:
                 mixed_values.append(data['coinjoins'][cjtx]['inputs'][index]['value'])
-                if address not in results:
-                    results[address] = {}
-                results[address].update({'txid': cjtx, 'input_index': index,
+                if address not in results['hits']:
+                    results['hits'][address] = []
+                results['hits'][address].append({'txid': cjtx, 'input_index': index,
                                          'value': data['coinjoins'][cjtx]['inputs'][index]['value'],
                                          'broadcast_time': data['coinjoins'][cjtx]['broadcast_time']})
                 print(
@@ -1427,9 +1427,9 @@ def detect_bybit_hack(target_path: str, interval: str, bybit_hack_addresses: dic
             address = get_address(data['coinjoins'][cjtx]['outputs'][index]['script'], script_type)
             # print(address)
             if address in bybit_hack_addresses:
-                if address not in results:
-                    results[address] = {}
-                results[address].update({'txid': cjtx, 'output_index': index, 'value': data['coinjoins'][cjtx]['inputs'][index]['value']})
+                if address not in results['hits']:
+                    results['hits'][address] = []
+                results['hits'][address].append({'txid': cjtx, 'output_index': index, 'value': data['coinjoins'][cjtx]['inputs'][index]['value']})
                 print(
                     f'  {cjtx}:output[{index}]: {data['coinjoins'][cjtx]['outputs'][index]['value'] / float(SATS_IN_BTC)} btc')
 

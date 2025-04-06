@@ -51,8 +51,16 @@ for dir in kruw gingerwallet opencoordinator wasabicoordinator coinjoin_nl wasab
     cp $TMP_DIR/Scanner/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/wasabi2_$dir/
 done
 
-# Run generation of plots
+# Run detection of Bybit hack
+python3 parse_dumplings.py --cjtype ww2 --env_vars="ANALYSIS_BYBIT_HACK=True" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
+
+
+# Run generation of aggregated plots
 python3 parse_dumplings.py --cjtype ww2 --action plot_coinjoins --target-path $TMP_DIR/ | tee parse_dumplings.py.log
+
+# Run generation of plots only for intervals
+python3 parse_dumplings.py --cjtype ww2 --action plot_coinjoins --target-path $TMP_DIR/ --env_vars "PLOT_REMIXES_SINGLE_INTERVAL=True" | tee parse_dumplings.py.log
+#python3 parse_dumplings.py --cjtype ww2 --action plot_coinjoins --target-path $TMP_DIR/ --env_vars "PLOT_REMIXES_SINGLE_INTERVAL=True;MIX_IDS=['wasabi2_zksnacks']" | tee parse_dumplings.py.log
 
 
 #

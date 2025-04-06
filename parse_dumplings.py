@@ -24,6 +24,7 @@ import argparse
 import gc
 import time
 import ast
+import requests
 
 # Configure the logging module
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -3345,6 +3346,7 @@ class DumplingsParseOptions:
     VISUALIZE_ALL_COINJOINS_INTERVALS = False
     ANALYSIS_REMIXRATE = True
     ANALYSIS_LIQUIDITY = False
+    ANALYSIS_BYBIT_HACK = False
 
     target_base_path = ''
     interval_stop_date = '2024-10-10 00:00:07.000'  # Last date to be analyzed, e.g., 2024-10-10 00:00:07.000
@@ -3427,6 +3429,7 @@ class DumplingsParseOptions:
         self.ANALYSIS_CLUSTERS = False
         self.ANALYSIS_REMIXRATE = False
         self.ANALYSIS_LIQUIDITY = False
+        self.ANALYSIS_BYBIT_HACK = False
 
         self.PLOT_REMIXES_FLOWS = False
         self.PLOT_INTERMIX_FLOWS = False
@@ -3915,6 +3918,46 @@ if __name__ == "__main__":
         wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', False, True)
         wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', True, False)
         wasabi_plot_remixes('wasabi2_select', os.path.join(target_path, 'wasabi2_select'), 'coinjoin_tx_info.json', True, True)
+
+    if op.ANALYSIS_BYBIT_HACK:
+        url = "https://hackscan.hackbounty.io/public/hack-address.json"
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+            bybit_hack = response.json()
+        except requests.exceptions.RequestException as e:
+            logging.error("bybit hack-adressess download error:", e)
+
+        # Save for later use
+        json_path = os.path.join(target_path, 'bybit_hack-address.json')
+        print(f'Path to save {json_path}')
+        als.save_json_to_file_pretty(json_path, bybit_hack)
+        bybit_hack = als.load_json_from_file(json_path)
+        bybit_hack_addresses = {addr: 1 for addr in bybit_hack['0221']['btc']}
+
+        # Detect bybit addresses coordinator
+        detected_addressed = {}
+        for month in range(2, 10):
+            interval_name = f'wasabi2_kruw/2025-0{month}-01 00-00-00--2025-0{month+1}-01 00-00-00_unknown-static-100-1utxo'
+            if os.path.exists(os.path.join(target_path, interval_name)):
+                bybit_interval = als.detect_bybit_hack(target_path, interval_name, bybit_hack_addresses)
+                als.merge_dicts(bybit_interval, detected_addressed)
+
+        als.save_json_to_file_pretty(os.path.join(target_path, 'bybit_hack-txs.json'), detected_addressed)
+
+        total_btc_mixed = 0
+        total_hits = 0
+        for address in detected_addressed['hits'].keys():
+            total_hits += len(detected_addressed['hits'][address])
+            for item in detected_addressed['hits'][address]:
+                total_btc_mixed += item['value']
+
+        detected_addressed['_summary'] = {'hits_detected': total_hits, 'total_btc_mixed': total_btc_mixed, 'total_btc_mixed_str': f'{round(total_btc_mixed / SATS_IN_BTC, 2)} btc'}
+        SM.print(f"Bybit hack detection:")
+        SM.print(f"  Total address entering coinjoins: {total_hits}")
+        SM.print(f"  Total detected mixed: {round(total_btc_mixed / SATS_IN_BTC, 2)} btc")
+
+        als.save_json_to_file_pretty(os.path.join(target_path, 'bybit_hack-txs.json'), detected_addressed, True)
 
     if op.PROCESS_NOTABLE_INTERVALS:
         def process_joint_interval(mix_origin_name, interval_name, all_data, mix_type, target_path, start_date: str,
