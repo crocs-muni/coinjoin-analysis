@@ -540,7 +540,7 @@ def plot_num_wallets(mix_id: str, data: dict, ax):
     FIND_SYNTHETIC_RATIO = False
     if FIND_SYNTHETIC_RATIO:
         avg_input_ratio['factor_inputs_wallets'] = AVG_NUM_INPUTS
-        avg_input_ratio['factor_outputs_wallets'] = AVG_NUM_outPUTS
+        avg_input_ratio['factor_outputs_wallets'] = AVG_NUM_OUTPUTS
 
         X = np.array([len(coinjoins[cj['txid']]['inputs']) for cj in sorted_cj_time])
         Y = np.array([len(coinjoins[cj['txid']]['outputs']) for cj in sorted_cj_time])
