@@ -183,7 +183,9 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                     # of address resuse (cj_analysis.py", line 910) : AssertionError: Inconsistent value found for
                     # 9be067b5311adb18a3458a6f9e164a25e0590ad8a8fc6907da0288f80bf25bc9/3/synbc1001407fb8593407d_1
                     #this_input['address'] = get_synthetic_address(segments[3], segments[1])
-                    this_input['address'] = get_synthetic_address(segments[0], segments[1])
+
+                    #this_input['address'] = get_synthetic_address(segments[0], segments[1])
+                    this_input['address'], this_input['script_type'] = als.get_address(this_input['script'])
 
                     record['inputs'][f'{index}'] = this_input
                     index += 1
@@ -198,7 +200,8 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                     this_output['wallet_name'] = 'real_unknown'
                     this_output['script'] = segments[1]
                     this_output['script_type'] = segments[2]
-                    this_output['address'] = get_synthetic_address(tx_id, index)  # TODO: Compute proper address from script
+                    #this_output['address'] = get_synthetic_address(tx_id, index)  # TODO: Compute proper address from script
+                    this_output['address'], this_output['script_type'] = als.get_address(this_output['script'])
 
                     record['outputs'][f'{index}'] = this_output
                     index += 1
@@ -3534,11 +3537,12 @@ if __name__ == "__main__":
         exit(42)
 
 
-        address_out = als.get_address('0014194311ad28daaedfd1346bdf6cb2603b848f5701', 'TxWitnessV0Keyhash')
+        address_out, _ = als.get_address_legacy('0014194311ad28daaedfd1346bdf6cb2603b848f5701', 'TxWitnessV0Keyhash')
+        address_out, _ = als.get_address('0014194311ad28daaedfd1346bdf6cb2603b848f5701')
         expected = 'bc1qr9p3rtfgm2hdl5f5d00kevnq8wzg74cpzuzj2m'
         assert address_out == expected, f'{expected} expected, but {address_out} obtained'
 
-        address_in = als.get_address('0014ba5241b6abf4fbbaaf5b99b855e645bb464f18a7', 'TxWitnessV0Keyhash')
+        address_in, _ = als.get_address_legacy('0014ba5241b6abf4fbbaaf5b99b855e645bb464f18a7', 'TxWitnessV0Keyhash')
         expected = 'bc1qhffyrd4t7nam4t6mnxu9tej9hdry7x98mdn4a9'
         assert address_in == expected, f'{expected} expected, but {address_in} obtained'
 

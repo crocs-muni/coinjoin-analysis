@@ -14,9 +14,11 @@ import math
 from bitcoin import SelectParams
 from bitcoin.core import CTransaction, CMutableTransaction, CTxWitness, CScript, x
 from bitcoin.core.script import OP_HASH160, OP_EQUAL
-from bitcoin.wallet import P2WPKHBitcoinAddress, CBitcoinAddressError, P2SHBitcoinAddress
+from bitcoin.wallet import P2WPKHBitcoinAddress, CBitcoinAddressError, P2SHBitcoinAddress, P2WSHBitcoinAddress
 
 from scipy.optimize import minimize
+
+from bitcoinlib.transactions import Output
 
 
 SATS_IN_BTC = 100000000
@@ -1374,15 +1376,29 @@ def compute_partial_vsize(tx_hex: str, input_indices: list[int], output_indices:
     return filtered_vsize, orig_vsize
 
 
-def get_address(script: str, script_type: str):
+def get_address(script_hex: str):
+    """
+    Create an Output object from the script
+    """
+    output = Output(lock_script=bytes.fromhex(script_hex), value=0)
+    address = output.address
+
+    return address, output.script_type
+
+
+def get_address_legacy(script: str, script_type: str):
     try:
         SelectParams('mainnet')
         if script_type.strip().lower() == 'unknown':
             return None
 
         scriptPubKey = CScript(x(script))
+
         if script_type == 'TxWitnessV0Keyhash':
             return str(P2WPKHBitcoinAddress.from_scriptPubKey(scriptPubKey))
+
+        if script_type == 'Unknown':
+            return str(P2WSHBitcoinAddress.from_scriptPubKey(scriptPubKey))
 
         if script_type == 'TxScripthash':
             if (len(scriptPubKey) == 3 and
@@ -1393,8 +1409,9 @@ def get_address(script: str, script_type: str):
 
         # If no previous types were hit, return default type
         return str(P2WPKHBitcoinAddress.from_scriptPubKey(scriptPubKey))
+
     except CBitcoinAddressError as e:
-        #logging.error(f'{script_type}: {e}')
+        logging.error(f'{script_type}: {e}')
         return None
 
 
@@ -1409,7 +1426,7 @@ def detect_bybit_hack(target_path: str, interval: str, bybit_hack_addresses: dic
         cjtx = tx['txid']
         for index in data['coinjoins'][cjtx]['inputs'].keys():
             script_type = data['coinjoins'][cjtx]['inputs'][index]['script_type']
-            address = get_address(data['coinjoins'][cjtx]['inputs'][index]['script'], script_type)
+            address, _ = get_address(data['coinjoins'][cjtx]['inputs'][index]['script'])
             # print(address)
             if address in bybit_hack_addresses:
                 mixed_values.append(data['coinjoins'][cjtx]['inputs'][index]['value'])
@@ -1419,18 +1436,17 @@ def detect_bybit_hack(target_path: str, interval: str, bybit_hack_addresses: dic
                                          'value': data['coinjoins'][cjtx]['inputs'][index]['value'],
                                          'broadcast_time': data['coinjoins'][cjtx]['broadcast_time']})
                 print(
-                    f'  {cjtx}:input[{index}]: {data['coinjoins'][cjtx]['inputs'][index]['value'] / float(SATS_IN_BTC)} btc')
-                print(f'    {data['coinjoins'][cjtx]['broadcast_time']}')
+                    f'{data['coinjoins'][cjtx]['broadcast_time']} {cjtx}:input[{index}]: {data['coinjoins'][cjtx]['inputs'][index]['value'] / float(SATS_IN_BTC)} btc')
 
         for index in data['coinjoins'][cjtx]['outputs'].keys():
             script_type = data['coinjoins'][cjtx]['outputs'][index]['script_type']
-            address = get_address(data['coinjoins'][cjtx]['outputs'][index]['script'], script_type)
+            address, _ = get_address(data['coinjoins'][cjtx]['outputs'][index]['script'])
             # print(address)
             if address in bybit_hack_addresses:
                 if address not in results['hits']:
                     results['hits'][address] = []
-                results['hits'][address].append({'txid': cjtx, 'output_index': index, 'value': data['coinjoins'][cjtx]['inputs'][index]['value']})
+                results['hits'][address].append({'txid': cjtx, 'output_index': index, 'value': data['coinjoins'][cjtx]['outputs'][index]['value']})
                 print(
-                    f'  {cjtx}:output[{index}]: {data['coinjoins'][cjtx]['outputs'][index]['value'] / float(SATS_IN_BTC)} btc')
+                    f'{data['coinjoins'][cjtx]['broadcast_time']} {cjtx}:output[{index}]: {data['coinjoins'][cjtx]['outputs'][index]['value'] / float(SATS_IN_BTC)} btc')
 
     return results
