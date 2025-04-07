@@ -1727,7 +1727,7 @@ def wasabi2_analyse_remixes(mix_id: str, target_path: str):
 
 def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_file: str,
                         analyze_values: bool = True, normalize_values: bool = True,
-                        restrict_to_out_size: int = None, restrict_to_in_size: int = None,
+                        restrict_to_out_size = None, restrict_to_in_size = None,
                         plot_multigraph: bool = True, plot_only_intervals: bool = False):
 
     if plot_only_intervals:
@@ -1748,7 +1748,7 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
 
 def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_file: str,
                         analyze_values: bool = True, normalize_values: bool = True,
-                        restrict_to_out_size: int = None, restrict_to_in_size = None,
+                        restrict_to_out_size = None, restrict_to_in_size = None,
                         plot_multigraph: bool = True, plot_only_intervals: bool=False):
     files = os.listdir(target_path) if os.path.exists(target_path) else print(
         f'Path {target_path} does not exist')
@@ -1802,10 +1802,12 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
             # If required, filter only coinjoins with specific size (whirlpool pools)
             if restrict_to_out_size is not None:
                 before_len = len(data["coinjoins"])
-                data["coinjoins"] = {cjtx: item for cjtx, item in data["coinjoins"].items() if item['outputs']['0']['value'] == restrict_to_out_size}
-                print(f'Length after / before filtering {len(data["coinjoins"])} / {before_len} ({restrict_to_out_size/SATS_IN_BTC})')
+                data["coinjoins"] = {cjtx: item for cjtx, item in data["coinjoins"].items() if
+                                     restrict_to_out_size[0] <= item['outputs']['0']['value'] <=
+                                     restrict_to_out_size[1]}
+                print(f'Length after / before filtering {len(data["coinjoins"])} / {before_len} ({restrict_to_out_size[0]/SATS_IN_BTC} - {restrict_to_out_size[1]/SATS_IN_BTC})')
                 if len(data["coinjoins"]) == 0:
-                    print(f'No coinjoins of specified value {restrict_to_out_size/SATS_IN_BTC} found in given interval, skipping')
+                    print(f'No coinjoins of specified value {restrict_to_out_size[0]/SATS_IN_BTC} - {restrict_to_out_size[1]/SATS_IN_BTC} found in given interval, skipping')
                     continue
 
             fig_single = None
@@ -1905,7 +1907,7 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
 
             # Save single interval figure
             if plot_only_intervals:
-                restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 2)}btc'
+                restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 3)}btc'
                 save_file = os.path.join(target_path, dir_name,
                          f'{mix_id}_input_types_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
                 fig_single.savefig(f'{save_file}.png', dpi=300)
@@ -1997,7 +1999,7 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
             ax2.spines['right'].set_position(('outward', -25))  # Adjust position of the third axis
 
             # Save computed remixes to file
-            restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 2)}btc'
+            restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 3)}btc'
             save_file = os.path.join(target_path,
                              f'{mix_id}_remixrate_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
             als.save_json_to_file_pretty(f'{save_file}.json', {'remix_ratios_all': remix_ratios_all, 'remix_ratios_nonstd': remix_ratios_nonstd, 'remix_ratios_std': remix_ratios_std})
@@ -2090,7 +2092,7 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
         # Finalize multigraph graph
         if plot_multigraph:
             plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
-            restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 2)}btc'
+            restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 3)}btc'
             save_file = os.path.join(target_path, f'{mix_id}_input_types_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
             plt.savefig(f'{save_file}.png', dpi=300)
             plt.savefig(f'{save_file}.pdf', dpi=300)
@@ -2103,7 +2105,7 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
     ax = fig.add_subplot(1, 1, 1, axes_class=AA.Axes)  # Get next subplot
     plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, changing_liquidity_timecutoff, stay_liquidity, remix_liquidity, mining_fee_rate, ['month', 'year'])
     plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
-    restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 2)}btc'
+    restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 3)}btc'
     save_file = os.path.join(target_path, f'{mix_id}_cummul_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
     plt.savefig(f'{save_file}.png', dpi=300)
     plt.savefig(f'{save_file}.pdf', dpi=300)
@@ -3496,9 +3498,39 @@ if __name__ == "__main__":
     #   Fixed by not setting virtual block time too far away
     # WARNING: SW 100k pool does not match exactly mix_stay and active liqudity at the end - likely reason are neglected mining fees
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         op.PLOT_REMIXES_SINGLE_INTERVAL = True
+        #        for mix_id in ['wasabi2_zksnacks']:
+        for mix_id in ['wasabi2_kruw']:
+            # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+            #                     'coinjoin_tx_info.json', True, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+            #                     'coinjoin_tx_info.json', True, False, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+            #                     'coinjoin_tx_info.json', False, False, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+            #                     'coinjoin_tx_info.json', False, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+
+#            limits = [100000, 1000000, 11000000, 100000000, 1000000000, 10000000000]
+#            limits = [100000, 1000000]
+#             limits = [100000, 500000, 750000, 1000000]
+            limits = [100000, 200000, 300000, 4000000, 5000000]
+            prev_limit = 0
+            for limit in limits:
+                wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+                                    'coinjoin_tx_info.json', False, True, None, (prev_limit, limit), True,
+                                    op.PLOT_REMIXES_SINGLE_INTERVAL)
+                wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+                                    'coinjoin_tx_info.json', True, True, None, (prev_limit, limit), True,
+                                    op.PLOT_REMIXES_SINGLE_INTERVAL)
+                # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+                #                     'coinjoin_tx_info.json', True, True, (prev_limit, limit), None, True,
+                #                     op.PLOT_REMIXES_SINGLE_INTERVAL)
+                prev_limit = limit
+
+        exit(42)
+        op.PLOT_REMIXES_SINGLE_INTERVAL = False
         #        for mix_id in ['wasabi2_zksnacks']:
         for mix_id in ['wasabi2_kruw']:
             # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
@@ -3510,7 +3542,6 @@ if __name__ == "__main__":
             wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
                                 'coinjoin_tx_info.json', False, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
 
-            # print(f'{als.avg_output_ratio}')
             if len(als.avg_input_ratio['all']) > 0:
                 als.avg_input_ratio['all_median'] = np.median(als.avg_input_ratio['all'])
                 als.avg_input_ratio['all_average'] = np.average(als.avg_input_ratio['all'])
