@@ -581,8 +581,8 @@ def plot_num_wallets(mix_id: str, data: dict, ax):
             last_val = num_wallets_predicted[index]
 
     if ax:
-        #AVG_WINDOWS = 10
-        AVG_WINDOWS = 5
+        AVG_WINDOWS = 10
+        #AVG_WINDOWS = 5
         COLOR_WALLETS_INPUTS = 'red'
         #COLOR_WALLETS_OUTPUTS = 'magenta'
         COLOR_WALLETS_OUTPUTS = 'green'
