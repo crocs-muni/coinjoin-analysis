@@ -374,6 +374,7 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
     stats['all_cjs_weight_anonscore'] = {}
     stats['anon_percentage_status'] = {}
     stats['anon_gain_weighted'] = {}
+    stats['observed_mix_liquidity'] = {}
     stats['observed_remix_liquidity_ratio'] = {}
     stats['observed_remix_liquidity_ratio_cumul'] = {}  # Remix liquidity based on value of inputs
     stats['observed_remix_inputs_ratio_cumul'] = {}     # unused now, remix liquidity based on number of inputs
@@ -383,6 +384,7 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
         anon_percentage_status_list = []
         anon_gain_weighted_list = []
         observed_remix_liquidity_ratio_list = []
+        observed_mix_liquidity_list = []
         observed_remix_liquidity_ratio_cumul_list = []
         observed_remix_inputs_ratio_cumul_list = []
         anonscore_coins_distribution_list = []
@@ -442,7 +444,9 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
             # every additional mix is adding additional input liquidity (remixed))
             # 1. Sum values of all wallet's input coins (to this cjtx), divided by fresh liquidity (of this session)
             # 2. Compute cummulative liquidity for each subsequent coinjoin (observed_remix_liquidity_ratio_cumul_list)
-            observed_remix_liquidity_ratio = sum([cjtx['inputs'][index]['value'] for index in cjtx['inputs']]) / session_size_inputs
+            observed_mix_liquidity = sum([cjtx['inputs'][index]['value'] for index in cjtx['inputs']])
+            observed_mix_liquidity_list.append(observed_mix_liquidity)
+            observed_remix_liquidity_ratio = observed_mix_liquidity / session_size_inputs
             observed_remix_liquidity_ratio_list.append(observed_remix_liquidity_ratio)
             if len(observed_remix_liquidity_ratio_cumul_list) == 0:
                 if not math.isclose(observed_remix_liquidity_ratio, 1.0, rel_tol=1e-9):
@@ -465,6 +469,7 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
             stats['anon_gain_weighted'][session_label] = anon_gain_weighted_list
         if len(observed_remix_liquidity_ratio_list) > 0:
             assert session_label not in stats['observed_remix_liquidity_ratio'], f'Duplicate session label {session_label}'
+            stats['observed_mix_liquidity'][session_label] = observed_mix_liquidity_list
             stats['observed_remix_liquidity_ratio'][session_label] = observed_remix_liquidity_ratio_list
             stats['observed_remix_liquidity_ratio_cumul'][session_label] = observed_remix_liquidity_ratio_cumul_list
         if len(anonscore_coins_distribution_list) > 0:
@@ -664,6 +669,28 @@ def full_analyze_as25_202405(base_path: str):
                           wallets_names, problematic_sessions, 23)
 
 
+def full_analyze_as25_202405_only1m(base_path: str):
+    # Experiment configuration
+    target_path = os.path.join(base_path, 'as25\\')
+    experiment_start_cut_date = '2024-05-14T19:02:49+00:00'  # AS=25 experiment start time
+    experiment_target_anonscore = 25
+    problematic_sessions = ['mix1 0.1btc | 12 cjs | txid: 34', 'mix2 0.2btc']  # Remove all 0.2 sessions + one problematic 0.1
+    wallets_names = ['mix1', 'mix2', 'mix3']
+    return analyze_ww2_artifacts(target_path, experiment_start_cut_date, experiment_target_anonscore,
+                          wallets_names, problematic_sessions, 16)
+
+
+def full_analyze_as25_202405_only2m(base_path: str):
+    # Experiment configuration
+    target_path = os.path.join(base_path, 'as25\\')
+    experiment_start_cut_date = '2024-05-14T19:02:49+00:00'  # AS=25 experiment start time
+    experiment_target_anonscore = 25
+    problematic_sessions = ['mix1 0.1', 'mix2 0.1', 'mix3 0.1']  # remove all 0.1 sessions
+    wallets_names = ['mix1', 'mix2', 'mix3']
+    return analyze_ww2_artifacts(target_path, experiment_start_cut_date, experiment_target_anonscore,
+                          wallets_names, problematic_sessions, 7)
+
+
 def full_analyze_as38_202503(base_path: str):
     # Experiment configuration
     target_path = os.path.join(base_path, 'as38\\')
@@ -676,7 +703,7 @@ def full_analyze_as38_202503(base_path: str):
     create_download_script(wallets_names, target_path, 'download_as38.sh')
 
     return analyze_ww2_artifacts(target_path, experiment_start_cut_date, experiment_target_anonscore,
-                          wallets_names, problematic_sessions, -1)  # TODO: once as38 experimen is finisihed, set number of expected sessions
+                          wallets_names, problematic_sessions, 23)
 
 
 def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, experiment_target_anonscore: int,
@@ -713,8 +740,8 @@ def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, expe
                                f'Wallet {mix_name}, progress towards fully anonymized liquidity (anonscore threshold);total sessions={len(wallet_stats['anon_percentage_status'])}',
                                'privacy progress (%)', f'{experiment_target_anonscore}')
             plot_cj_anonscores(wallet_stats['observed_remix_liquidity_ratio_cumul'],
-                               f'Wallet {mix_name}, cumullative remix liquidity ratio;total sessions={len(wallet_stats['observed_remix_liquidity_ratio_cumul'])}',
-                               'cummulative remix ratio', f'{experiment_target_anonscore}')
+                               f'Wallet {mix_name}, cumulative remix liquidity ratio;total sessions={len(wallet_stats['observed_remix_liquidity_ratio_cumul'])}',
+                               'cumulative remix ratio', f'{experiment_target_anonscore}')
             plot_cj_anonscores(wallet_stats['skipped_cjtxs'],
                                f'Wallet {mix_name}, skipped cjtxs;total sessions={len(wallet_stats['skipped_cjtxs'])}',
                                'num cjtxs skipped', f'{experiment_target_anonscore}')
@@ -746,8 +773,8 @@ def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, expe
                        f'{experiment_target_anonscore}','Anonscore gain', 'royalblue')
     plot_cj_anonscores(mfig, all_stats['anon_gain_ratio'], f'All wallets, change in anonscore weighted ratio out/in (AS={experiment_target_anonscore}); total sessions={len(all_stats['anon_gain'])}',
                        f'{experiment_target_anonscore}','Anonscore gain (weighted, ratio)', 'royalblue')
-    plot_cj_anonscores(mfig, all_stats['observed_remix_liquidity_ratio_cumul'], f'All wallets, cumullative remix liquidity ratio (AS={experiment_target_anonscore}); total sessions={len(all_stats['observed_remix_liquidity_ratio_cumul'])}',
-                       f'{experiment_target_anonscore}','Cummulative remix ratio', 'royalblue')
+    plot_cj_anonscores(mfig, all_stats['observed_remix_liquidity_ratio_cumul'], f'All wallets, cumulative remix liquidity ratio (AS={experiment_target_anonscore}); total sessions={len(all_stats['observed_remix_liquidity_ratio_cumul'])}',
+                       f'{experiment_target_anonscore}','Cumulative remix ratio', 'royalblue')
     plot_cj_anonscores(mfig, all_stats['num_inputs'],
                        f'All wallets, number of inputs;total sessions={len(all_stats['num_inputs'])}',
                        f'{experiment_target_anonscore}','number of inputs', 'royalblue')
@@ -759,6 +786,8 @@ def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, expe
                        f'{experiment_target_anonscore}','num cjtxs skipped', 'royalblue')
     plot_cj_anonscores(mfig, all_stats['anon_gain_weighted'], f'Nocap progress towards fully anonymized liquidity (AS={experiment_target_anonscore}); total sessions={len(all_stats['anon_gain_weighted'])}',
                        f'{experiment_target_anonscore}', 'Privacy progress (%)', 'royalblue')
+    plot_cj_anonscores(mfig, all_stats['observed_mix_liquidity'], f'All wallets, mix liquidity (AS={experiment_target_anonscore}); total sessions={len(all_stats['observed_mix_liquidity'])}',
+                       f'{experiment_target_anonscore}','Cummulative mixed value (sats)', 'royalblue')
 
     x, y = [], []
     for session in all_stats['num_inputs'].keys():
@@ -873,6 +902,11 @@ def plot_ww2mix_stats(mfig, all_stats: dict, experiment_label: str, experiment_t
                        experiment_target_anonscore, 'number of outputs', color)
     index += 1
     ax = mfig.get(index)
+    plot_cj_anonscores_ax(ax, all_stats['observed_mix_liquidity'],
+                       f'All wallets, mixed liquidity;total sessions={len(all_stats['observed_mix_liquidity'])}',
+                       experiment_target_anonscore, 'cummulative mixed value', color)
+    index += 1
+    ax = mfig.get(index)
     plot_cj_anonscores_ax(ax, all_stats['skipped_cjtxs'],
                        f'All wallets, skipped cjtxs;total sessions={len(all_stats['skipped_cjtxs'])}',
                        experiment_target_anonscore, 'num cjtxs skipped', color)
@@ -914,17 +948,20 @@ if __name__ == "__main__":
     base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\mn1\\'
     all38_stats, all38 = full_analyze_as38_202503(base_path)
     all25_stats, all25 = full_analyze_as25_202405(base_path)
+    all25_1m_stats, all25_1m = full_analyze_as25_202405_only1m(base_path)
+    all25_2m_stats, all25_2m = full_analyze_as25_202405_only2m(base_path)
 
     NUM_COLUMNS = 2  # 4
     NUM_ROWS = 6     # 5
     fig = plt.figure(figsize=(20, NUM_ROWS * 4))
     mfig = Multifig(plt, fig, NUM_ROWS, NUM_COLUMNS)
-    mfig.add_multiple_subplots(8)
+    mfig.add_multiple_subplots(10)
 
     # Plot both experiments into single image
-    plot_ww2mix_stats(mfig, all25_stats, '25&38', '25', 'royalblue')
+#    plot_ww2mix_stats(mfig, all25_stats, '25&38', '25', 'royalblue')
+    plot_ww2mix_stats(mfig, all25_1m_stats, '25&38', '25', 'royalblue')
+    plot_ww2mix_stats(mfig, all25_2m_stats, '25&38', '25', 'darkblue')
     plot_ww2mix_stats(mfig, all38_stats, '25&38', '38', 'lightcoral')
-    #plot_ww2mix_stats(mfig, all38, 38, 'lightcoral')
 
     # save graph
     mfig.plt.suptitle(f'Combined plots as25 and as38', fontsize=16)  # Adjust the fontsize and y position as needed
@@ -946,6 +983,6 @@ if __name__ == "__main__":
     # TODO: Compute cost of mixing including hidden coordination fee
     # TODO: Compute remixed liquidity when as limited to 5
     # TODO: plot how long it takes (#coinjoins, walltime) to achieve desired anonscore target
-    #
-
-
+    # TODO: Add wallclock time for coinjoin
+    # TODO: predict number of wallets roughly based on number of avg inputs as well as number of avg outputs! (and compare)
+    # TODO:
