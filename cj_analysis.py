@@ -1436,7 +1436,7 @@ def detect_bybit_hack(target_path: str, interval: str, bybit_hack_addresses: dic
                                          'value': data['coinjoins'][cjtx]['inputs'][index]['value'],
                                          'broadcast_time': data['coinjoins'][cjtx]['broadcast_time']})
                 print(
-                    f'{data['coinjoins'][cjtx]['broadcast_time']} {cjtx}:input[{index}]: {data['coinjoins'][cjtx]['inputs'][index]['value'] / float(SATS_IN_BTC)} btc')
+                    f"{data['coinjoins'][cjtx]['broadcast_time']} {cjtx}:input[{index}]: {data['coinjoins'][cjtx]['inputs'][index]['value'] / float(SATS_IN_BTC)} btc")
 
         for index in data['coinjoins'][cjtx]['outputs'].keys():
             script_type = data['coinjoins'][cjtx]['outputs'][index]['script_type']
@@ -1445,8 +1445,10 @@ def detect_bybit_hack(target_path: str, interval: str, bybit_hack_addresses: dic
             if address in bybit_hack_addresses:
                 if address not in results['hits']:
                     results['hits'][address] = []
-                results['hits'][address].append({'txid': cjtx, 'output_index': index, 'value': data['coinjoins'][cjtx]['outputs'][index]['value']})
+                results['hits'][address].append({'txid': cjtx, 'output_index': index,
+                                                 'value': data['coinjoins'][cjtx]['outputs'][index]['value'],
+                                                 'broadcast_time': data['coinjoins'][cjtx]['broadcast_time']})
                 print(
-                    f'{data['coinjoins'][cjtx]['broadcast_time']} {cjtx}:output[{index}]: {data['coinjoins'][cjtx]['outputs'][index]['value'] / float(SATS_IN_BTC)} btc')
+                    f"{data['coinjoins'][cjtx]['broadcast_time']} {cjtx}:output[{index}]: {data['coinjoins'][cjtx]['outputs'][index]['value'] / float(SATS_IN_BTC)} btc")
 
     return results
