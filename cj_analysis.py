@@ -1452,3 +1452,89 @@ def detect_bybit_hack(target_path: str, interval: str, bybit_hack_addresses: dic
                     f"{data['coinjoins'][cjtx]['broadcast_time']} {cjtx}:output[{index}]: {data['coinjoins'][cjtx]['outputs'][index]['value'] / float(SATS_IN_BTC)} btc")
 
     return results
+
+
+def generate_tx_download_script(txids: list, file_name):
+    curl_lines = []
+    for cjtx in txids:
+        curl_str = "curl --user user:password --data-binary \'{\"jsonrpc\": \"1.0\", \"id\": \"curltest\", \"method\": \"getrawtransaction\", \"params\": [\"" + cjtx + "\", true]}\' -H \'Content-Type: application/json\' http://127.0.0.1:8332/" + f" > {cjtx}.json\n"
+        curl_lines.append(curl_str)
+    with open(file_name, 'w') as f:
+        f.writelines(curl_lines)
+
+
+def get_input_address(txid, txid_in_out, raw_txs: dict = {}):
+    """
+    Returns address which was used in transaction given by 'txid' as 'txid_in_out' output index
+    :param txid: transaction id to read input address from
+    :param txid_in_out: index in vout to read input address from
+    :param raw_txs: pre-computed database of transactions
+    :return:
+    """
+
+    tx_info = raw_txs[txid]
+    try:
+        outputs = tx_info['vout']
+        for output in outputs:
+            if output['n'] == txid_in_out:
+                return output['scriptPubKey']['address'], tx_info
+
+    except json.JSONDecodeError as e:
+        print("Error decoding JSON:", e)
+
+    return None, None
+
+
+def extract_tx_info(txid: str, raw_txs: dict):
+    """
+    Extract input and output addresses
+    :param txid: transaction to parse
+    :param raw_txs: dictionary with pre-loaded transactions
+    :return: parsed transaction record
+    """
+
+    # Use pre-loaded transactions if available
+    tx_info = raw_txs[txid]
+
+    input_addresses = {}
+    output_addresses = {}
+    try:
+        parsed_data = tx_info
+        tx_record = {}
+
+        tx_record['txid'] = txid
+        # tx_record['raw_tx_json'] = parsed_data
+        tx_record['inputs'] = {}
+        tx_record['outputs'] = {}
+
+        inputs = parsed_data['vin']
+        index = 0
+        for input in inputs:
+            # we need to read and parse previous transaction to obtain address and other information
+            in_address, in_full_info = get_input_address(input['txid'], input['vout'], raw_txs)
+
+            tx_record['inputs'][index] = {}
+            tx_record['inputs'][index]['address'] = in_address
+            tx_record['inputs'][index]['txid'] = input['txid']
+            tx_record['inputs'][index]['value'] = int(in_full_info['vout'][input['vout']]['value'] * SATS_IN_BTC)
+            tx_record['inputs'][index]['spending_tx'] = get_output_name_string(input['txid'], input['vout'])
+            tx_record['inputs'][index]['wallet_name'] = 'real_unknown'
+
+            input_addresses[index] = in_address  # store address to index of the input
+            index = index + 1
+
+        outputs = parsed_data['vout']
+        for output in outputs:
+            index = output['n']
+            output_addresses[index] = output['scriptPubKey']['address']
+            tx_record['outputs'][index] = {}
+            tx_record['outputs'][index]['address'] = output['scriptPubKey']['address']
+            tx_record['outputs'][index]['value'] = int(output['value'] * SATS_IN_BTC)
+            # tx_record['outputs'][index]['spend_by_tx'] = get_input_name_string(output['txid'], output['vout'])
+            tx_record['outputs'][index]['wallet_name'] = 'real_unknown'
+
+    except json.JSONDecodeError as e:
+        print("Error decoding JSON:", e)
+        return None
+
+    return tx_record

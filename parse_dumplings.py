@@ -3466,6 +3466,37 @@ def free_memory(data_to_free):
     time.sleep(3)
 
 
+def generate_normalized_json(base_path: str, base_txs: list):
+        # 1. Generate base download script for provided base transactions
+        download_base_file = os.path.join(base_path, 'download_base_txs.sh')
+        als.generate_tx_download_script(base_txs, download_base_file)
+
+        # 2. Load base_txs from hex (after downloading) and generate download script for all input transactions
+        raw_txs = {}
+        for txid in base_txs:
+            raw_txs[txid] = als.load_json_from_file(os.path.join(base_path, f'{txid}.json'))['result']
+        txids = set(base_txs)
+        for txid in raw_txs:
+            for tx in raw_txs[txid]['vin']:
+                txids.add(tx['txid'])
+        download_base_file = os.path.join(base_path, 'download_all_txs.sh')
+        als.generate_tx_download_script(list(txids), download_base_file)
+
+        # 3. Load all txs downloaded in folder and create normalized coinjoin_tx_info.json
+        json_files = [f for f in os.listdir(base_path) if f.endswith('.json')]
+        raw_txs = {}
+        for filename in json_files:
+            if filename == 'coinjoin_tx_info.json':
+                continue
+            txid, extension = os.path.splitext(filename)
+            raw_txs[txid] = als.load_json_from_file(os.path.join(base_path, filename))['result']
+
+        cjtxs = {'coinjoins': {}}
+        for txid in base_txs:
+            cjtxs['coinjoins'][txid] = als.extract_tx_info(txid, raw_txs)
+        als.save_json_to_file_pretty(os.path.join(base_path, f'coinjoin_tx_info.json'), cjtxs)
+
+
 if __name__ == "__main__":
     op = DumplingsParseOptions()
     # parse arguments, overwrite default settings if required
@@ -3498,8 +3529,18 @@ if __name__ == "__main__":
     #   Fixed by not setting virtual block time too far away
     # WARNING: SW 100k pool does not match exactly mix_stay and active liqudity at the end - likely reason are neglected mining fees
 
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
+        # Base addresses
+        base_txs = ['dcbddb28cfe2682e6135be36f0afe6f8e7ec0055d2786cad09806e76c6a95fbf',
+               '075b01cf63d35fe58a538511c59e95f4e150f843b582381427b22e6169dd31eb',
+               '39960bb706d0233d93013f3e7443eedb496b9325ffd9ba43dbb941d70f72a6cb',
+               'd6ebaf5e1b4fdfa149ccc6fefb23037ef582ee6b5892c00c2d31c0a086b6c96d',
+               'f4d12e0c1b7fd30c7a7690f715fbb4d1e8bd101ee1b71e1abae3c341f647915b']
+        generate_normalized_json(op.target_base_path, base_txs)
+
+        exit(42)
+
         op.PLOT_REMIXES_SINGLE_INTERVAL = True
         #        for mix_id in ['wasabi2_zksnacks']:
         for mix_id in ['wasabi2_kruw']:
