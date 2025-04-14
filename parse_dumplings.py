@@ -1,5 +1,6 @@
 import copy
 import math
+import multiprocessing
 import os
 import pickle
 import random
@@ -7,6 +8,7 @@ import shutil
 from datetime import datetime, timedelta
 from collections import defaultdict, Counter
 from enum import Enum
+from multiprocessing.pool import ThreadPool
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -25,6 +27,7 @@ import gc
 import time
 import ast
 import requests
+from tqdm import tqdm
 
 # Configure the logging module
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -184,8 +187,8 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                     # 9be067b5311adb18a3458a6f9e164a25e0590ad8a8fc6907da0288f80bf25bc9/3/synbc1001407fb8593407d_1
                     #this_input['address'] = get_synthetic_address(segments[3], segments[1])
 
-                    #this_input['address'] = get_synthetic_address(segments[0], segments[1])
-                    this_input['address'], this_input['script_type'] = als.get_address(this_input['script'])
+                    this_input['address'] = get_synthetic_address(segments[0], segments[1])
+                    #this_input['address'], this_input['script_type'] = als.get_address(this_input['script'])
 
                     record['inputs'][f'{index}'] = this_input
                     index += 1
@@ -200,8 +203,8 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                     this_output['wallet_name'] = 'real_unknown'
                     this_output['script'] = segments[1]
                     this_output['script_type'] = segments[2]
-                    #this_output['address'] = get_synthetic_address(tx_id, index)  # TODO: Compute proper address from script
-                    this_output['address'], this_output['script_type'] = als.get_address(this_output['script'])
+                    this_output['address'] = get_synthetic_address(tx_id, index)  # TODO: Compute proper address from script
+                    #this_output['address'], this_output['script_type'] = als.get_address(this_output['script'])
 
                     record['outputs'][f'{index}'] = this_output
                     index += 1
@@ -842,6 +845,34 @@ def visualize_coinjoins(data, events, base_path, experiment_name):
     logging.info('Basic coinjoins statistics saved into {}'.format(save_file))
 
 
+def compute_real_addresses(data: dict):
+    # Extract all lock scripts, parallelize address computation, then collate back to main dictionary
+    scripts = {data[cjtx]['inputs'][index]['script']: "" for cjtx in data.keys() for index in data[cjtx]['inputs'].keys()}
+    scripts.update({data[cjtx]['outputs'][index]['script']: "" for cjtx in data.keys() for index in
+               data[cjtx]['outputs'].keys()})
+    scripts_only = list(scripts.keys())
+
+    # Parallelize conversion
+    def compute_address(script):
+        return script, als.get_address(script)[0]
+
+    logging.debug(f'Obtaining addresses from scripts, using {multiprocessing.cpu_count()} threads')
+    results = {}
+    with tqdm(total=len(scripts_only)) as progress:
+        for result in ThreadPool(multiprocessing.cpu_count()).imap(compute_address, scripts_only):
+            progress.update(1)
+            results[result[0]] = result[1]
+
+    logging.debug('Setting computed real addresses to coinjoin dict')
+    for cjtx in data.keys():
+        for index in data[cjtx]['inputs'].keys():
+            data[cjtx]['inputs'][index]['address_real'] = results[data[cjtx]['inputs'][index]['script']]
+    for cjtx in data.keys():
+        for index in data[cjtx]['outputs'].keys():
+            data[cjtx]['outputs'][index]['address_real'] = results[data[cjtx]['outputs'][index]['script']]
+    logging.debug('  DONE: Finished assigning computed real addresses to coinjoin dict')
+
+
 def process_coinjoins(target_path, mix_protocol: MIX_PROTOCOL, mix_filename, postmix_filename, premix_filename, start_date: str, stop_date: str):
     data, data_extended, false_cjtxs = load_coinjoins(target_path, mix_protocol, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
     if len(data["coinjoins"]) == 0:
@@ -884,7 +915,7 @@ def filter_liquidity_events(data):
             else:
                 # Remove all unnecessary data
                 for item in events[txid]['inputs'][input].copy():
-                    if item not in ['value', 'wallet_name', 'mix_event_type']:
+                    if item not in ['value', 'wallet_name', 'mix_event_type', 'address_real']:
                         events[txid]['inputs'][input].pop(item)
         # Process outputs
         events[txid]['num_outputs'] = len(events[txid]['outputs'])
@@ -896,7 +927,7 @@ def filter_liquidity_events(data):
             else:
                 # Remove all unnecessary data
                 for item in events[txid]['outputs'][output].copy():
-                    if item not in ['value', 'wallet_name', 'mix_event_type']:
+                    if item not in ['value', 'wallet_name', 'mix_event_type', 'address_real']:
                         events[txid]['outputs'][output].pop(item)
     return events
 
@@ -915,6 +946,9 @@ def process_and_save_coinjoins(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
         wallet_nums_predictions = als.load_json_from_file(metadata_file)
         for cjtx in data['coinjoins'].keys():
             data['coinjoins'][cjtx]['num_wallets_predicted'] = wallet_nums_predictions.get(cjtx, -100)
+
+    # FIXME: Compute and update real addresses from lock scripts
+    #compute_real_addresses(data['coinjoins'])
 
     if SAVE_BASE_FILES_JSON:
         als.save_json_to_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'), data)
@@ -3529,7 +3563,7 @@ if __name__ == "__main__":
     #   Fixed by not setting virtual block time too far away
     # WARNING: SW 100k pool does not match exactly mix_stay and active liqudity at the end - likely reason are neglected mining fees
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         # Base addresses
         base_txs = ['dcbddb28cfe2682e6135be36f0afe6f8e7ec0055d2786cad09806e76c6a95fbf',
