@@ -992,7 +992,7 @@ def extract_wallets_info(data):
     all_coins = []
     for wallet_name in wallets_coins_info.keys():
         all_coins.extend(wallets_coins_info[wallet_name])
-    coins = {coin['address']: coin for coin in all_coins}
+    coins = {coin['address']: coin for coin in all_coins}  # BUGBUG: Will not work in case of address reuse!!!
 
     for cjtxid in txs_data.keys():
         for index in txs_data[cjtxid]['inputs'].keys():
@@ -1027,7 +1027,7 @@ def extract_wallets_info(data):
                 coins[target_addr]['destroy_time'] = txs_data[cjtxid]['broadcast_time']
                 if 'spentBy' not in coins[target_addr].keys():
                     coins[target_addr]['spentBy'] = cjtxid
-                    coin['is_spent_by_cjtx'] = False if cjtxid not in txs_data.keys() else txs_data[cjtxid].get('is_cjtx', False)
+                    coins[target_addr]['is_spent_by_cjtx'] = False if cjtxid not in txs_data.keys() else txs_data[cjtxid].get('is_cjtx', False)
                 else:
                     assert coins[target_addr]['spentBy'] == cjtxid, f'Inconsistent spentBy mapping for {coins[target_addr]["address"]}'
 
