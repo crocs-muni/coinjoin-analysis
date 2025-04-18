@@ -5,11 +5,14 @@ import os
 import pickle
 import random
 import shutil
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from multiprocessing.pool import ThreadPool
 from datetime import datetime, timedelta
 from collections import defaultdict, Counter
 from enum import Enum
-from multiprocessing.pool import ThreadPool
 from pathlib import Path
+from typing import List
+
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -146,7 +149,13 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
             cj_stats = pickle.load(file)
     else:
         with open(target_file, "r") as file:
+            num_lines = 0
             for line in file.readlines():
+                num_lines += 1
+                # if num_lines % 10 == 0:
+                #     print('.', end="")
+                # if num_lines % 1000 == 0:
+                #     print(f"{num_lines}")
                 parts = line.split(VerboseTransactionInfoLineSeparator)
                 record = {}
 
@@ -1763,6 +1772,96 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
                         analyze_values: bool = True, normalize_values: bool = True,
                         restrict_to_out_size = None, restrict_to_in_size = None,
                         plot_multigraph: bool = True, plot_only_intervals: bool = False):
+    PARALLELIZE = True
+    if PARALLELIZE:
+        wasabi_plot_remixes_parallel(mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
+                      restrict_to_out_size, restrict_to_in_size, plot_multigraph, plot_only_intervals)
+    else:
+        wasabi_plot_remixes_serial(mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
+                      restrict_to_out_size, restrict_to_in_size, plot_multigraph, plot_only_intervals)
+
+
+def wasabi_plot_remixes_parallel(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_file: str,
+                        analyze_values: bool = True, normalize_values: bool = True,
+                        restrict_to_out_size = None, restrict_to_in_size = None,
+                        plot_multigraph: bool = True, plot_only_intervals: bool = False):
+    max_processes = multiprocessing.cpu_count()
+    if plot_only_intervals:
+        #
+        # Plot only single intervals
+        #
+        # Get all paths, prepare separate task for each
+        files = os.listdir(target_path) if os.path.exists(target_path) else print(
+            f'Path {target_path} does not exist')
+        only_dirs = [file for file in files if os.path.isdir(os.path.join(target_path, file))]
+        files = only_dirs
+
+        ### Version with threads - does not work properly as mathplotlib is internally serialized :(
+        # task_args: List[Tuple] = [
+        #     (mix_id, mix_protocol, target_path, tx_file,
+        #      analyze_values, normalize_values, restrict_to_out_size, restrict_to_in_size, plot_multigraph,
+        #      plot_only_intervals, [file])
+        #     for file in files
+        # ]
+        # with tqdm(total=len(task_args)) as progress:
+        #     for result in ThreadPool(multiprocessing.cpu_count()).imap(lambda args: wasabi_plot_remixes_worker(*args), task_args):
+        #         results = []
+        #         progress.update(1)
+
+        ### Version with separate process - works!
+        # processes: List[multiprocessing.Process] = []
+        # for file in files:
+        #     p = multiprocessing.Process(
+        #         target=wasabi_plot_remixes_worker,
+        #         args=(mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
+        #               restrict_to_out_size, restrict_to_in_size, plot_multigraph, plot_only_intervals, [file])  # [file] instructs each process to plot only single directory
+        #     )
+        #     processes.append(p)
+        # # Start processes in batches
+        #
+        # for i in range(0, len(processes), max_processes):
+        #     batch = processes[i:i + max_processes]
+        #     for p in batch:
+        #         p.start()
+        #
+        #     # Wait for them to finish
+        #     for p in batch:
+        #         p.join()
+        # print("✅ All plotting tasks completed.")
+
+        ### Version with futures - works!
+        results: List[dict] = []
+        with ProcessPoolExecutor(max_workers=max_processes) as executor:
+            futures = {
+                executor.submit(
+                    wasabi_plot_remixes_worker, mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
+                      restrict_to_out_size, restrict_to_in_size, plot_multigraph, plot_only_intervals, [file]
+                ): file for file in files
+            }
+            with tqdm(total=len(files)) as progress:
+                for future in as_completed(futures):
+                    try:
+                        result = future.result()
+                        #results.append(result)
+                        progress.update(1)
+                    except Exception as e:
+                        results.append({
+                            "mix_id": futures[future],
+                            "status": "error",
+                            "error": str(e)
+                        })
+    else:
+        #
+        # Plot all graphs together
+        #
+        wasabi_plot_remixes_worker(mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
+                            restrict_to_out_size, restrict_to_in_size, plot_multigraph, False)
+
+
+def wasabi_plot_remixes_serial(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_file: str,
+                        analyze_values: bool = True, normalize_values: bool = True,
+                        restrict_to_out_size = None, restrict_to_in_size = None,
+                        plot_multigraph: bool = True, plot_only_intervals: bool = False):
 
     if plot_only_intervals:
         #
@@ -1779,13 +1878,18 @@ def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Pa
                             restrict_to_out_size, restrict_to_in_size, plot_multigraph, False)
 
 
-
 def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_file: str,
                         analyze_values: bool = True, normalize_values: bool = True,
                         restrict_to_out_size = None, restrict_to_in_size = None,
-                        plot_multigraph: bool = True, plot_only_intervals: bool=False):
+                        plot_multigraph: bool = True, plot_only_intervals: bool=False, filter_paths: list=None):
+    logging.info(f"[{time.time()}] Starting next worker")
+
     files = os.listdir(target_path) if os.path.exists(target_path) else print(
         f'Path {target_path} does not exist')
+    only_dirs = [file for file in files if os.path.isdir(os.path.join(target_path, file))]
+    files = only_dirs
+    if filter_paths is None:  # If filtering list is not provided, then process all paths
+        filter_paths = files
 
     # Load fee rates
     mining_fee_rates = als.load_json_from_file(os.path.join(target_path, 'fee_rates.json'))
@@ -1827,6 +1931,8 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
     days_dict = defaultdict(dict)
 
     for dir_name in sorted(files):
+        if dir_name not in filter_paths:  # Process only for selected paths
+            continue
         target_base_path = os.path.join(target_path, dir_name)
         tx_json_file = os.path.join(target_base_path, f'{tx_file}')
         current_year = dir_name[0:4]
@@ -1952,7 +2058,6 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
 
         prev_year = current_year
 
-
         def plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, changing_liquidity_timecutoff, stay_liquidity, remix_liquidity, mining_fee_rate, separators_to_plot: list):
             # Plot mining fee rate
             PLOT_FEERATE = False
@@ -2005,6 +2110,8 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
             # plot_bars_downscaled(out_liquidity, 1, 'red', ax)
 
             # Remix ratio
+            if MIX_EVENT_TYPE.MIX_REMIX.name not in input_types.keys():
+                assert False, f'Missing MIX_REMIX for {target_base_path}'
             remix_ratios_all = [input_types[MIX_EVENT_TYPE.MIX_REMIX.name][i] * 100 for i in
                                 range(len(input_types[MIX_EVENT_TYPE.MIX_REMIX.name]))]  # All remix including nonstandard
             remix_ratios_nonstd = [input_types['MIX_REMIX_nonstd'][i] * 100 for i in
@@ -3532,6 +3639,8 @@ def generate_normalized_json(base_path: str, base_txs: list):
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method("spawn")  # Set safer process spawning variant for multiprocessing
+
     op = DumplingsParseOptions()
     # parse arguments, overwrite default settings if required
     args = parse_arguments()
@@ -3565,6 +3674,19 @@ if __name__ == "__main__":
 
     DEBUG = False
     if DEBUG:
+        op.PLOT_REMIXES_SINGLE_INTERVAL = True
+        for mix_id in ['wasabi2_kruw']:
+            elapsed = -time.time()
+            #matplotlib.use("Agg")
+            #multiprocessing.set_start_method('spawn')
+            # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+            #                     'coinjoin_tx_info.json', True, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+                                'coinjoin_tx_info.json', True, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            elapsed += time.time()
+            print(f"Execution time: {elapsed:.2f} seconds using {multiprocessing.cpu_count()} processes")
+        exit(42)
+
         # Base addresses
         base_txs = ['dcbddb28cfe2682e6135be36f0afe6f8e7ec0055d2786cad09806e76c6a95fbf',
                '075b01cf63d35fe58a538511c59e95f4e150f843b582381427b22e6169dd31eb',
