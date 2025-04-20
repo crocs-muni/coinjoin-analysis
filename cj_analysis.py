@@ -11,10 +11,11 @@ from enum import Enum
 import re
 import math
 
-from bitcoin import SelectParams
-from bitcoin.core import CTransaction, CMutableTransaction, CTxWitness, CScript, x
-from bitcoin.core.script import OP_HASH160, OP_EQUAL
-from bitcoin.wallet import P2WPKHBitcoinAddress, CBitcoinAddressError, P2SHBitcoinAddress, P2WSHBitcoinAddress
+from bitcoin.core import CTransaction, CMutableTransaction, CTxWitness
+# from bitcoin.core import CScript, x
+# from bitcoin import SelectParams
+# from bitcoin.core.script import OP_HASH160, OP_EQUAL
+# from bitcoin.wallet import P2WPKHBitcoinAddress, CBitcoinAddressError, P2SHBitcoinAddress, P2WSHBitcoinAddress
 
 from scipy.optimize import minimize
 
@@ -49,7 +50,7 @@ class CJ_ALICE_TYPES(Enum):
     ALICE_POSTED_SIGNATURE = 'ALICE_POSTED_SIGNATURE'
 
 
-class PRECOMP_STRPTIME():
+class PRECOMP_STRPTIME:
     precomp_strptime = {}
     precomp_strftime = {}
 
@@ -108,19 +109,19 @@ def detect_no_inout_remix_txs(coinjoins):
             logging.warning(f'No output remix detected for {cjtx}')
             no_remix['outputs_noremix'][cjtx] = coinjoins[cjtx]['broadcast_time']
 
-    noremix_txs = set(no_remix['inputs_noremix'].keys()).intersection(set(no_remix['outputs_noremix'].keys()))
+    noremix_txs = set(no_remix['inputs_noremix'].keys()).intersection(set(no_remix.get('outputs_noremix').keys()))
     no_remix['both_noremix'] = {cjtx: coinjoins[cjtx]['broadcast_time'] for cjtx in noremix_txs}
     logging.warning(f'Txs with no input&output remix: {no_remix["both_noremix"]}')
     return no_remix
 
 
 def detect_address_reuse_txs(coinjoins, reuse_threshold: float):
-    '''
+    """
     Detect addresses reusing.
     :param coinjoins: structire with all coinjoins
     :param reuse_threshold: value between 0 and 1. Higher the threshold, more addresses needs to be reused (=> less size of set())
     :return: detected txs with addresses reusing
-    '''
+    """
     addr_reuse = {'inputs_address_reuse': {}, 'outputs_address_reuse': {}}
     for cjtx in coinjoins.keys():
         in_addressses = set([coinjoins[cjtx]['inputs'][index]['script'] for index in coinjoins[cjtx]['inputs'].keys()])
@@ -539,7 +540,7 @@ def plot_num_wallets(mix_id: str, data: dict, ax):
     AVG_NUM_INPUTS, AVG_NUM_OUTPUTS = get_wallets_prediction_ratios(mix_id)
 
     # Find heuristically the AVG_NUM_INPUTS and AVG_NUM_OUTPUTS to minimize difference between computed number of inputs and outputs
-    FIND_SYNTHETIC_RATIO = False
+    FIND_SYNTHETIC_RATIO = True
     if FIND_SYNTHETIC_RATIO:
         avg_input_ratio['factor_inputs_wallets'] = AVG_NUM_INPUTS
         avg_input_ratio['factor_outputs_wallets'] = AVG_NUM_OUTPUTS
@@ -555,7 +556,7 @@ def plot_num_wallets(mix_id: str, data: dict, ax):
         # Initial guess for x1 and y1
         initial_guess = [1, 1]
         # Minimize the objective function
-        result = minimize(objective, initial_guess, method='Nelder-Mead')
+        result = minimize(objective, np.ndarray(initial_guess), method='Nelder-Mead')
         # Optimal values
         x1_opt, y1_opt = result.x
         #AVG_NUM_OUTPUTS = AVG_NUM_INPUTS * (y1_opt / x1_opt)
@@ -720,7 +721,7 @@ def print_coordinators_counts(coord_txs: dict, min_print_txs: int):
     print(f'Theoretical total coordinators (incl. very small ones) detected: {len(coord_txs)}')
 
 
-def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins={}, ww1_postmix_spend={}):
+def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins:dict = None, ww1_postmix_spend:dict = None):
     """
     Requires performance speedup, will not finish (after 8 hours) for Whirlpool with very large number of coins
     :param coinjoins:
@@ -732,6 +733,12 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
     :return:
     """
     logging.debug('analyze_input_out_liquidity() started')
+
+    if ww1_coinjoins is None:
+        ww1_coinjoins = {}
+    if ww1_postmix_spend is None:
+        ww1_postmix_spend = {}
+
     liquidity_events = []
     total_inputs = 0
     total_mix_entering = 0
@@ -1115,7 +1122,7 @@ def find_round_ids(filename, regex_pattern, group_names):
     Function is more generic as any group_name from regex_pattern can be specified, not only round_id
     :param filename: name of file with logs
     :param regex_pattern: regex pattern which is matched to every line
-    :param group_name: name of item specified in regex pattern, which is extracted
+    :param group_names: name of items specified in regex pattern, which are extracted
     :return: list of dictionaries for all specified group_names
     """
     hits = {}
@@ -1379,40 +1386,41 @@ def compute_partial_vsize(tx_hex: str, input_indices: list[int], output_indices:
 def get_address(script_hex: str):
     """
     Create an Output object from the script
+    @param script_hex: hex string representation of the script
     """
     output = Output(lock_script=bytes.fromhex(script_hex), value=0)
     address = output.address
 
     return address, output.script_type
 
-
-def get_address_legacy(script: str, script_type: str):
-    try:
-        SelectParams('mainnet')
-        if script_type.strip().lower() == 'unknown':
-            return None
-
-        scriptPubKey = CScript(x(script))
-
-        if script_type == 'TxWitnessV0Keyhash':
-            return str(P2WPKHBitcoinAddress.from_scriptPubKey(scriptPubKey))
-
-        if script_type == 'Unknown':
-            return str(P2WSHBitcoinAddress.from_scriptPubKey(scriptPubKey))
-
-        if script_type == 'TxScripthash':
-            if (len(scriptPubKey) == 3 and
-                    scriptPubKey[0] == OP_HASH160 and
-                    scriptPubKey[2] == OP_EQUAL):
-                hash160 = scriptPubKey[1]
-                return str(P2SHBitcoinAddress.from_scriptPubKey(hash160))
-
-        # If no previous types were hit, return default type
-        return str(P2WPKHBitcoinAddress.from_scriptPubKey(scriptPubKey))
-
-    except CBitcoinAddressError as e:
-        logging.error(f'{script_type}: {e}')
-        return None
+# WORKS, but only for limited script types
+# def get_address_legacy(script: str, script_type: str):
+#     try:
+#         SelectParams('mainnet')
+#         if script_type.strip().lower() == 'unknown':
+#             return None
+#
+#         scriptPubKey = CScript(x(script))
+#
+#         if script_type == 'TxWitnessV0Keyhash':
+#             return str(P2WPKHBitcoinAddress.from_scriptPubKey(scriptPubKey))
+#
+#         if script_type == 'Unknown':
+#             return str(P2WSHBitcoinAddress.from_scriptPubKey(scriptPubKey))
+#
+#         if script_type == 'TxScripthash':
+#             if (len(scriptPubKey) == 3 and
+#                     scriptPubKey[0] == OP_HASH160 and
+#                     scriptPubKey[2] == OP_EQUAL):
+#                 hash160 = scriptPubKey[1]
+#                 return str(P2SHBitcoinAddress.from_scriptPubKey(hash160))
+#
+#         # If no previous types were hit, return default type
+#         return str(P2WPKHBitcoinAddress.from_scriptPubKey(scriptPubKey))
+#
+#     except CBitcoinAddressError as e:
+#         logging.error(f'{script_type}: {e}')
+#         return None
 
 
 def detect_bybit_hack(target_path: str, interval: str, bybit_hack_addresses: dict):
@@ -1463,7 +1471,7 @@ def generate_tx_download_script(txids: list, file_name):
         f.writelines(curl_lines)
 
 
-def get_input_address(txid, txid_in_out, raw_txs: dict = {}):
+def get_input_address(txid, txid_in_out, raw_txs: dict = None):
     """
     Returns address which was used in transaction given by 'txid' as 'txid_in_out' output index
     :param txid: transaction id to read input address from
@@ -1471,6 +1479,8 @@ def get_input_address(txid, txid_in_out, raw_txs: dict = {}):
     :param raw_txs: pre-computed database of transactions
     :return:
     """
+    if raw_txs is None:
+        raw_txs = {}
 
     tx_info = raw_txs[txid]
     try:
