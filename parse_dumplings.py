@@ -1827,7 +1827,6 @@ def wasabi_plot_remixes_parallel(mix_id: str, mix_protocol: MIX_PROTOCOL, target
         #     # Wait for them to finish
         #     for p in batch:
         #         p.join()
-        # print("✅ All plotting tasks completed.")
 
         ### Version with futures - works!
         results: List[dict] = []
@@ -1855,7 +1854,7 @@ def wasabi_plot_remixes_parallel(mix_id: str, mix_protocol: MIX_PROTOCOL, target
         # Plot all graphs together
         #
         wasabi_plot_remixes_worker(mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
-                            restrict_to_out_size, restrict_to_in_size, plot_multigraph, False)
+                            restrict_to_out_size, restrict_to_in_size, plot_multigraph, False, None)
 
 
 def wasabi_plot_remixes_serial(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_file: str,
@@ -2052,7 +2051,7 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
                          f'{mix_id}_input_types_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
                 fig_single.savefig(f'{save_file}.png', dpi=300)
                 fig_single.savefig(f'{save_file}.pdf', dpi=300)
-
+                logging.debug(f'Sucesfully saved figure {save_file}')
                 del ax
                 del fig_single
 
@@ -2908,6 +2907,7 @@ def wasabi2_extract_other_pools(selected_coords: list, data: dict, target_path: 
         coord_full_name = f'wasabi2_{coord_name}'
         cjtx_coord = {cjtx: data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys()
                       if cjtx in tx_to_entity and tx_to_entity[cjtx] == coord_name}
+
         target_save_path = os.path.join(target_path, coord_full_name)
         if not os.path.exists(target_save_path):
             os.makedirs(target_save_path.replace('\\', '/'))
@@ -3507,6 +3507,7 @@ class DumplingsParseOptions:
     DETECT_FALSE_POSITIVES = False
     PLOT_REMIXES = False
     PLOT_REMIXES_SINGLE_INTERVAL = False
+    PLOT_REMIXES_MULTIGRAPH = True
     PROCESS_NOTABLE_INTERVALS = False
     SPLIT_WHIRLPOOL_POOLS = False
     DETECT_COORDINATORS = False
@@ -3591,7 +3592,8 @@ class DumplingsParseOptions:
         self.ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
         self.DETECT_FALSE_POSITIVES = False
         self.PLOT_REMIXES = False
-        self.PLOT_REMIXES_SINGLE_INTERVAL = False
+        self.PLOT_REMIXES_SINGLE_INTERVAL = False  # If True, separate standalone graph is generated for each interval
+        self.PLOT_REMIXES_MULTIGRAPH = True     # If True, all intervals are plotted together in single graph
         self.PROCESS_NOTABLE_INTERVALS = False
         self.SPLIT_WHIRLPOOL_POOLS = False
         self.DETECT_COORDINATORS = False
@@ -3705,17 +3707,24 @@ if __name__ == "__main__":
 
     DEBUG = False
     if DEBUG:
-        op.PLOT_REMIXES_SINGLE_INTERVAL = True
+        # Load all coinjoin transactions
+        #data = als.load_json_from_file(!!!)
+        #
+        # wasabi2_recompute_inputs_outputs_other_pools(['kruw'], target_path, MIX_PROTOCOL.WASABI2)
+        # exit(42)
+
+        op.PLOT_REMIXES_SINGLE_INTERVAL = False
         for mix_id in ['wasabi2_kruw']:
             elapsed = -time.time()
-            #matplotlib.use("Agg")
-            #multiprocessing.set_start_method('spawn')
-            # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
-            #                     'coinjoin_tx_info.json', True, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
             wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
-                                'coinjoin_tx_info.json', True, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+                                'coinjoin_tx_info.json', False, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
+            #                     'coinjoin_tx_info.json', True, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
             elapsed += time.time()
             print(f"Execution time: {elapsed:.2f} seconds using {multiprocessing.cpu_count()} processes")
+        exit(42)
+
+        wasabi2_recompute_inputs_outputs_other_pools(['kruw'], target_path, MIX_PROTOCOL.WASABI2)
         exit(42)
 
         # Base addresses
@@ -3747,13 +3756,13 @@ if __name__ == "__main__":
             prev_limit = 0
             for limit in limits:
                 wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
-                                    'coinjoin_tx_info.json', False, True, None, (prev_limit, limit), True,
+                                    'coinjoin_tx_info.json', False, True, None, (prev_limit, limit), op.PLOT_REMIXES_MULTIGRAPH,
                                     op.PLOT_REMIXES_SINGLE_INTERVAL)
                 wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
-                                    'coinjoin_tx_info.json', True, True, None, (prev_limit, limit), True,
+                                    'coinjoin_tx_info.json', True, True, None, (prev_limit, limit), op.PLOT_REMIXES_MULTIGRAPH,
                                     op.PLOT_REMIXES_SINGLE_INTERVAL)
                 # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
-                #                     'coinjoin_tx_info.json', True, True, (prev_limit, limit), None, True,
+                #                     'coinjoin_tx_info.json', True, True, (prev_limit, limit), None, op.PLOT_REMIXES_MULTIGRAPH,
                 #                     op.PLOT_REMIXES_SINGLE_INTERVAL)
                 prev_limit = limit
 
@@ -3762,13 +3771,13 @@ if __name__ == "__main__":
         #        for mix_id in ['wasabi2_zksnacks']:
         for mix_id in ['wasabi2_kruw']:
             # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
-            #                     'coinjoin_tx_info.json', True, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            #                     'coinjoin_tx_info.json', True, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
             # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
-            #                     'coinjoin_tx_info.json', True, False, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            #                     'coinjoin_tx_info.json', True, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
             # wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
-            #                     'coinjoin_tx_info.json', False, False, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            #                     'coinjoin_tx_info.json', False, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
             wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
-                                'coinjoin_tx_info.json', False, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+                                'coinjoin_tx_info.json', False, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
 
             if len(als.avg_input_ratio['all']) > 0:
                 als.avg_input_ratio['all_median'] = np.median(als.avg_input_ratio['all'])
@@ -3812,13 +3821,13 @@ if __name__ == "__main__":
             target_base_path = os.path.join(target_path, mix_id)
             if os.path.exists(target_base_path):
                 wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
-                                    'coinjoin_tx_info.json', False, False, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+                                    'coinjoin_tx_info.json', False, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
                 wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
-                                    'coinjoin_tx_info.json', False, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+                                    'coinjoin_tx_info.json', False, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
                 wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
-                                    'coinjoin_tx_info.json', True, False, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+                                    'coinjoin_tx_info.json', True, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
                 wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
-                                    'coinjoin_tx_info.json', True, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+                                    'coinjoin_tx_info.json', True, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
         exit(42)
         #mix_id = 'wasabi2_zksnacks'
         mix_id = 'wasabi2_kruw'
@@ -3827,9 +3836,9 @@ if __name__ == "__main__":
                                                  'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None,
                                                  SAVE_BASE_FILES_JSON, True)
         wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
-                    'coinjoin_tx_info.json', False, False, None, None, True)
+                    'coinjoin_tx_info.json', False, False, None, None, op.PLOT_REMIXES_MULTIGRAPH)
         wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
-                    'coinjoin_tx_info.json', False, True, None, None, True)
+                    'coinjoin_tx_info.json', False, True, None, None, op.PLOT_REMIXES_MULTIGRAPH)
         exit(42)
 
         wasabi_detect_false(os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json')
@@ -3872,7 +3881,7 @@ if __name__ == "__main__":
                                 'coinjoin_tx_info.json', False, False)
         exit(42)
         wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'),
-                    'coinjoin_tx_info.json', True, False, None, None, True)
+                    'coinjoin_tx_info.json', True, False, None, None, op.PLOT_REMIXES_MULTIGRAPH)
         # wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'),
         #             'coinjoin_tx_info.json', False, True, None, None, True)
 
@@ -4231,7 +4240,7 @@ if __name__ == "__main__":
             shutil.copyfile(os.path.join(target_path, mix_origin_name, 'false_cjtxs.json'),
                             os.path.join(target_path, interval_name, 'false_cjtxs.json'))
             wasabi_plot_remixes(interval_name, MIX_PROTOCOL.WASABI1, os.path.join(target_path, interval_name),
-                                'coinjoin_tx_info.json', True, False, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+                                'coinjoin_tx_info.json', True, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
 
         if op.CJ_TYPE == CoinjoinType.WW1:
             target_load_path = os.path.join(target_path, 'wasabi1')
@@ -4420,10 +4429,10 @@ if __name__ == "__main__":
 
     if op.PLOT_REMIXES:
         if op.CJ_TYPE == CoinjoinType.WW1:
-            wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
-            wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, False, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
-            wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
-            wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
 
         if op.CJ_TYPE == CoinjoinType.WW2:
             if op.MIX_IDS == "":
@@ -4437,10 +4446,10 @@ if __name__ == "__main__":
             for mix_id in mix_ids:
                 target_base_path = os.path.join(target_path, mix_id)
                 if os.path.exists(target_base_path):
-                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, False, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
-                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
-                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, False, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
-                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, True, None, None, True, op.PLOT_REMIXES_SINGLE_INTERVAL)
+                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
+                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
+                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
+                    wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
                 else:
                     logging.warning(f'Path {target_base_path} does not exists.')
 
@@ -4551,6 +4560,8 @@ if __name__ == "__main__":
     # TODO: Filter overall smaller and bigger cjtxs and plot separately
 
     # TODO: Plot graph of remix rates (values, num_inputs) as line plot for all months into single graph
+
+    # TODO: Recompute fresh inflows for post-zksnacks coordinators
 
 # b71981909c440bcb29e9a2d1cde9992cc97d3ca338c925c4b0547566bdc62f4d
 # ec9d5c2c678a70e304fa6e06a6430c9aff49e75107ac33f10165b14f0fa9a1f4
