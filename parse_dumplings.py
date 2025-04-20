@@ -2240,21 +2240,21 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
             #     f.write(mpld3.fig_to_html(plt.gcf()))
         plt.close()
 
-    # Save generate and save cummulative results separately
-    fig = plt.figure(figsize=(10, 3))
-    ax = fig.add_subplot(1, 1, 1, axes_class=AA.Axes)  # Get next subplot
-    plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, changing_liquidity_timecutoff, stay_liquidity, remix_liquidity, mining_fee_rate, ['month', 'year'])
-    plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
-    restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 3)}btc'
-    save_file = os.path.join(target_path, f'{mix_id}_cummul_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
-    plt.savefig(f'{save_file}.png', dpi=300)
-    plt.savefig(f'{save_file}.pdf', dpi=300)
-    # with open(f'{save_file}.html', "w") as f:
-    #     f.write(mpld3.fig_to_html(plt.gcf()))
-    plt.close()
+        # Save generate and save cummulative results separately
+        fig = plt.figure(figsize=(10, 3))
+        ax = fig.add_subplot(1, 1, 1, axes_class=AA.Axes)  # Get next subplot
+        plot_allcjtxs_cummulative(ax, new_month_indices, changing_liquidity, changing_liquidity_timecutoff, stay_liquidity, remix_liquidity, mining_fee_rate, ['month', 'year'])
+        plt.subplots_adjust(bottom=0.1, wspace=0.15, hspace=0.4)
+        restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 3)}btc'
+        save_file = os.path.join(target_path, f'{mix_id}_cummul_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
+        plt.savefig(f'{save_file}.png', dpi=300)
+        plt.savefig(f'{save_file}.pdf', dpi=300)
+        # with open(f'{save_file}.html', "w") as f:
+        #     f.write(mpld3.fig_to_html(plt.gcf()))
+        plt.close()
 
-    # save detected no transactions with no remixes (potentially false positives)
-    als.save_json_to_file_pretty(os.path.join(target_path, 'no_remix_txs_simplified.json'), no_remix_all)
+        # save detected transactions with no remixes (potentially false positives)
+        als.save_json_to_file_pretty(os.path.join(target_path, 'no_remix_txs_simplified.json'), no_remix_all)
     # Backup corresponding log file
     backup_log_files(target_path)
 
