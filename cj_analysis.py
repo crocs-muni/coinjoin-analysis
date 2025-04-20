@@ -556,7 +556,7 @@ def plot_num_wallets(mix_id: str, data: dict, ax):
         # Initial guess for x1 and y1
         initial_guess = [1, 1]
         # Minimize the objective function
-        result = minimize(objective, np.ndarray(initial_guess), method='Nelder-Mead')
+        result = minimize(objective, initial_guess, method='Nelder-Mead')
         # Optimal values
         x1_opt, y1_opt = result.x
         #AVG_NUM_OUTPUTS = AVG_NUM_INPUTS * (y1_opt / x1_opt)
