@@ -721,7 +721,7 @@ def print_coordinators_counts(coord_txs: dict, min_print_txs: int):
     print(f'Theoretical total coordinators (incl. very small ones) detected: {len(coord_txs)}')
 
 
-def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins:dict = None, ww1_postmix_spend:dict = None):
+def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins:dict = None, ww1_postmix_spend:dict = None, warn_if_not_found_in_postmix:bool = True):
     """
     Requires performance speedup, will not finish (after 8 hours) for Whirlpool with very large number of coins
     :param coinjoins:
@@ -730,6 +730,7 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
     :param mix_protocol:
     :param ww1_coinjoins:
     :param ww1_postmix_spend:
+    :param warn_if_not_found_in_postmix: If True warning is emmited if spending_tx is not found in set of postmix txs
     :return:
     """
     logging.debug('analyze_input_out_liquidity() started')
@@ -816,7 +817,8 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
                 if spend_by_tx not in coinjoins.keys():
                     # Postmix spend: the spending transaction is outside mix => liquidity out
                     if spend_by_tx not in postmix_spend.keys():
-                        logging.warning(f'Could not find spend_by_tx {spend_by_tx} in postmix_spend txs')
+                        if warn_if_not_found_in_postmix:
+                            logging.warning(f'Could not find spend_by_tx {spend_by_tx} in postmix_spend txs')
                     else:
                         coinjoins[cjtx]['outputs'][output]['burn_time'] = round((broadcast_times[spend_by_tx] - broadcast_times[cjtx]).total_seconds(), 0)
                     total_mix_leaving += 1

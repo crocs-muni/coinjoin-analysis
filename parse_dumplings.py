@@ -2921,6 +2921,37 @@ def wasabi2_extract_other_pools(selected_coords: list, data: dict, target_path: 
     return split_pools_info
 
 
+def wasabi2_recompute_inputs_outputs_other_pools(selected_coords: list, target_path: str, mix_protocol: MIX_PROTOCOL):
+    """
+    Takes list of coordinators and re-analyze liquidity inputs for each
+    :param selected_coords: list of coordinator names which shall be separated
+    :param target_path: directory where to store jsons with separated coordinators
+    :return: dictionary with basic information regarding separated cooridnators
+    """
+    logging.debug('wasabi2_analyze_inputs_outputs_other_pools() started')
+
+    # Process each coordinator
+    for coord_name in selected_coords:
+        coord_full_name = f'wasabi2_{coord_name}'
+
+        target_save_path = os.path.join(target_path, coord_full_name)
+        data = als.load_json_from_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'))
+
+        als.analyze_input_out_liquidity(data["coinjoins"], data.get('postmix', {}), data.get('premix', {}),
+                                        mix_protocol, None, None, False)
+
+        als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), data)
+
+        pool_data = process_and_save_intervals_filter(coord_full_name, MIX_PROTOCOL.WASABI2, target_path,
+                                                      '2024-05-01 00:00:07.000', op.interval_stop_date,
+                                                      'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None,
+                                                      SAVE_BASE_FILES_JSON, True, data)
+
+        logging.info(f'Recomputed mix events for pool {coord_full_name}: {len(data['coinjoins'])}')
+
+    return None
+
+
 def backup_log_files(target_path: str):
     """
     This code runs before exiting
