@@ -3663,7 +3663,11 @@ def generate_normalized_json(base_path: str, base_txs: list):
             if filename == 'coinjoin_tx_info.json':
                 continue
             txid, extension = os.path.splitext(filename)
-            raw_txs[txid] = als.load_json_from_file(os.path.join(base_path, filename))['result']
+            tx = als.load_json_from_file(os.path.join(base_path, filename))
+            if 'result' in tx:
+                raw_txs[txid] = tx['result']
+            else:
+                print(f'Skipping {filename}')
 
         cjtxs = {'coinjoins': {}}
         for txid in base_txs:
