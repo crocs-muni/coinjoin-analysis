@@ -1,4 +1,6 @@
+import json
 import os
+from itertools import groupby
 
 import plotly.graph_objects as go
 from orjson import orjson
@@ -136,17 +138,17 @@ def gant_coordinators_plotly():
     # --- Define tasks based on your table ---
     base_tasks = [
         #dict(Task="Whirlpool all (Sam.)", Start="2019-04-17", Finish="2024-04-24"),
-        dict(Task="Wasabi 1.x (zkSNACKs)", Start="2018-07-19", Finish="2024-06-01", y_pos=0),
-        dict(Task="Wasabi 2.x (zkSNACKs)", Start="2022-06-18", Finish="2024-06-01", y_pos=1),
+        dict(Task="Wasabi 1.x (zksnacks)", Start="2018-07-19", Finish="2024-06-01", y_pos=0),
+        dict(Task="Wasabi 2.x (zksnacks)", Start="2022-06-18", Finish="2024-06-02", y_pos=1),
         dict(Task="Whirlpool 5M", Start="2019-04-17", Finish="2024-04-24", y_pos=2),
         dict(Task="Whirlpool 1M", Start="2019-05-23", Finish="2024-04-24", y_pos=3),
         dict(Task="Whirlpool 50M", Start="2019-08-02", Finish="2024-04-24", y_pos=4),
         dict(Task="Whirlpool 100k", Start="2021-03-05", Finish="2024-04-24", y_pos=5),
-        dict(Task="Wasabi 2.x (kruw.io)", Start="2024-05-31", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=6),
-        dict(Task="Wasabi 2.x (gingerwallet)", Start="2024-05-31", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=7),
-        dict(Task="Wasabi 2.x (opencoordinator)", Start="2024-05-31", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=8),
-        dict(Task="Wasabi 2.x (wasabist)", Start="2024-05-31", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=9),
-        dict(Task="Wasabi 2.x (wasabicoordinator)", Start="2024-05-31", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=10),
+        dict(Task="Wasabi 2.x (kruw.io)", Start="2024-05-31", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=2),
+        dict(Task="Wasabi 2.x (gingerwallet)", Start="2024-05-21", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=3),
+        dict(Task="Wasabi 2.x (wasabicoordinator)", Start="2024-06-11", Finish="2024-08-11", y_pos=4),
+        dict(Task="Wasabi 2.x (opencoordinator)", Start="2024-07-08", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=5),
+#        dict(Task="Wasabi 2.x (wasabist)", Start="2024-07-23", Finish="2024-08-03", y_pos=9),
     ]
 
     df = pd.DataFrame(base_tasks)
@@ -163,28 +165,34 @@ def gant_coordinators_plotly():
 
     # --- Gantt bars ---
     for _, row in df.iterrows():
-        fig.add_trace(go.Bar(
-            y=[row["y_pos"]],
-            x=[row["Duration"]],
-            base=[row["Start_ordinal"]],
-            width=bar_height,
-            orientation='h',
-            marker=dict(color='white', line=dict(color='black', width=1)),
-            text=[row["Task"]],
-            textposition='inside',
-            insidetextanchor='middle',
-            hoverinfo='none',
-            showlegend=False
-        ))
+        fig.add_shape(
+            type="rect",
+            x0=row.Start_ordinal,
+            x1=row.Finish_ordinal,
+            y0=row.y_pos - bar_height / 2,
+            y1=row.y_pos + bar_height / 2,
+            fillcolor="white",
+            line=dict(color="black", width=1),
+            layer="above"
+        )
 
-    # --- Replace trend lines with heatmap fill per task ---
-    from matplotlib import cm
+        # Add task label manually as an annotation (optional)
+        fig.add_annotation(
+            x=(row.Start_ordinal + row.Finish_ordinal) / 2,
+            y=row.y_pos,
+            text=row.Task,
+            showarrow=False,
+            font=dict(color="black", size=10),
+            xanchor="center",
+            yanchor="middle"
+        )
 
+    from matplotlib import colormaps
     # Define colormaps per category
     group_colormaps = {
-        "Whirlpool": cm.get_cmap("Blues"),
-        "Wasabi 1.x": cm.get_cmap("Reds"),
-        "Wasabi 2.x": cm.get_cmap("Greens")
+        "Whirlpool": colormaps.get_cmap("Blues"),
+        "Wasabi 1.x": colormaps.get_cmap("Reds"),
+        "Wasabi 2.x": colormaps.get_cmap("Greens")
     }
 
     for task_idx, row in enumerate(df.itertuples()):
@@ -200,11 +208,31 @@ def gant_coordinators_plotly():
         elif "Wasabi 2.x" in row.Task:
             cmap = group_colormaps["Wasabi 2.x"]
         else:
-            cmap = cm.get_cmap("Greys")  # default fallback
+            cmap = colormaps.get_cmap("Greys")  # default fallback
 
         # Generate synthetic values
         values = np.clip(np.sin(np.linspace(0, np.pi, num_bins)) + 0.1 * np.random.randn(num_bins), 0, 1)
+        print(f'Original length for {row.Task}: {len(values)}')
+
+        coords = ['kruw', 'Wasabi 2.x (zksnacks)', 'gingerwallet', 'opencoordinator', 'wasabicoordinator']
+        for coord in coords:
+            # Load real values
+            if coord in row.Task:
+                liquidity = als.load_json_from_file(f'wasabi2_{coord}_freshliquidity_values_norm.json')['months_liquidity'][1:]
+                real_values = np.array([key for key, _ in groupby(liquidity)])
+                print(f'Collapsed length: {len(real_values)}')
+                if len(real_values) != len(values):
+                    print(f'Mismatch between expected and loaded value for {coord}; expected: {len(values)}, loaded {len(real_values)} ')
+                    if len(real_values) > len(values):
+                        real_values = real_values[:len(values)]
+                    else:
+                        pad_values = np.full((len(values) - len(real_values)), real_values[-1])
+                        real_values = np.concatenate([real_values, pad_values])
+
+                values = real_values
         values = values / values.max()
+
+
 
         for i in range(num_bins):
             start_day = row.Start + timedelta(days=i * bin_width)
@@ -226,10 +254,14 @@ def gant_coordinators_plotly():
             )
 
     # --- Axes formatting ---
+    # Ensure full vertical range covers all shape bars
+    min_y = df["y_pos"].min() - bar_height
+    max_y = df["y_pos"].max() + bar_height
+
     fig.update_yaxes(
+        range=[max_y, min_y],  # reversed axis!
         tickvals=[],
         ticktext=[],
-        autorange='reversed',
         showgrid=False,
         title=None
     )
