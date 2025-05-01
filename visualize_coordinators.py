@@ -17,7 +17,7 @@ def build_intercoord_flows_sankey_good(base_path: str, entity_dict: dict, transa
     flows_only_inter = {}  # Only flows to another coordinator
 
     for entity, tx_ids in entity_dict.items():
-        print(f'Processing {entity} entity', end="")
+        print(f'Processing {entity} coordinator', end="")
         for tx_id in tx_ids:
             coinjoin_data = transaction_outputs['coinjoins'].get(tx_id)
             if coinjoin_data:
@@ -67,8 +67,12 @@ def build_intercoord_flows_sankey_good(base_path: str, entity_dict: dict, transa
     ))
     fig.update_layout(title_text=f"Inter-coordinators flows for Wasabi 2.x ({'output counts' if counts else 'output values'})"
                                  f" [{'all coinjoins' if start_date is None else 'coinjoins after ' + start_date}]", font_size=10)
-    fig.show()  # This ensures the renderer is initialized before saving
-    fig.to_html(os.path.join(base_path, f'{output_file_template}.html'))
+    print(f"Sankey diagram updated")
+    #fig.show()  # BUGBUG: this call hangs # This ensures the renderer is initialized before saving
+    fig.write_html(f'{output_file_template}.html', auto_open=True)
+    print(f"Sankey diagram shown")
+    # fig.to_html(os.path.join(base_path, f'{output_file_template}.html'))
+    # print(f"Sankey diagram to html saved")
     #fig.write_image(os.path.join(base_path, f'{output_file_template}.png'))  # BUGBUG: this call hangs
     print(f"Sankey diagram saved as {os.path.join(base_path, f'{output_file_template}.html')}")
 
@@ -122,6 +126,163 @@ def visualize_coord_flows(base_path: str):
     build_intercoord_flows_sankey_good(base_path, entities_to_process, data, False, "2025-01-01 00:00:00.000")
 
 
+def gant_coordinators_plotly():
+    import plotly.graph_objects as go
+    import pandas as pd
+    import numpy as np
+    from datetime import datetime, timedelta
+    from math import ceil
+
+    # --- Define tasks based on your table ---
+    base_tasks = [
+        #dict(Task="Whirlpool all (Sam.)", Start="2019-04-17", Finish="2024-04-24"),
+        dict(Task="Wasabi 1.x (zkSNACKs)", Start="2018-07-19", Finish="2024-06-01", y_pos=0),
+        dict(Task="Wasabi 2.x (zkSNACKs)", Start="2022-06-18", Finish="2024-06-01", y_pos=1),
+        dict(Task="Whirlpool 5M", Start="2019-04-17", Finish="2024-04-24", y_pos=2),
+        dict(Task="Whirlpool 1M", Start="2019-05-23", Finish="2024-04-24", y_pos=3),
+        dict(Task="Whirlpool 50M", Start="2019-08-02", Finish="2024-04-24", y_pos=4),
+        dict(Task="Whirlpool 100k", Start="2021-03-05", Finish="2024-04-24", y_pos=5),
+        dict(Task="Wasabi 2.x (kruw.io)", Start="2024-05-31", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=6),
+        dict(Task="Wasabi 2.x (gingerwallet)", Start="2024-05-31", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=7),
+        dict(Task="Wasabi 2.x (opencoordinator)", Start="2024-05-31", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=8),
+        dict(Task="Wasabi 2.x (wasabist)", Start="2024-05-31", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=9),
+        dict(Task="Wasabi 2.x (wasabicoordinator)", Start="2024-05-31", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=10),
+    ]
+
+    df = pd.DataFrame(base_tasks)
+    df["Start"] = pd.to_datetime(df["Start"])
+    df["Finish"] = pd.to_datetime(df["Finish"])
+    df["Duration"] = (df["Finish"] - df["Start"]).dt.days
+    df["Start_ordinal"] = df["Start"].map(datetime.toordinal)
+    df["Finish_ordinal"] = df["Finish"].map(datetime.toordinal)
+    df["y_pos"] = df["y_pos"]
+
+    fig = go.Figure()
+
+    bar_height = 0.8
+
+    # --- Gantt bars ---
+    for _, row in df.iterrows():
+        fig.add_trace(go.Bar(
+            y=[row["y_pos"]],
+            x=[row["Duration"]],
+            base=[row["Start_ordinal"]],
+            width=bar_height,
+            orientation='h',
+            marker=dict(color='white', line=dict(color='black', width=1)),
+            text=[row["Task"]],
+            textposition='inside',
+            insidetextanchor='middle',
+            hoverinfo='none',
+            showlegend=False
+        ))
+
+    # --- Replace trend lines with heatmap fill per task ---
+    from matplotlib import cm
+
+    # Define colormaps per category
+    group_colormaps = {
+        "Whirlpool": cm.get_cmap("Blues"),
+        "Wasabi 1.x": cm.get_cmap("Reds"),
+        "Wasabi 2.x": cm.get_cmap("Greens")
+    }
+
+    for task_idx, row in enumerate(df.itertuples()):
+        duration_days = (row.Finish - row.Start).days
+        num_bins = max(2, ceil(duration_days / 30))  # 1 bin/month
+        bin_width = duration_days / num_bins
+
+        # --- Determine task group and colormap ---
+        if "Whirlpool" in row.Task:
+            cmap = group_colormaps["Whirlpool"]
+        elif "Wasabi 1.x" in row.Task:
+            cmap = group_colormaps["Wasabi 1.x"]
+        elif "Wasabi 2.x" in row.Task:
+            cmap = group_colormaps["Wasabi 2.x"]
+        else:
+            cmap = cm.get_cmap("Greys")  # default fallback
+
+        # Generate synthetic values
+        values = np.clip(np.sin(np.linspace(0, np.pi, num_bins)) + 0.1 * np.random.randn(num_bins), 0, 1)
+        values = values / values.max()
+
+        for i in range(num_bins):
+            start_day = row.Start + timedelta(days=i * bin_width)
+            end_day = start_day + timedelta(days=bin_width)
+
+            # Convert matplotlib color to Plotly-compatible rgba string
+            r, g, b, a = [int(255 * c) if j < 3 else round(c, 2) for j, c in enumerate(cmap(values[i]))]
+            color = f"rgba({r}, {g}, {b}, {a})"
+
+            fig.add_shape(
+                type="rect",
+                x0=start_day.toordinal(),
+                x1=end_day.toordinal(),
+                y0=row.y_pos - 0.4,
+                y1=row.y_pos + 0.4,
+                fillcolor=color,
+                line=dict(width=0),
+                layer="above"
+            )
+
+    # --- Axes formatting ---
+    fig.update_yaxes(
+        tickvals=[],
+        ticktext=[],
+        autorange='reversed',
+        showgrid=False,
+        title=None
+    )
+
+    # --- Monthly ticks for better performance ---
+    start_min = df["Start"].min()
+    end_max = df["Finish"].max()
+    tick_dates = pd.date_range(start=start_min, end=end_max, freq="MS")  # 1st of each month
+    tick_vals = [d.toordinal() for d in tick_dates]
+
+    # Show tick labels only for January, formatted as year
+    tick_dates = pd.date_range(start=start_min, end=end_max, freq="MS")  # 1st of each month
+    tick_vals = [d.toordinal() for d in tick_dates]
+    tick_labels = [d.strftime("%Y") if d.month == 1 else "" for d in tick_dates]
+
+    # Tighten x-axis range to just beyond min/max dates
+    start_min = df["Start"].min()
+    end_max = df["Finish"].max()
+
+    x_range = [
+        (start_min - pd.Timedelta(days=30)).toordinal(),  # 30 days before
+        (end_max + pd.Timedelta(days=30)).toordinal(),  # 30 days after
+    ]
+
+    fig.update_xaxes(
+        range=x_range,
+        tickvals=tick_vals,
+        ticktext=tick_labels,
+        showgrid=True,
+        gridcolor='lightgray',
+        title=None
+    )
+    # --- Adaptive height to fit on one screen ---
+    max_chart_height = 600
+    bar_padding = 8
+    fig_height = min(max_chart_height, 200 + len(df) * bar_padding)
+
+    fig.update_layout(
+        title="Minimalist Gantt Chart with Trend Lines (Monthly Ticks)",
+        template='simple_white',
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        margin=dict(l=40, r=40, t=40, b=40),
+        height=fig_height
+    )
+
+    # --- Output ---
+    fig.write_html("gantt_monthly_ticks_trend_lines.html", auto_open=True)
+    fig.write_image("gantt_monthly_ticks_trend_lines.svg")
+
+
+
 if __name__ == "__main__":
     base_path = 'c:/!blockchains/CoinJoin/Dumplings_Stats_20250302/'
-    visualize_coord_flows(base_path)
+    gant_coordinators_plotly()
+    #visualize_coord_flows(base_path)
