@@ -4475,24 +4475,24 @@ if __name__ == "__main__":
 
         if op.CJ_TYPE == CoinjoinType.SW:
             PLOT_OPTIONS = []  # (analyze_values, normalize_values, plot_multigraph)
-            PLOT_OPTIONS.append((True, False, False))  # values, not normalized
-            PLOT_OPTIONS.append((False, True, False))  # number of inputs, normalized
-            PLOT_OPTIONS.append((True, True, False))  # values, normalized
-            PLOT_OPTIONS.append((False, False, False))  # number of inputs, not normalized
+            PLOT_OPTIONS.append((True, False))  # values, not normalized
+            PLOT_OPTIONS.append((False, True))  # number of inputs, normalized
+            PLOT_OPTIONS.append((True, True))  # values, normalized
+            PLOT_OPTIONS.append((False, False))  # number of inputs, not normalized
             for option in PLOT_OPTIONS:
                 # Plotting remixes separately for different Whirlpool pools
                 wasabi_plot_remixes('whirlpool_100k', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
-                                    option[0], option[1], None, None, option[2], op.PLOT_REMIXES_SINGLE_INTERVAL)
+                                    option[0], option[1], None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
                 wasabi_plot_remixes('whirlpool_1M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
-                                    option[0], option[1], None, None, option[2], op.PLOT_REMIXES_SINGLE_INTERVAL)
+                                    option[0], option[1], None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
                 wasabi_plot_remixes('whirlpool_5M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json',
-                                    option[0], option[1], None, None, option[2], op.PLOT_REMIXES_SINGLE_INTERVAL)
+                                    option[0], option[1], None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
                 wasabi_plot_remixes('whirlpool_50M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
-                                    option[0], option[1], None, None, option[2], op.PLOT_REMIXES_SINGLE_INTERVAL)
+                                    option[0], option[1], None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
 
-            wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, False, None, None, False, op.PLOT_REMIXES_SINGLE_INTERVAL)
-            wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', False, True, None, None, False, op.PLOT_REMIXES_SINGLE_INTERVAL)
-            wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, True, None, None, False, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', False, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
+            wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
 
     if op.PLOT_REMIXES_FLOWS:
         wasabi_plot_remixes_flows('wasabi2_select',
