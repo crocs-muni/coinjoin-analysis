@@ -144,9 +144,10 @@ def gant_coordinators_plotly():
         dict(Task="Whirlpool 1M", Start="2019-05-23", Finish="2024-04-24", y_pos=3),
         dict(Task="Whirlpool 50M", Start="2019-08-02", Finish="2024-04-24", y_pos=4),
         dict(Task="Whirlpool 100k", Start="2021-03-05", Finish="2024-04-24", y_pos=5),
-        dict(Task="Wasabi 2.x (kruw.io)", Start="2024-05-31", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=2),
-        dict(Task="Wasabi 2.x (gingerwallet)", Start="2024-05-21", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=3),
-        dict(Task="Wasabi 2.x (wasabicoordinator)", Start="2024-06-11", Finish="2024-08-11", y_pos=4),
+        dict(Task="Wasabi 2.x (kruw.io)", Start="2024-05-31", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=3),
+        dict(Task="Wasabi 2.x (gingerwallet)", Start="2024-05-21", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=2),
+        #dict(Task="Wasabi 2.x (wasabicoordinator)", Start="2024-06-11", Finish="2024-08-11", y_pos=4),
+        dict(Task="Wasabi 2.x (others)", Start="2024-06-13", Finish="2024-09-14", y_pos=4),
         dict(Task="Wasabi 2.x (opencoordinator)", Start="2024-07-08", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=5),
 #        dict(Task="Wasabi 2.x (wasabist)", Start="2024-07-23", Finish="2024-08-03", y_pos=9),
     ]
@@ -214,15 +215,18 @@ def gant_coordinators_plotly():
         values = np.clip(np.sin(np.linspace(0, np.pi, num_bins)) + 0.1 * np.random.randn(num_bins), 0, 1)
         print(f'Original length for {row.Task}: {len(values)}')
 
-        coords = ['kruw', 'Wasabi 2.x (zksnacks)', 'gingerwallet', 'opencoordinator', 'wasabicoordinator']
+        coords = [('wasabi2', 'kruw'), ('wasabi2', 'Wasabi 2.x (zksnacks)'), ('wasabi2', 'gingerwallet'),
+                  ('wasabi2', 'opencoordinator'), ('wasabi2', 'wasabicoordinator'),
+                  ('whirlpool', '100k'), ('whirlpool', '1M'), ('whirlpool', '5M'), ('whirlpool', '50M'),
+                  ('wasabi1', 'Wasabi 1.x (zksnacks)')]
         for coord in coords:
             # Load real values
-            if coord in row.Task:
-                liquidity = als.load_json_from_file(f'wasabi2_{coord}_freshliquidity_values_norm.json')['months_liquidity'][1:]
+            if coord[1] in row.Task:
+                liquidity = als.load_json_from_file(f'{coord[0]}_{coord[1]}_freshliquidity_values_norm.json')['months_liquidity'][1:]
                 real_values = np.array([key for key, _ in groupby(liquidity)])
                 print(f'Collapsed length: {len(real_values)}')
                 if len(real_values) != len(values):
-                    print(f'Mismatch between expected and loaded value for {coord}; expected: {len(values)}, loaded {len(real_values)} ')
+                    print(f'Mismatch between expected and loaded value for {coord[1]}; expected: {len(values)}, loaded {len(real_values)} ')
                     if len(real_values) > len(values):
                         real_values = real_values[:len(values)]
                     else:
