@@ -526,6 +526,17 @@ def  get_wallets_prediction_ratios(mix_id: str):
         AVG_NUM_INPUTS = 2.72  # real value taken from zksnacks as25 experiment (use for zksnacks)
 #        AVG_NUM_OUTPUTS = 2.91 # synthetic median value minimizing euclidean distance between output and input factors for zksnacks if AVG_NUM_INPUTS = 2.72
 
+    # Wasabi 1.x
+    if 'wasabi1' in mix_id:
+        AVG_NUM_OUTPUTS = 2.0 # real value taken from wasabi1 experiments (one standard denomination, one change output)
+        AVG_NUM_INPUTS = 2.3  # synthetic value
+
+    # Whirlpool
+    if 'whirlpool' in mix_id:
+        AVG_NUM_OUTPUTS = 1 # real value taken from implementation of Whirlpool clients
+        AVG_NUM_INPUTS = 1  # real value taken from implementation of Whirlpool clients
+
+
     return AVG_NUM_INPUTS, AVG_NUM_OUTPUTS
 
 
