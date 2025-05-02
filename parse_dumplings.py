@@ -1928,6 +1928,7 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
     next_month_index = 0
     weeks_dict = defaultdict(dict)
     days_dict = defaultdict(dict)
+    months_dict = defaultdict(dict)
 
     for dir_name in sorted(files):
         if dir_name not in filter_paths:  # Process only for selected paths
@@ -2038,6 +2039,8 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
                 weeks_dict[(year, week_num)][key] = record
                 day_key = (dt.year, dt.month, dt.day)
                 days_dict[day_key][key] = record
+                month_key = (dt.year, dt.month)
+                months_dict[month_key][key] = record
 
             # Extend the y-limits to ensure the vertical lines go beyond the plot edges
             y_range = ax.get_ylim()
@@ -2079,6 +2082,7 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
                 print(f'Limits for inputs value is {limit_size[0]} - {limit_size[1]}')
 
             # Decide on resolution of liquidity display
+            #interval_to_display = months_dict
             #interval_to_display = weeks_dict
             interval_to_display = days_dict
 
@@ -2103,6 +2107,12 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
             label = f'Fresh liquidity (btc)'
             ax.set_ylabel(label, color='gray', fontsize='6')
             ax.tick_params(axis='y', colors='gray')
+
+            new_month_liquidity = compute_aggregated_interval_liquidity(months_dict)
+            restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 3)}btc'
+            save_file = os.path.join(target_path,
+                             f'{mix_id}_freshliquidity_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
+            als.save_json_to_file_pretty(f'{save_file}.json', {'months_liquidity': compute_aggregated_interval_liquidity(months_dict), 'weeks_liquidity': compute_aggregated_interval_liquidity(weeks_dict)})
 
             # Outflows
             # out_liquidity = [input_types[MIX_EVENT_TYPE.MIX_LEAVE.name][i] for i in range(len(input_types[MIX_EVENT_TYPE.MIX_LEAVE.name]))]
@@ -3441,6 +3451,12 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
             #     if coord_tx in merged_coord_cjtxs[coord_id]:
             #         print(f'merged_coord_cjtxs: {coord_id} paired to {coord_name} by {coord_tx}')
 
+
+    # # Sort coord txs based on its broadcast time
+    # sorted_items = {}
+    # for coord in coord_txs.keys():
+    #     sorted_items[coord] = sorted(coord_txs[coord], key=lambda x: precomp_datetime.strptime(cjtxs[x]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f"))
+    # coord_txs = sorted_items
 
     # Save discovered coordinators
     als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_discovered.json'), coord_txs)
