@@ -560,14 +560,18 @@ def plot_num_wallets(mix_id: str, data: dict, ax):
         Y = np.array([len(coinjoins[cj['txid']]['outputs']) for cj in sorted_cj_time])
 
         # Objective function to minimize
-        def objective(params):
+        def objective_euclidean(params):
             x1, y1 = params
             return np.sum((X / x1 - Y / y1) ** 2)
+
+        def objective_linear(params):
+            x1, y1 = params
+            return np.sum(np.abs(X / x1 - Y / y1))
 
         # Initial guess for x1 and y1
         initial_guess = [1, 1]
         # Minimize the objective function
-        result = minimize(objective, initial_guess, method='Nelder-Mead')
+        result = minimize(objective_linear, initial_guess, method='Nelder-Mead')
         # Optimal values
         x1_opt, y1_opt = result.x
         #AVG_NUM_OUTPUTS = AVG_NUM_INPUTS * (y1_opt / x1_opt)
@@ -600,14 +604,16 @@ def plot_num_wallets(mix_id: str, data: dict, ax):
         COLOR_WALLETS_OUTPUTS = 'green'
         num_wallets_avg_inputs = compute_averages(num_wallets_naive_inputs, AVG_WINDOWS)
         num_wallets_avg_inputs = np.array(num_wallets_avg_inputs)
-        ax.plot(num_wallets_avg_inputs, color=COLOR_WALLETS_INPUTS, alpha=0.4, linewidth=2, linestyle='-',
+        x = range(AVG_WINDOWS // 2, len(num_wallets_avg_inputs) + AVG_WINDOWS // 2)
+        #x = range(AVG_WINDOWS, len(num_wallets_avg_inputs) + AVG_WINDOWS)
+        #x = range(0, len(num_wallets_avg_inputs))
+        ax.plot(x, num_wallets_avg_inputs, color=COLOR_WALLETS_INPUTS, alpha=0.4, linewidth=2, linestyle='-',
                 label=f'Predicted wallets (inputs, avg={AVG_WINDOWS}, factor={round(AVG_NUM_INPUTS, 2)})')
         num_wallets_avg_outputs = compute_averages(num_wallets_naive_outputs, AVG_WINDOWS)
         num_wallets_avg_outputs = np.array(num_wallets_avg_outputs)
-        ax.plot(num_wallets_avg_outputs, color=COLOR_WALLETS_OUTPUTS, alpha=0.4, linewidth=2, linestyle='-',
+        ax.plot(x, num_wallets_avg_outputs, color=COLOR_WALLETS_OUTPUTS, alpha=0.4, linewidth=2, linestyle='-',
                 label=f'Predicted wallets (outputs, avg={AVG_WINDOWS}, factor={round(AVG_NUM_OUTPUTS, 2)})')
         ax.tick_params(axis='y', colors=COLOR_WALLETS_INPUTS, labelsize=6)
-        x = range(0, len(num_wallets_avg_inputs))
         ax.fill_between(x, num_wallets_avg_inputs, num_wallets_avg_outputs, where=num_wallets_avg_inputs>num_wallets_avg_outputs, interpolate=True, color=COLOR_WALLETS_INPUTS, alpha=0.3)
         ax.fill_between(x, num_wallets_avg_inputs, num_wallets_avg_outputs, where=num_wallets_avg_outputs>num_wallets_avg_inputs, interpolate=True, color=COLOR_WALLETS_OUTPUTS, alpha=0.3)
         max_wallets_y = max(max(num_wallets_avg_outputs), max(num_wallets_avg_inputs))
