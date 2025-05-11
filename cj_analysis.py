@@ -908,6 +908,13 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
         else:
             coinjoins[tx['txid']]['broadcast_time_virtual'] = precomp_datetime.strftime(min_broadcast_time)[:-3]  # Use corrected time
 
+    # Compute ['broadcast_time']
+    broadcast_reorder_times_diff_mins = [int(abs((precomp_datetime.strptime(coinjoins[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") - precomp_datetime.strptime(coinjoins[cjtx]['broadcast_time_virtual'], "%Y-%m-%d %H:%M:%S.%f")).total_seconds() / 60)) for cjtx in coinjoins.keys()]
+    difference_counts = dict(Counter(broadcast_reorder_times_diff_mins))
+    print(f'Broadcast time differences: {difference_counts}')
+    difference_counts_str = {str(key): item for key, item in difference_counts.items()}
+    save_json_to_file('tx_reordering_stats.json', difference_counts_str)
+
     # Print summary results
     print_liquidity_summary(coinjoins)
     SM.print(f'  {get_ratio_string(total_mix_entering, total_inputs)} Inputs entering mix / total inputs used by mix transactions')
