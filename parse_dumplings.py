@@ -3741,8 +3741,148 @@ if __name__ == "__main__":
     #   Fixed by not setting virtual block time too far away
     # WARNING: SW 100k pool does not match exactly mix_stay and active liqudity at the end - likely reason are neglected mining fees
 
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
+        wasabi_plot_remixes('wasabi2_zksnacks', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_zksnacks'),
+                            'coinjoin_tx_info.json', False, True, None,
+                            None, op.PLOT_REMIXES_MULTIGRAPH, True)
+        exit(42)
+
+        # wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'),
+        #                     'coinjoin_tx_info.json', True, True, None,
+        #                     None, op.PLOT_REMIXES_MULTIGRAPH, True)
+        # exit(42)
+        #
+        wasabi_plot_remixes('wasabi2_kruw', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_kruw'),
+                            'coinjoin_tx_info.json', True, True, None,
+                            None, op.PLOT_REMIXES_MULTIGRAPH, True)
+        exit(42)
+
+        example_path = 'c:/!blockchains/CoinJoin/coinjoin_tx_info.json'
+        data = als.load_json_from_file(example_path)
+        txids = data['coinjoins'].keys()
+        for txid in txids:
+            indexes = data['coinjoins'][txid]['inputs'].keys()
+
+            def set_artifical_values(item: dict, value, mix_type, burn_time):
+                item['value'] = value
+                item['mix_event_type'] = mix_type
+                item['burn_time_cjtxs'] = burn_time
+                return item
+
+            def variant1(data: dict):
+                index  = 0
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 3000, MIX_EVENT_TYPE.MIX_ENTER.name, 1)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 1200, MIX_EVENT_TYPE.MIX_REMIX.name, 1)
+                data['coinjoins'][txid]['inputs'][str(index)]['is_standard_denom'] = False
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 2000, MIX_EVENT_TYPE.MIX_REMIX.name, 1)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 2500, MIX_EVENT_TYPE.MIX_REMIX.name, 2)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 1500, MIX_EVENT_TYPE.MIX_REMIX.name, 3)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 1400, MIX_EVENT_TYPE.MIX_REMIX.name, 6)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 800, MIX_EVENT_TYPE.MIX_REMIX.name, 20)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 900, MIX_EVENT_TYPE.MIX_REMIX.name, 1000)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 800, MIX_EVENT_TYPE.MIX_REMIX.name, 2000)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 4000, MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name, 10)
+                index = index + 1
+
+
+            def variant2(data: dict):
+                index = 0
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 2000, MIX_EVENT_TYPE.MIX_ENTER.name, 1)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 500, MIX_EVENT_TYPE.MIX_REMIX.name, 1)
+                data['coinjoins'][txid]['inputs'][str(index)]['is_standard_denom'] = False
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 1500, MIX_EVENT_TYPE.MIX_REMIX.name, 1)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 1500, MIX_EVENT_TYPE.MIX_REMIX.name, 2)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 1500, MIX_EVENT_TYPE.MIX_REMIX.name, 3)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 1400, MIX_EVENT_TYPE.MIX_REMIX.name, 6)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 800, MIX_EVENT_TYPE.MIX_REMIX.name, 20)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 900, MIX_EVENT_TYPE.MIX_REMIX.name, 1000)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 800, MIX_EVENT_TYPE.MIX_REMIX.name, 2000)
+                index = index + 1
+
+                item = data['coinjoins'][txid]['inputs'][str(index)]
+                item = set_artifical_values(item, 2000, MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name, 10)
+                index = index + 1
+
+                return index
+
+
+            index = variant2(data)
+
+            for in_index in list(data['coinjoins'][txid]['inputs'].keys()):
+                if in_index not in [str(i) for i in range(0, index)]:
+                    del data['coinjoins'][txid]['inputs'][in_index]
+
+        als.save_json_to_file(example_path + '.trim', data)
+
+        exit(42)
+        wasabi_plot_remixes('whirlpool_5M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_5M'),
+                            'coinjoin_tx_info.json', True, True, None,
+                            None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
+        exit(42)
+        op.target_base_path = 'c:/!blockchains/CoinJoin/!Jirka_small_coinjoins/'
+        base_txs = []
+        base_txs.extend(als.load_json_from_file(os.path.join(op.target_base_path, 'small1.json')).keys())
+        base_txs.extend(als.load_json_from_file(os.path.join(op.target_base_path, 'small2.json')).keys())
+        base_txs.extend(als.load_json_from_file(os.path.join(op.target_base_path, 'small3.json')).keys())
+        generate_normalized_json(op.target_base_path, base_txs)
+
+        exit(42)
         # Load all coinjoin transactions
         #data = als.load_json_from_file(!!!)
         #
@@ -4601,6 +4741,8 @@ if __name__ == "__main__":
     # TODO: Plot graph of remix rates (values, num_inputs) as line plot for all months into single graph
 
     # TODO: Recompute fresh inflows for post-zksnacks coordinators
+
+    # TODO: Detect cooridnator transactions and find start and end of given coordinator (requires update for cjtxstats coinjoin structure)
 
 # b71981909c440bcb29e9a2d1cde9992cc97d3ca338c925c4b0547566bdc62f4d
 # ec9d5c2c678a70e304fa6e06a6430c9aff49e75107ac33f10165b14f0fa9a1f4
