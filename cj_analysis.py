@@ -327,9 +327,9 @@ def plot_inputs_type_ratio(mix_id: str, data: dict, initial_cj_index: int, ax, a
         ax.set_title(f'Type of inputs for given cjtx ({"values" if analyze_values else "number"})\n{short_exp_name}')
         ax.set_xlabel('Coinjoin in time')
         if analyze_values and normalize_values:
-            ax.set_ylabel('Fraction of inputs sizes')
+            ax.set_ylabel('Fraction of inputs values')
         if analyze_values and not normalize_values:
-            ax.set_ylabel('Inputs sizes (btc)')
+            ax.set_ylabel('Inputs values (btc)')
         if not analyze_values and normalize_values:
             ax.set_ylabel('Fraction of input numbers')
         if not analyze_values and not normalize_values:
@@ -455,7 +455,7 @@ def plot_mix_liquidity(mix_id: str, data: dict, initial_liquidity, time_liquidit
     remix_liquidity_btc = [item / SATS_IN_BTC for item in remix_liquidity]
     if ax:
         #x_ticks = range(initial_cj_index, initial_cj_index + len(liquidity_btc))
-        ax.plot(liquidity_btc, color='royalblue', alpha=0.6)
+        ax.plot(liquidity_btc, color='royalblue', alpha=0.6, linewidth=3)
         #ax.plot(stay_liquidity_btc, color='royalblue', alpha=0.6, linestyle='--')
         #ax.plot(remix_liquidity_btc, color='black', alpha=0.6, linestyle='--')
         PLOT_LEAVE_TIMECUTOFF = False
@@ -529,7 +529,7 @@ def  get_wallets_prediction_ratios(mix_id: str):
     # Wasabi 1.x
     if 'wasabi1' in mix_id:
         AVG_NUM_OUTPUTS = 2.0 # real value taken from wasabi1 experiments (one standard denomination, one change output)
-        AVG_NUM_INPUTS = 2.3  # synthetic value
+        AVG_NUM_INPUTS = 1.15  # synthetic value
 
     # Whirlpool
     if 'whirlpool' in mix_id:
@@ -899,7 +899,7 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
         else:
             broadcast_times_observed.append(tx['broadcast_time'])  # Save broadcast_time of this cjtx
 
-        # Set virtual time as minimum from the chunk if distance is more than 30 minutes
+        # Set virtual time as minimum from the chunk if distance is more than 120 minutes
         # (do not correct cases where difference is too big and is not caused by delay in mining, but start of new pool instead)
         # (do not correct cases where difference is small and no delay in mining was introduced)
         time_difference = abs(precomp_datetime.strptime(coinjoins[tx['txid']]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") - min_broadcast_time)
