@@ -135,11 +135,12 @@ def plot_cj_anonscores_ax(ax, data: dict, title: str, total_sessions: int, anon_
                 linewidth=float(smoothed_widths[i])  # Use raw number of lists for thickness
             )
 
-
-    ax.legend(loc="best", fontsize='8')
-    ax.set_title(title)
-    ax.set_xlabel('Number of coinjoins executed')
-    ax.set_ylabel(y_label)
+    FONT_SIZE = '10'
+    ax.legend(loc="best", fontsize=FONT_SIZE)
+    #ax.set_title(f'{title}; total_sessions={total_sessions}')
+    ax.set_title(f'{title}', fontsize=FONT_SIZE)
+    ax.set_xlabel('Number of coinjoins executed', fontsize=FONT_SIZE)
+    ax.set_ylabel(y_label, fontsize=FONT_SIZE)
     #plt.show()
 
     PLOT_BOXPLOT = False
@@ -383,6 +384,7 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
     stats['observed_remix_liquidity_ratio_cumul'] = {}  # Remix liquidity based on value of inputs
     stats['observed_remix_inputs_ratio_cumul'] = {}     # unused now, remix liquidity based on number of inputs
     stats['anonscore_coins_distribution'] = {}
+    stats['num_wallet_coins'] = {}
     for session_label in cjtxs['sessions'].keys():
         session_coins = {}
         anon_percentage_status_list = []
@@ -392,9 +394,12 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
         observed_remix_liquidity_ratio_cumul_list = []
         observed_remix_inputs_ratio_cumul_list = []
         anonscore_coins_distribution_list = []
+        num_wallet_coins_list = []
         session_size_inputs = cjtxs['sessions'][session_label]['funding_tx']['value']
         assert session_size_inputs > 0, f'Unexpected negative funding tx size of {session_size_inputs}'
+        cj_index = 0
         for cjtxid in cjtxs['sessions'][session_label]['coinjoins'].keys():
+            cj_index = cj_index + 1
             cjtx = cjtxs['sessions'][session_label]['coinjoins'][cjtxid]
             print(f'#', end='')
             assert len(cjtx['outputs']) != 0, f'No coins assigned to {cjtx['txid']}'
@@ -442,6 +447,10 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
             anon_percentage_status_list.append(anon_percentage_status * 100)
             anon_gain_weighted_list.append(anon_gain_weighted)
 
+            # Print number of all coins in wallet for given coinjoin and session
+            print(f' [{cj_index}.s:{len(session_coins)}c]', end='')
+            num_wallet_coins_list.append(len(session_coins))
+
             # Compute observed liquidity ratio for wallet's coins
             # This value enumerates multiplier of initial fresh liquidity over multiple cjtxs
             # (If all coins are fully mixed in the first coinjoin, then observed_remix_liquidity_ratio is 1,
@@ -479,7 +488,9 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
         if len(anonscore_coins_distribution_list) > 0:
             assert session_label not in stats['anonscore_coins_distribution'], f'Duplicate session label {session_label}'
             stats['anonscore_coins_distribution'][session_label] = anonscore_coins_distribution_list
-
+        if len(num_wallet_coins_list) > 0:
+            assert session_label not in stats['num_wallet_coins'], f'Duplicate session label {session_label}'
+            stats['num_wallet_coins'][session_label] = num_wallet_coins_list
         # Print finalized info
         session = cjtxs['sessions'][session_label]
         session_end_merge_tx = f'{len(session['coinjoins'].keys())} cjs | ' + session['funding_tx']['label'] + ' ' + session['funding_tx']['broadcast_time'] + ' ' + \
@@ -641,10 +652,11 @@ def plot_cj_heatmap(mfig: Multifig, x, y, x_label, y_label, title):
     ax = mfig.add_subplot()
     #sns.heatmap(heatmap.T, cmap='viridis', annot=True, fmt='.0f', cbar=True, ax=ax)
     heatmap_percentage = (heatmap / np.sum(heatmap)) * 100
+    #print(f'{heatmap_percentage}')
     #sns.set_style("whitegrid")
     sns.set_style("white")
 #    sns.heatmap(heatmap_percentage.T, cmap='viridis', annot=True, fmt='.1f', cbar=True, ax=ax)
-    sns.heatmap(heatmap_percentage.T, cmap='coolwarm', annot=True, fmt='.1f', cbar=True, ax=ax, linecolor='white')
+    sns.heatmap(heatmap_percentage.T, cmap='coolwarm', annot=True, annot_kws={"size": 6}, fmt='.1f', cbar=True, ax=ax, linecolor='white')
 
     ax.invert_yaxis()
 
@@ -700,6 +712,7 @@ def full_analyze_as38_202503(base_path: str):
     target_path = os.path.join(base_path, 'as38\\')
     experiment_start_cut_date = '2025-03-09T00:02:49+00:00'  # AS=38 experiment start time
     experiment_target_anonscore = 38
+    #experiment_target_anonscore = 10
     problematic_sessions = ['mix7 0.1btc | 3 cjs | txid: 3493c971d']  # Failed experiments to be removed from processing
     wallets_names = ['mix6', 'mix7']
 
@@ -875,6 +888,9 @@ def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, expe
     geometric_mean = np.exp(np.mean(np.log(anonscore_gains)))
     print(f'Anonscore (weighted) ratio gain per one coinjoin: median={round(np.median(anonscore_gains), 2)}, average={round(np.average(anonscore_gains), 2)}, geometric average={round(geometric_mean, 2)}, min={round(min(anonscore_gains), 2)}, max={round(max(anonscore_gains), 2)}')
 
+    # TODO: Probability of coin selection based on its current anonymity score
+
+
     # save graph
     mfig.plt.suptitle(f'as{experiment_target_anonscore}', fontsize=16)  # Adjust the fontsize and y position as needed
     mfig.plt.subplots_adjust(bottom=0.1, wspace=0.5, hspace=0.5)
@@ -963,6 +979,8 @@ if __name__ == "__main__":
     # prison_logs = analyse_prison_logs(target_path)
     # exit(42)
     base_path = 'c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\mn1\\'
+    #all25_stats, all25 = full_analyze_as25_202405(base_path)
+
     all38_stats, all38 = full_analyze_as38_202503(base_path)
     all25_stats, all25 = full_analyze_as25_202405(base_path)
     all25_1m_stats, all25_1m = full_analyze_as25_202405_only1m(base_path)
@@ -977,8 +995,8 @@ if __name__ == "__main__":
     # Plot both experiments into single image
 #    plot_ww2mix_stats(mfig, all25_stats, '25&38', '25', 'royalblue')
     plot_ww2mix_stats(mfig, all25_1m_stats, '25&38', '25', 'royalblue')
-    plot_ww2mix_stats(mfig, all25_2m_stats, '25&38', '25', 'darkblue')
     plot_ww2mix_stats(mfig, all38_stats, '25&38', '38', 'lightcoral')
+    plot_ww2mix_stats(mfig, all25_2m_stats, '25&38', '25', 'darkblue')
 
     # save graph
     mfig.plt.suptitle(f'Combined plots as25 and as38', fontsize=16)  # Adjust the fontsize and y position as needed
