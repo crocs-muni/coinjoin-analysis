@@ -56,6 +56,7 @@ SLOT_WIDTH_SECONDS = 3600   # hour
 LEGEND_FONT_SIZE = 'medium'
 
 
+
 class ClusterIndex:
     NEW_CLUSTER_INDEX = 0
 
@@ -718,11 +719,12 @@ def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_b
 
     # Plot distribution of input values (bar height corresponding to number of occurences)
     if ax_input_values_bar:
-        # For whirlpooll, use distribution of inputs to TX0 (which splits inputs to premix), otherwise inputs to coinjoins
+        # For whirlpool, use distribution of inputs to TX0 (which splits inputs to premix), otherwise inputs to coinjoins
         if tx0_inputs_values_in_slot and len(tx0_inputs_values_in_slot) > 0:
             input_data = tx0_inputs_values_in_slot
         else:
             input_data = inputs_values_in_slot
+        als.save_json_to_file_pretty(f'{mix_id}_inputs', input_data)
         flat_data = [item for index in input_data.keys() for item in input_data[index]]
         log_data = np.log(flat_data)
         hist, bins = np.histogram(log_data, bins=100)
@@ -957,6 +959,7 @@ def process_and_save_coinjoins(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
             data['coinjoins'][cjtx]['num_wallets_predicted'] = wallet_nums_predictions.get(cjtx, -100)
 
     # FIXME: Compute and update real addresses from lock scripts
+    # Problems: 1) Time consuming (not a big problem), 2) address resuse will break analysis later (need fix)
     #compute_real_addresses(data['coinjoins'])
 
     if SAVE_BASE_FILES_JSON:
@@ -1113,13 +1116,13 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
     return data
 
 
-def visualize_interval(mix_id: str, data: dict, mix_filename: str, premix_filename: str, target_save_path: str, last_stop_date_str: str, current_stop_date_str: str):
+def visualize_interval(mix_id: str, target_save_path: str, last_stop_date_str: str, current_stop_date_str: str):
     logging.info(f'Processing interval {last_stop_date_str} - {current_stop_date_str}')
 
     interval_path = os.path.join(target_save_path, f'{last_stop_date_str.replace(":", "-")}--{current_stop_date_str.replace(":", "-")}_unknown-static-100-1utxo')
     assert os.path.exists(interval_path), f'{interval_path} does not exist'
 
-    interval_data = als.load_json_from_file(os.path.join(interval_path, f'coinjoin_tx_info.json'))
+    interval_data = als.load_coinjoins_from_file(interval_path, None, True)
     events = filter_liquidity_events(interval_data)
 
     # Visualize coinjoins
@@ -1128,18 +1131,21 @@ def visualize_interval(mix_id: str, data: dict, mix_filename: str, premix_filena
 
 
 def visualize_intervals(mix_id: str, target_path: os.path, start_date: str, stop_date: str):
-    # Create directory structure with files split per month (around 1000 subsequent coinjoins)
-    # Load all coinjoins first, then filter based on intervals
+    # Process all intervals and visualize coinjoin statistics
+    # TODO: This code makes own separation and does not respect existing folders with intervals
     target_save_path = os.path.join(target_path, mix_id)
     if not os.path.exists(target_save_path):
         os.makedirs(target_save_path.replace('\\', '/'))
 
-    # Load base files from already stored json
-    logging.info(f'Loading {target_save_path}/coinjoin_tx_info.json ...')
+    # # Load base files from already stored json
+    # data = als.load_coinjoins_from_file(target_save_path, None, True)
+    #logging.info(f'{target_save_path}/coinjoin_tx_info.json loaded with {len(data["coinjoins"])} conjoins')
 
-    data = als.load_json_from_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'))
-
-    logging.info(f'{target_save_path}/coinjoin_tx_info.json loaded with {len(data["coinjoins"])} conjoins')
+    # Visualize all data
+    interval_data = als.load_coinjoins_from_file(target_save_path, None, True)
+    if len(interval_data["coinjoins"]) > 0:
+        events = filter_liquidity_events(interval_data)
+        visualize_coinjoins(interval_data, events, target_save_path, os.path.basename(target_save_path))
 
     # Find first day of a month when first coinjoin occured
     start_date_obj = precomp_datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S.%f")
@@ -1160,7 +1166,7 @@ def visualize_intervals(mix_id: str, target_path: os.path, start_date: str, stop
     current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M:%S")
 
     while current_stop_date_str <= last_date_str:
-        visualize_interval(mix_id, data, target_save_path, last_stop_date_str, current_stop_date_str)
+        visualize_interval(mix_id, target_save_path, last_stop_date_str, current_stop_date_str)
 
         # Move to the next month
         last_stop_date_str = current_stop_date_str
@@ -1168,6 +1174,7 @@ def visualize_intervals(mix_id: str, target_path: os.path, start_date: str, stop
         current_stop_date = current_stop_date + timedelta(days=32)
         current_stop_date = datetime(current_stop_date.year, current_stop_date.month, 1)
         current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M:%S")
+
 
 
 def process_and_save_single_interval(mix_id: str, data: dict, mix_protocol: MIX_PROTOCOL, target_path: os.path, start_date: str, stop_date: str):
@@ -1281,11 +1288,16 @@ def print_interval_data_stats(pool_stats: dict, client_stats: CoinMixInfo, resul
         #results[str(client_stats.pool_size)].append(ratio_all_inputs)
         results[str(client_stats.pool_size)].append(ratio_freeremix_inputs)
         present_probability = client_stats.num_mixes / len(pool_stats.keys()) * 100
+        est_queue_len = round(100 / (present_probability / client_stats.num_coins))
+        present_in_mixes_single_coin = round(present_probability / client_stats.num_coins, 2)
         logging.info(f'    present in % of mixes= {round(present_probability, 2)}%')
         logging.info(f'    estimated queue length = {round(100 / present_probability)} coins')
-        logging.info(f'    present in % of mixes (per single coin)= {round(present_probability / client_stats.num_coins, 2)}%')
-        logging.info(f'    estimated queue length (per single coin)= {round(100 / (present_probability / client_stats.num_coins))} coins')
+        logging.info(f'    present in % of mixes (per single coin)= {present_in_mixes_single_coin}%')
+        logging.info(f'    estimated queue length (per single coin)= {est_queue_len} coins')
 
+        #print('###################################')
+        SM.print(f'{round(client_stats.pool_size / SATS_IN_BTC, 3)} (DATE) & {len(pool_stats)} / {num_freeremix_inputs_pool} & {client_stats.num_coins} / {client_stats.num_mixes} / {present_in_mixes_single_coin}\\% & {est_queue_len}')
+        #print('###################################')
 
 def analyze_interval_data(interval_data, stats: CoinJoinStats, results: dict):
     if stats.cj_type == MIX_PROTOCOL.WHIRLPOOL:
@@ -1394,7 +1406,7 @@ def process_estimated_wallets_distribution(mix_id: str, target_path: Path, input
 
 
 def process_inputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_filename: str, save_outputs: bool= True):
-    logging.info(f'Processing {mix_id} process_inputs_distribution2()')
+    logging.info(f'Processing {mix_id} process_inputs_distribution()')
     # Load txs for all pools
     target_load_path = os.path.join(target_path, mix_id)
     data = als.load_coinjoins_from_file(target_load_path, None, True)
@@ -2160,7 +2172,7 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
             changing_liquidity_timecutoff_btc = [item / SATS_IN_BTC for item in changing_liquidity_timecutoff]
             remix_liquidity_btc = [item / SATS_IN_BTC for item in remix_liquidity]
             stay_liquidity_btc = [item / SATS_IN_BTC for item in stay_liquidity]
-            ax2.plot(changing_liquidity_btc, color='royalblue', alpha=0.6, label='Changing liquidity (cjtx centric, MIX_ENTER - MIX_LEAVE)')
+            ax2.plot(changing_liquidity_btc, color='royalblue', alpha=0.6, linewidth=2, label='Changing liquidity (cjtx centric, MIX_ENTER - MIX_LEAVE)')
             ax2.plot(stay_liquidity_btc, color='darkgreen', alpha=0.6, linestyle='--', label='Unmoved outputs (MIX_STAY)')
             #ax2.plot(remix_liquidity_btc, color='black', alpha=0.6, linestyle='--', label='Cummulative remix liquidity, MIX_ENTER - MIX_LEAVE - MIX_STAY')
             ax2.plot([0], [0], label=f'Average remix rate', color='brown', linewidth=1, linestyle='--', alpha=0.5)  # Fake plot to have correct legend record from other twinx
@@ -3541,9 +3553,12 @@ class DumplingsParseOptions:
     ANALYSIS_REMIXRATE = True
     ANALYSIS_LIQUIDITY = False
     ANALYSIS_BYBIT_HACK = False
+    ANALYSIS_OUTPUT_CLUSTERS = False
 
     target_base_path = ''
-    interval_stop_date = '2024-10-10 00:00:07.000'  # Last date to be analyzed, e.g., 2024-10-10 00:00:07.000
+    #interval_stop_date = '2024-10-10 00:00:07.000'  # Last date to be analyzed, e.g., 2024-10-10 00:00:07.000
+    now = datetime.now()
+    interval_stop_date = now.strftime('%Y-%m-%d %H:%M:%S.') + f'{int(now.microsecond / 1000):03d}'
 
     def __init__(self):
         self.default_values()
@@ -3625,6 +3640,7 @@ class DumplingsParseOptions:
         self.ANALYSIS_REMIXRATE = False
         self.ANALYSIS_LIQUIDITY = False
         self.ANALYSIS_BYBIT_HACK = False
+        self.ANALYSIS_OUTPUT_CLUSTERS = False
 
         self.PLOT_REMIXES_FLOWS = False
         self.PLOT_INTERMIX_FLOWS = False
@@ -4544,6 +4560,9 @@ if __name__ == "__main__":
 
     if op.ANALYSIS_LIQUIDITY:
         print_liquidity_summary_all(target_path)
+
+    if op.ANALYSIS_OUTPUT_CLUSTERS:
+        analyze_zksnacks_output_clusters('wasabi2', target_path)
 
     # TODO: Analyze difference of unmoved and dynamic liquidity for Whirlpool between 2024-04-24 and 2024-08-24 (impact of knowledge of whirlpool seizure). Show last 1 year.
 
