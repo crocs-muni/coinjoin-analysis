@@ -3526,6 +3526,7 @@ class CoinjoinType(Enum):
 
 
 class DumplingsParseOptions:
+    DEBUG = False
     # Limit analysis only to specific coinjoin type
     CJ_TYPE = CoinjoinType.WW2
     MIX_IDS = ""
@@ -3554,6 +3555,7 @@ class DumplingsParseOptions:
     ANALYSIS_LIQUIDITY = False
     ANALYSIS_BYBIT_HACK = False
     ANALYSIS_OUTPUT_CLUSTERS = False
+    ANALYSIS_WALLET_PREDICTION = False
 
     target_base_path = ''
     #interval_stop_date = '2024-10-10 00:00:07.000'  # Last date to be analyzed, e.g., 2024-10-10 00:00:07.000
@@ -3609,6 +3611,7 @@ class DumplingsParseOptions:
                         logging.warning(f"Unable to parse value '{value}' for key '{key}', ignored.")
 
     def default_values(self):
+        self.DEBUG = False
         self.CJ_TYPE = CoinjoinType.WW2
         # Sorting strategy for coinjoins in time.
         # If False, coinjoins are sorted using 'broadcast_time'
@@ -3641,6 +3644,7 @@ class DumplingsParseOptions:
         self.ANALYSIS_LIQUIDITY = False
         self.ANALYSIS_BYBIT_HACK = False
         self.ANALYSIS_OUTPUT_CLUSTERS = False
+        self.ANALYSIS_WALLET_PREDICTION = False
 
         self.PLOT_REMIXES_FLOWS = False
         self.PLOT_INTERMIX_FLOWS = False
@@ -3707,6 +3711,64 @@ def generate_normalized_json(base_path: str, base_txs: list):
         als.save_json_to_file_pretty(os.path.join(base_path, f'coinjoin_tx_info.json'), cjtxs)
 
 
+def estimate_wallet_prediction_factor(base_path, mix_id):
+    AVG_NUM_INPUTS, AVG_NUM_OUTPUTS = als.get_wallets_prediction_ratios(mix_id)
+
+    target_load_path = os.path.join(base_path, mix_id)
+    all_data = als.load_coinjoins_from_file(target_load_path, None, True)
+    sorted_cj_time = als.sort_coinjoins(all_data['coinjoins'], als.SORT_COINJOINS_BY_RELATIVE_ORDER)
+
+    logging.debug(f'estimate_wallet_prediction_factor() going to estimate input factors for {mix_id}')
+
+    X = np.array([len(all_data['coinjoins'][cj['txid']]['inputs']) for cj in sorted_cj_time])
+    Y = np.array([len(all_data['coinjoins'][cj['txid']]['outputs']) for cj in sorted_cj_time])
+
+    # Find heuristically the AVG_NUM_INPUTS and AVG_NUM_OUTPUTS to minimize difference between computed number of inputs and outputs
+    # Objective function to minimize
+    def objective_linear(params, x_window, y_window):
+        x1, y1 = params
+        return np.sum(np.abs(x_window / x1 - y_window / y1))
+
+    plt.close()
+
+    ratios_list_every_cjtx = [X[offset] / (Y[offset] / AVG_NUM_OUTPUTS) for offset in range(0, len(X))]  # Number of wallets in every
+    # for offset in range(0, len(X)):
+    #     AVG_NUM_INPUTS = X[offset] / (Y[offset] / AVG_NUM_OUTPUTS)
+    #     ratios_list_every_cjtx.append(AVG_NUM_INPUTS)
+    plt.plot(ratios_list_every_cjtx, label=f'Inputs factor (separately)', alpha=0.3, color='black')
+
+    ratios_list = []
+    WINDOW_LEN = 10
+    for offset in range(0, len(X) - WINDOW_LEN):
+        # Initial guess for x1 and y1
+        initial_guess = [1, 1]
+        x_window = X[offset:offset + WINDOW_LEN]
+        y_window = Y[offset:offset + WINDOW_LEN]
+        # Minimize the objective function
+        result = minimize(objective_linear, initial_guess, args=(x_window, y_window), method='Nelder-Mead')
+        # Optimal values
+        x1_opt, y1_opt = result.x
+        # AVG_NUM_OUTPUTS = AVG_NUM_INPUTS * (y1_opt / x1_opt)
+        AVG_NUM_INPUTS = AVG_NUM_OUTPUTS * (x1_opt / y1_opt)
+        ratios_list.append(AVG_NUM_INPUTS)
+    plt.plot(ratios_list, label=f'Inputs factor, window size={WINDOW_LEN}', alpha=0.5, color='black')
+    LARGE_AVG_WINDOW = 100
+    ratios_list_avg = als.compute_averages(ratios_list, LARGE_AVG_WINDOW)
+    plt.plot(range(LARGE_AVG_WINDOW, len(ratios_list_avg) + LARGE_AVG_WINDOW), ratios_list_avg, label=f'Inputs factor, AVG({LARGE_AVG_WINDOW})', color='red')
+    plt.xlabel('coinjoin in time')
+    plt.ylabel('number of wallets prediction factor (inputs)')
+    plt.title('Prediction factor for wallet numbers based on inputs to match outputs')
+    plt.legend()
+    save_path = os.path.join(target_load_path, f'{mix_id}_inputs_prediction_factor_dynamics.png')
+    plt.savefig(save_path, dpi=300)
+    logging.info(f'estimate_wallet_prediction_factor() saved into {save_path}')
+    #plt.show()
+    plt.close()
+
+    return ratios_list
+
+
+
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn")  # Set safer process spawning variant for multiprocessing
 
@@ -3737,12 +3799,15 @@ if __name__ == "__main__":
     target_path = os.path.join(op.target_base_path, 'Scanner')
     SM.print(f'Starting analysis of {target_path}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
 
-    # BUGBUG: Very recent WW2 coinjoins are not connected previous ones, having relative dist 0 => got into first month of WW2.
-    #   Fixed by not setting virtual block time too far away
     # WARNING: SW 100k pool does not match exactly mix_stay and active liqudity at the end - likely reason are neglected mining fees
 
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
+        estimate_wallet_prediction_factor(target_path, 'wasabi2_kruw')
+        estimate_wallet_prediction_factor(target_path, 'wasabi2_zksnacks')
+        estimate_wallet_prediction_factor(target_path, 'wasabi1')
+
+        exit(42)
         wasabi_plot_remixes('wasabi2_zksnacks', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_zksnacks'),
                             'coinjoin_tx_info.json', False, True, None,
                             None, op.PLOT_REMIXES_MULTIGRAPH, True)
@@ -4703,6 +4768,12 @@ if __name__ == "__main__":
 
     if op.ANALYSIS_OUTPUT_CLUSTERS:
         analyze_zksnacks_output_clusters('wasabi2', target_path)
+
+    if op.ANALYSIS_WALLET_PREDICTION:
+        estimate_wallet_prediction_factor(target_path, 'wasabi2_kruw')
+        estimate_wallet_prediction_factor(target_path, 'wasabi2_zksnacks')
+        estimate_wallet_prediction_factor(target_path, 'wasabi1')
+
 
     # TODO: Analyze difference of unmoved and dynamic liquidity for Whirlpool between 2024-04-24 and 2024-08-24 (impact of knowledge of whirlpool seizure). Show last 1 year.
 
