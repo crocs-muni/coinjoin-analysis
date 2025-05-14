@@ -190,9 +190,15 @@ def extract_txid_from_inout_string(inout_string):
         return inout_string[0], inout_string[1]
 
 
+def get_ratio(numerator, denominator) -> int:
+    if denominator != 0:
+        return round(numerator/float(denominator) * 100, 1)
+    else:
+        return 0
+
 def get_ratio_string(numerator, denominator) -> str:
     if denominator != 0:
-        return f'{numerator}/{denominator} ({round(numerator/float(denominator) * 100, 1)}%)'
+        return f'{numerator}/{denominator} ({get_ratio(numerator, denominator)}%)'
     else:
         return f'{numerator}/{0} (0%)'
 
@@ -657,7 +663,7 @@ def compute_cjtxs_relative_ordering(coinjoins):
     return coinjoins_relative_distance
 
 
-def print_liquidity_summary(coinjoins: dict):
+def print_liquidity_summary(coinjoins: dict, mix_id: str):
     total_inputs_len = [len(coinjoins[cjtx]['inputs']) for cjtx in coinjoins.keys()]
     total_inputs = [coinjoins[cjtx]['inputs'][input]['value'] for cjtx in coinjoins.keys() for input in coinjoins[cjtx]['inputs']]
     total_outputs_len = [len(coinjoins[cjtx]['outputs']) for cjtx in coinjoins.keys()]
@@ -706,7 +712,19 @@ def print_liquidity_summary(coinjoins: dict):
     total_mix_staying_number = len(total_mix_staying)
     total_mix_staying_value = sum(total_mix_staying)
 
+    def parse_broadcast_time(cjtx):
+        return precomp_datetime.strptime(coinjoins[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f")
+
+    # Find earliest and latest
+    earliest_cjtx = min(coinjoins, key=parse_broadcast_time)
+    latest_cjtx = max(coinjoins, key=parse_broadcast_time)
+
+    earliest_time = coinjoins[earliest_cjtx]['broadcast_time']
+    latest_time = coinjoins[latest_cjtx]['broadcast_time']
+
     # Print summary results
+    SM.print(f"  Earliest broadcast: {earliest_time} from {earliest_cjtx}")
+    SM.print(f"  Latest broadcast: {latest_time} from {latest_cjtx}")
     SM.print(f'  Total coinjoin transactions: {len(coinjoins.keys())}')
     SM.print(f'  Number of inputs: min={min(total_inputs_len)}, max={max(total_inputs_len)}, avg={np.average(total_inputs_len)}, median={np.median(total_inputs_len)}')
     SM.print(f'  Number of outputs: min={min(total_outputs_len)}, max={max(total_outputs_len)}, avg={np.average(total_outputs_len)}, median={np.median(total_outputs_len)}')
@@ -725,8 +743,17 @@ def print_liquidity_summary(coinjoins: dict):
     SM.print(f'  {total_mix_leaving_nonstd_value / SATS_IN_BTC} btc, total non-standard value leaving mix (not mixed)')
     SM.print(f'  {(total_mix_entering_value - total_mix_leaving_nonstd_value) / SATS_IN_BTC} btc, total fresh entering mix without non-standard leaving')
 
+    mix_id_latex = mix_id.replace('_', '\\_' )
+    SM.print(f'  \hline   '
+             + f'{mix_id_latex} & {earliest_time}--{latest_time} & '
+             + f'{len(coinjoins.keys())} & {total_mix_entering_number} / {round(total_mix_entering_value / SATS_IN_BTC, 1)}~\\bitcoinSymbol' + '{} & '
+             + f'{get_ratio(total_mix_remix_value, total_inputs_value)}\% & '
+             + f'{get_ratio(total_mix_staying_number, total_outputs_number - total_mix_remix_out_number)}\%, {round(total_mix_staying_value / SATS_IN_BTC, 1)}~\\bitcoinSymbol' + '{} & '
+             + f'{min(total_inputs_len)} / {round(np.average(total_inputs_len), 1)} / {max(total_inputs_len)} \\\\')
+
 
 def print_coordinators_counts(coord_txs: dict, min_print_txs: int):
+    print('*********')
     coord_tx_counts = {id: len(coord_txs[id]) for id in coord_txs.keys()}
     sorted_counts = sorted(coord_tx_counts, key=coord_tx_counts.get, reverse=True)
     # sorted_counts = coord_tx_counts.keys()
@@ -736,6 +763,7 @@ def print_coordinators_counts(coord_txs: dict, min_print_txs: int):
             print(f'  coord. {id}: {len(coord_txs[id])} txs')
     print(f'Total non-small coordinators (min={min_print_txs}): {len([1 for x in coord_txs.keys() if len(coord_txs[x]) >= min_print_txs])}')
     print(f'Theoretical total coordinators (incl. very small ones) detected: {len(coord_txs)}')
+    print('*********')
 
 
 def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins:dict = None, ww1_postmix_spend:dict = None, warn_if_not_found_in_postmix:bool = True):
@@ -916,7 +944,7 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
     save_json_to_file('tx_reordering_stats.json', difference_counts_str)
 
     # Print summary results
-    print_liquidity_summary(coinjoins)
+    print_liquidity_summary(coinjoins, '')
     SM.print(f'  {get_ratio_string(total_mix_entering, total_inputs)} Inputs entering mix / total inputs used by mix transactions')
     SM.print(f'  {get_ratio_string(total_mix_friends, total_inputs)} Friends inputs re-entering mix / total inputs used by mix transactions')
     SM.print(f'  {get_ratio_string(total_mix_leaving, total_outputs)} Outputs leaving mix / total outputs by mix transactions')
