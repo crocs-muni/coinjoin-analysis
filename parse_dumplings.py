@@ -2055,7 +2055,7 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
             mining_fee_rate_interval = als.plot_mining_fee_rates(f'{mix_id} {dir_name}', data, mining_fee_rates, ax3)
             mining_fee_rate.extend(mining_fee_rate_interval)
 
-            PLOT_NUM_WALLETS = True
+            PLOT_NUM_WALLETS = True if plot_only_intervals else False
             if PLOT_NUM_WALLETS:
                 ax3 = ax.twinx()
                 ax3.spines['right'].set_position(('outward', -28))  # Adjust position of the third axis
@@ -2201,7 +2201,7 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
             changing_liquidity_timecutoff_btc = [item / SATS_IN_BTC for item in changing_liquidity_timecutoff]
             remix_liquidity_btc = [item / SATS_IN_BTC for item in remix_liquidity]
             stay_liquidity_btc = [item / SATS_IN_BTC for item in stay_liquidity]
-            ax2.plot(changing_liquidity_btc, color='royalblue', alpha=0.6, linewidth=2, label='Changing liquidity (cjtx centric, MIX_ENTER - MIX_LEAVE)')
+            ax2.plot(changing_liquidity_btc, color='royalblue', alpha=0.6, linewidth=2, label='Interim liquidity (MIX_ENTER - MIX_LEAVE)')
             ax2.plot(stay_liquidity_btc, color='darkgreen', alpha=0.6, linestyle='--', label='Unmoved outputs (MIX_STAY)')
             #ax2.plot(remix_liquidity_btc, color='black', alpha=0.6, linestyle='--', label='Cummulative remix liquidity, MIX_ENTER - MIX_LEAVE - MIX_STAY')
             ax2.plot([0], [0], label=f'Average remix rate', color='brown', linewidth=1, linestyle='--', alpha=0.5)  # Fake plot to have correct legend record from other twinx
@@ -2210,10 +2210,10 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
             PLOT_CHAINANALYSIS_TIMECUTOFF = False
             if PLOT_CHAINANALYSIS_TIMECUTOFF:
                 ax2.plot(changing_liquidity_timecutoff_btc, color='blue', alpha=0.6,
-                         label='Changing liquidity (cjtx centric, MIX_ENTER - MIX_LEAVE, time cutoff)')
+                         label='Interim liquidity (MIX_ENTER - MIX_LEAVE, time cutoff)')
                 #ax2.plot([a - b for a, b in zip([item / SATS_IN_BTC for item in changing_liquidity_timecutoff], [item / SATS_IN_BTC for item in stay_liquidity_timecutoff])], color='blue', alpha=0.6, linestyle='-.', label='Actively remixed liquidity (Changing - Unmoved)')
 
-            ax2.plot([a - b for a, b in zip(changing_liquidity_btc, stay_liquidity_btc)], color='red', alpha=0.6, linestyle='-.', label='Actively remixed liquidity (Changing - Unmoved)')
+            ax2.plot([a - b for a, b in zip(changing_liquidity_btc, stay_liquidity_btc)], color='red', alpha=0.6, linestyle='-.', label='Actively remixed liquidity (Interim - Unmoved)')
             ax2.set_ylabel('btc in mix', color='royalblue')
             ax2.tick_params(axis='y', colors='royalblue')
 
