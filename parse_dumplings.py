@@ -744,18 +744,6 @@ def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_b
         ax_output_values_bar.set_xticks(xticks, np.round(np.exp(xticks), decimals=0), rotation=45, fontsize=6)
         ax_output_values_bar.set_xlim(0, max(log_data))
 
-        #
-        # output_values_count = Counter(flat_data)
-        # sorted_input_values_count = sorted(output_values_count.items(), key=lambda x: x[0])
-        # sorted_values, counts = zip(*sorted_input_values_count)
-        # #ax_output_values_bar.bar(sorted_values, counts)
-        #
-        # log_values = np.log(flat_data)
-        # ax_output_values_bar.hist(log_values, 100)
-        # ax_output_values_bar.set_xscale('log')
-        # # ax_output_values_bar.set_xscale('linear')
-        # #ax_output_values_bar.set_xticks(np.linspace(min(flat_data), max(flat_data), 30))
-
     # if ax_burn_time:
     #     flat_data = [item for index in inputs_burned_time_in_slot.keys() for item in inputs_burned_time_in_slot[index]]
     #     ax_burn_time.bar(flat_data)
@@ -1424,19 +1412,19 @@ def process_inputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target_
         plt.ylabel(f'Number of inputs')
         plt.show()
 
-    if mix_protocol == MIX_PROTOCOL.WASABI2:
-        # zksnacks coordinator
-        zksnacks_cjtxs = {key: value for key, value in data["coinjoins"].items() if data["coinjoins"][key]['broadcast_time'] < '2024-06-02 00:00:07.000'}
-        inputs_info, inputs = extract_inputs_distribution(mix_id, target_path, tx_filename, zksnacks_cjtxs, save_outputs, '_zksnacks')
-        plot_distribution(inputs)
-        # Other coordinators
-        # BUGBUG: We othesr slightly overlap with zksnacks
-        other_cjtxs = {key: value for key, value in data["coinjoins"].items() if data["coinjoins"][key]['broadcast_time'] > '2024-06-01 00:00:07.000'}
-        inputs_info, inputs = extract_inputs_distribution(mix_id, target_path, tx_filename, other_cjtxs, save_outputs, '_others')
-        plot_distribution(inputs)
-    else:
-        inputs_info, inputs = extract_inputs_distribution(mix_id, target_path, tx_filename, data["coinjoins"], save_outputs, '')
-        plot_distribution(inputs)
+    # if mix_protocol == MIX_PROTOCOL.WASABI2:
+    #     # zksnacks coordinator
+    #     zksnacks_cjtxs = {key: value for key, value in data["coinjoins"].items() if data["coinjoins"][key]['broadcast_time'] < '2024-06-02 00:00:07.000'}
+    #     inputs_info, inputs = extract_inputs_distribution(mix_id, target_path, tx_filename, zksnacks_cjtxs, save_outputs, '_zksnacks')
+    #     plot_distribution(inputs)
+    #     # Other coordinators
+    #     # BUGBUG: We othesr slightly overlap with zksnacks
+    #     other_cjtxs = {key: value for key, value in data["coinjoins"].items() if data["coinjoins"][key]['broadcast_time'] > '2024-06-01 00:00:07.000'}
+    #     inputs_info, inputs = extract_inputs_distribution(mix_id, target_path, tx_filename, other_cjtxs, save_outputs, '_others')
+    #     plot_distribution(inputs)
+    # else:
+    inputs_info, inputs = extract_inputs_distribution(mix_id, target_path, tx_filename, data["coinjoins"], save_outputs, '')
+    plot_distribution(inputs)
 
 
 def extract_inputs_distribution(mix_id: str, target_path: Path, tx_filename: str, txs: dict, save_outputs = False, file_spec: str = ''):
@@ -1451,6 +1439,46 @@ def extract_inputs_distribution(mix_id: str, target_path: Path, tx_filename: str
         als.save_json_to_file_pretty(os.path.join(target_path, mix_id, f'{mix_id}_inputs_distribution{file_spec}.json'), inputs_info)
 
     return inputs_info, inputs
+
+
+
+def process_outputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_filename: str, save_outputs: bool= True):
+    logging.info(f'Processing {mix_id} process_outputs_distribution()')
+    # Load txs for all pools
+    target_load_path = os.path.join(target_path, mix_id)
+    data = als.load_coinjoins_from_file(target_load_path, None, True)
+
+    #outputs_info, outputs_noremix_stddenom, outputs_noremix_all, outputs_all =
+    extract_outputs_distribution(mix_id, target_path, tx_filename, data["coinjoins"], save_outputs, '')
+    #plot_distribution(outputs_all)
+
+
+def extract_outputs_distribution(mix_id: str, target_path: Path, tx_filename: str, txs: dict, save_outputs = False, file_spec: str = ''):
+    outputs_noremix_stddenom = [txs[txid]['outputs'][index]['value'] for txid in txs.keys() for index in txs[txid]['outputs'].keys()
+              if 'mix_event_type' in txs[txid]['outputs'][index].keys() and
+              txs[txid]['outputs'][index]['mix_event_type'] in [MIX_EVENT_TYPE.MIX_LEAVE.name, MIX_EVENT_TYPE.MIX_STAY.name] and
+               txs[txid]['outputs'][index]['is_standard_denom'] == True]
+    outputs_noremix_all = [txs[txid]['outputs'][index]['value'] for txid in txs.keys() for index in txs[txid]['outputs'].keys()
+              if 'mix_event_type' in txs[txid]['outputs'][index].keys() and
+              txs[txid]['outputs'][index]['mix_event_type'] in [MIX_EVENT_TYPE.MIX_LEAVE.name, MIX_EVENT_TYPE.MIX_STAY.name]]
+    outputs_all = [txs[txid]['outputs'][index]['value'] for txid in txs.keys() for index in txs[txid]['outputs'].keys()]
+
+    outputs_noremix_stddenom_distrib = dict(sorted(Counter(outputs_noremix_stddenom).items(), key=lambda item: (-item[1], item[0])))
+    outputs_noremix_all_distrib = dict(sorted(Counter(outputs_noremix_all).items(), key=lambda item: (-item[1], item[0])))
+    outputs_all_distrib = dict(sorted(Counter(outputs_all).items(), key=lambda item: (-item[1], item[0])))
+    outputs_info = {'mix_id': mix_id, 'path': tx_filename,
+                    'outputs_noremix_stddenom_distrib': outputs_noremix_stddenom_distrib,
+                    'outputs_noremix_all_distrib': outputs_noremix_all_distrib,
+                    'outputs_all_distrib': outputs_all_distrib}
+
+    logging.info(f'  Distribution extracted')
+    logging.info(f'    total outputs_noremix_stddenom_distrib={len(outputs_info["outputs_noremix_stddenom_distrib"])} different output values found')
+    logging.info(f'    total outputs_noremix_all_distrib={len(outputs_info["outputs_noremix_all_distrib"])} different output values found')
+    logging.info(f'    total outputs_all_distrib={len(outputs_info["outputs_all_distrib"])} different output values found')
+    if save_outputs:
+        als.save_json_to_file_pretty(os.path.join(target_path, mix_id, f'{mix_id}_outputs_distribution{file_spec}.json'), outputs_info)
+
+    return outputs_info, outputs_noremix_stddenom, outputs_noremix_all, outputs_all
 
 
 def analyze_address_reuse(target_path):
@@ -3174,6 +3202,17 @@ def print_remix_stats(target_base_path):
 
 def print_liquidity_summary_all(target_path: str):
     #
+    # WW2
+    #
+    coords = [('wasabi2', 'zksnacks'), ('wasabi2', 'others'), ('wasabi2', 'kruw'), ('wasabi2', 'gingerwallet'),
+              ('wasabi2', 'opencoordinator'), ('wasabi2', 'coinjoin_nl'), ('wasabi2', 'wasabicoordinator'),
+              ('wasabi2', 'mega'), ('wasabi2', 'btip')]
+    for coord in coords:
+        cjtx_coord = als.load_coinjoins_from_file(os.path.join(target_path, f'{coord[0]}_{coord[1]}'), None, True)
+        SM.print(f'{coord[0]}_{coord[1]}')
+        als.print_liquidity_summary(cjtx_coord["coinjoins"], f'{coord[0]}_{coord[1]}')
+
+    #
     # WW1
     #
     data = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi1'), None, True)
@@ -4746,13 +4785,18 @@ if __name__ == "__main__":
         # TODO: Compute input / output distributions from processed coinjoin_tx_info.json files including removal of false positives
         # Produce figure with distribution of diffferent pools merged
         if op.CJ_TYPE == CoinjoinType.WW1:
-            process_inputs_distribution('Wasabi1', MIX_PROTOCOL.WASABI1,  target_path, 'WasabiCoinJoins.txt', True)
+            process_inputs_distribution('wasabi1', MIX_PROTOCOL.WASABI1,  target_path, 'WasabiCoinJoins.txt', True)
+            process_outputs_distribution('wasabi1', MIX_PROTOCOL.WASABI1,  target_path, 'WasabiCoinJoins.txt', True)
+
         if op.CJ_TYPE == CoinjoinType.SW:
-            #process_inputs_distribution('whirlpool_tx0_test', MIX_PROTOCOL.WHIRLPOOL, target_path, 'sam_premix_test.txt', True)
             process_inputs_distribution_whirlpool('whirlpool', MIX_PROTOCOL.WHIRLPOOL,  target_path, 'SamouraiTx0s.txt', True)
+            process_outputs_distribution('whirlpool', MIX_PROTOCOL.WHIRLPOOL, target_path, 'SamouraiTx0s.txt', True)
         if op.CJ_TYPE == CoinjoinType.WW2:
-            process_inputs_distribution('wasabi2', MIX_PROTOCOL.WASABI2,  target_path, 'Wasabi2CoinJoins.txt', True)
-            #process_inputs_distribution('Wasabi2', MIX_PROTOCOL.WASABI2,  target_path, 'Wasabi2CoinJoins.txt', True)
+            for pool in ['wasabi2_zksnacks', 'wasabi2_others']:
+                process_inputs_distribution(pool, MIX_PROTOCOL.WASABI2,  target_path, 'Wasabi2CoinJoins.txt', True)
+                process_outputs_distribution(pool, MIX_PROTOCOL.WASABI2,  target_path, 'Wasabi2CoinJoins.txt', True)
+
+
 
     #
     # Analyze address reuse in all mixes
