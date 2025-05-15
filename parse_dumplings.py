@@ -3750,6 +3750,10 @@ def generate_normalized_json(base_path: str, base_txs: list):
         als.save_json_to_file_pretty(os.path.join(base_path, f'coinjoin_tx_info.json'), cjtxs)
 
 
+def list_get(lst, idx, default=None):
+    return lst[idx] if -len(lst) <= idx < len(lst) else default
+
+
 def estimate_wallet_prediction_factor(base_path, mix_id):
     AVG_NUM_INPUTS, AVG_NUM_OUTPUTS = als.get_wallets_prediction_ratios(mix_id)
 
@@ -3759,8 +3763,8 @@ def estimate_wallet_prediction_factor(base_path, mix_id):
 
     logging.debug(f'estimate_wallet_prediction_factor() going to estimate input factors for {mix_id}')
 
-    X = np.array([len(all_data['coinjoins'][cj['txid']]['inputs']) for cj in sorted_cj_time])
-    Y = np.array([len(all_data['coinjoins'][cj['txid']]['outputs']) for cj in sorted_cj_time])
+    num_all_inputs = np.array([len(all_data['coinjoins'][cj['txid']]['inputs']) for cj in sorted_cj_time])
+    num_all_outputs = np.array([len(all_data['coinjoins'][cj['txid']]['outputs']) for cj in sorted_cj_time])
 
     # Find heuristically the AVG_NUM_INPUTS and AVG_NUM_OUTPUTS to minimize difference between computed number of inputs and outputs
     # Objective function to minimize
@@ -3768,41 +3772,106 @@ def estimate_wallet_prediction_factor(base_path, mix_id):
         x1, y1 = params
         return np.sum(np.abs(x_window / x1 - y_window / y1))
 
-    plt.close()
+    fig_single, ax = plt.subplots(figsize=(20, 10))  # Figure for single plot
 
-    ratios_list_every_cjtx = [X[offset] / (Y[offset] / AVG_NUM_OUTPUTS) for offset in range(0, len(X))]  # Number of wallets in every
-    # for offset in range(0, len(X)):
-    #     AVG_NUM_INPUTS = X[offset] / (Y[offset] / AVG_NUM_OUTPUTS)
-    #     ratios_list_every_cjtx.append(AVG_NUM_INPUTS)
-    plt.plot(ratios_list_every_cjtx, label=f'Inputs factor (separately)', alpha=0.3, color='black')
+    ratios_list_every_cjtx = [num_all_inputs[offset] / (num_all_outputs[offset] / AVG_NUM_OUTPUTS) for offset in range(0, len(num_all_inputs))]  # Number of wallets in every
+    ax.plot(ratios_list_every_cjtx, label=f'Inputs/outputs-based ratio (every coinjoin)', alpha=0.3, color='black')
 
     ratios_list = []
     WINDOW_LEN = 10
-    for offset in range(0, len(X) - WINDOW_LEN):
+    for offset in range(0, len(num_all_inputs) - WINDOW_LEN):
         # Initial guess for x1 and y1
         initial_guess = [1, 1]
-        x_window = X[offset:offset + WINDOW_LEN]
-        y_window = Y[offset:offset + WINDOW_LEN]
+        x_window = num_all_inputs[offset:offset + WINDOW_LEN]
+        y_window = num_all_outputs[offset:offset + WINDOW_LEN]
         # Minimize the objective function
         result = minimize(objective_linear, initial_guess, args=(x_window, y_window), method='Nelder-Mead')
         # Optimal values
         x1_opt, y1_opt = result.x
-        # AVG_NUM_OUTPUTS = AVG_NUM_INPUTS * (y1_opt / x1_opt)
         AVG_NUM_INPUTS = AVG_NUM_OUTPUTS * (x1_opt / y1_opt)
         ratios_list.append(AVG_NUM_INPUTS)
-    plt.plot(ratios_list, label=f'Inputs factor, window size={WINDOW_LEN}', alpha=0.5, color='black')
+    ax.plot(ratios_list, label=f'L1 minimization, window={WINDOW_LEN}', alpha=0.5, color='black')
     LARGE_AVG_WINDOW = 100
     ratios_list_avg = als.compute_averages(ratios_list, LARGE_AVG_WINDOW)
-    plt.plot(range(LARGE_AVG_WINDOW, len(ratios_list_avg) + LARGE_AVG_WINDOW), ratios_list_avg, label=f'Inputs factor, AVG({LARGE_AVG_WINDOW})', color='red')
-    plt.xlabel('coinjoin in time')
-    plt.ylabel('number of wallets prediction factor (inputs)')
-    plt.title('Prediction factor for wallet numbers based on inputs to match outputs')
-    plt.legend()
-    save_path = os.path.join(target_load_path, f'{mix_id}_inputs_prediction_factor_dynamics.png')
-    plt.savefig(save_path, dpi=300)
-    logging.info(f'estimate_wallet_prediction_factor() saved into {save_path}')
+    ax.plot(range(LARGE_AVG_WINDOW, len(ratios_list_avg) + LARGE_AVG_WINDOW), ratios_list_avg,
+             label=f'Average of L1 minimization, window={LARGE_AVG_WINDOW}', color='blue', alpha=0.5, linewidth=2)
+    ax.set_xlabel('coinjoin in time')
+    ax.set_ylabel('prediction factor')
+
+    #
+    # Compute number of predicted wallets
+    COLOR_WALLETS_INPUTS = 'red'
+    COLOR_WALLETS_OUTPUTS = 'green'
+    predicted_wallets_list_inputs = []
+    predicted_wallets_list_outputs = []
+    # Select ratios to use
+    #used_prediction_ratios = ratios_list_every_cjtx
+    used_prediction_ratios = ratios_list
+    #used_prediction_ratios = ratios_list_avg
+
+    last_usable_factor = used_prediction_ratios[0]
+    for i in range(0, len(sorted_cj_time)):
+        # Use computed prediction factor if available
+        if list_get(used_prediction_ratios, i, -1) != -1:
+            predicted_num_wallets = int(round(num_all_inputs[i] / used_prediction_ratios[i]))
+            last_usable_factor = ratios_list[i]
+        else:
+            # Last last known if factor no longer computed (due to size of average window)
+            predicted_num_wallets = int(round(num_all_inputs[i] / last_usable_factor))
+        predicted_wallets_list_inputs.append(predicted_num_wallets)
+        predicted_wallets_list_outputs.append(int(round(num_all_outputs[i] / AVG_NUM_OUTPUTS)))
+
+    predicted_wallets_inputs_avg = als.compute_averages(predicted_wallets_list_inputs, LARGE_AVG_WINDOW)
+    predicted_wallets_outputs_avg = als.compute_averages(predicted_wallets_list_outputs, LARGE_AVG_WINDOW)
+    ax2 = ax.twinx()
+    ax2.plot(predicted_wallets_list_inputs,
+             label=f'Predicted # wallets (inputs)', color=COLOR_WALLETS_INPUTS, alpha=0.2, linewidth=1)
+    ax2.plot(predicted_wallets_inputs_avg,
+             label=f'Average predicted # wallets (inputs), window={LARGE_AVG_WINDOW}', color=COLOR_WALLETS_INPUTS, alpha=0.7, linewidth=1)
+    ax2.plot(predicted_wallets_outputs_avg,
+             label=f'Average predicted # wallets (outputs), window={LARGE_AVG_WINDOW}', color=COLOR_WALLETS_OUTPUTS, alpha=0.7, linewidth=1)
+
+    x = range(0, len(predicted_wallets_inputs_avg))
+    #x = range(LARGE_AVG_WINDOW // 2, len(predicted_wallets_inputs_avg) + LARGE_AVG_WINDOW // 2)
+    predicted_wallets_inputs_avg = np.full_like(x, predicted_wallets_inputs_avg)
+    predicted_wallets_outputs_avg = np.full_like(x, predicted_wallets_outputs_avg)
+    ax2.fill_between(x, predicted_wallets_inputs_avg, predicted_wallets_outputs_avg,
+                    where=predicted_wallets_inputs_avg>predicted_wallets_outputs_avg, interpolate=True,
+                    color=COLOR_WALLETS_INPUTS, alpha=0.3)
+    ax2.fill_between(x, predicted_wallets_inputs_avg, predicted_wallets_outputs_avg,
+                    where=predicted_wallets_outputs_avg>predicted_wallets_inputs_avg, interpolate=True,
+                    color=COLOR_WALLETS_OUTPUTS, alpha=0.3)
+    # Artificial entry with same settings to have legend complete on ax
+    ax.plot(predicted_wallets_list_inputs[0], label=f'Predicted # wallets (inputs)', color=COLOR_WALLETS_INPUTS, alpha=0.2, linewidth=1)
+    ax.plot(predicted_wallets_list_outputs[0], label=f'Predicted # wallets (outputs)', color=COLOR_WALLETS_OUTPUTS, alpha=0.2, linewidth=1)
+    ax.plot(predicted_wallets_inputs_avg[0],
+             label=f'Average predicted # wallets, window={LARGE_AVG_WINDOW}', color=COLOR_WALLETS_INPUTS, alpha=0.7, linewidth=1)
+    ax.plot(predicted_wallets_outputs_avg[0],
+             label=f'Average predicted # wallets (outputs), window={LARGE_AVG_WINDOW}', color=COLOR_WALLETS_OUTPUTS, alpha=0.7, linewidth=1)
+
+    ax2.set_ylabel('number of wallets', color=COLOR_WALLETS_INPUTS, alpha=0.5)
+    ax2.tick_params(axis='y', colors=COLOR_WALLETS_INPUTS)
+
+    # Finalize graph
+    ax.set_title(f'Wallets prediction factor variability: {mix_id}')
+    ax.legend()
+    save_path = os.path.join(target_load_path, f'{mix_id}_inputs_prediction_factor_dynamics')
+    plt.savefig(f'{save_path}.png', dpi=300)
+    plt.savefig(f'{save_path}.pdf', dpi=300)
+    logging.info(f'estimate_wallet_prediction_factor() saved into {save_path}.png')
     #plt.show()
     plt.close()
+
+    predicted_wallets = []
+    last_usable_factor = used_prediction_ratios[len(used_prediction_ratios) - 1]
+    for i in range(0, len(sorted_cj_time)):
+        predicted_wallets.append({'txid': sorted_cj_time[i]['txid'],
+                                  'num_wallets': predicted_wallets_list_inputs[i],
+                                  'separate_ctx_input_factor': list_get(ratios_list_every_cjtx, i, -1),
+                                  f'L1_{WINDOW_LEN}_input_factor': list_get(ratios_list, i, last_usable_factor),
+                                  f'L1_{WINDOW_LEN}_avg_{LARGE_AVG_WINDOW}_input_factor': list_get(ratios_list_avg, i, last_usable_factor)
+                                  })
+    als.save_json_to_file_pretty(f'{save_path}.json', {'mix_id':mix_id, 'predictions': predicted_wallets})
 
     return ratios_list
 
