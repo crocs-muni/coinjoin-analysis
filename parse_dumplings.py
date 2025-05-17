@@ -3388,13 +3388,17 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
     cjtxs = als.load_coinjoins_from_file(target_path, None, True)["coinjoins"]
     ordering = als.compute_cjtxs_relative_ordering(cjtxs)
     sorted_cjtxs = sorted(ordering, key=ordering.get)
-    ground_truth_known_coord_txs = als.load_json_from_file(os.path.join(target_path, 'txid_coord.json'))  # Load known coordinators
-    # Transform dictionary to {'coord': [cjtstxs]} format
-    transformed_dict = defaultdict(list)
-    for key, value in ground_truth_known_coord_txs.items():
-        transformed_dict[value].append(key)
-    initial_known_txs = dict(transformed_dict)
-    als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_t.json'), initial_known_txs)
+
+    if os.path.exists(os.path.join(target_path, 'txid_coord_t.json')):
+        initial_known_txs = als.load_json_from_file(os.path.join(target_path, 'txid_coord_t.json'))  # Load known coordinators
+    else:
+        ground_truth_known_coord_txs = als.load_json_from_file(os.path.join(target_path, 'txid_coord.json'))  # Load known coordinators
+        # Transform dictionary to {'coord': [cjtstxs]} format
+        transformed_dict = defaultdict(list)
+        for key, value in ground_truth_known_coord_txs.items():
+            transformed_dict[value].append(key)
+        initial_known_txs = dict(transformed_dict)
+        als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_t.json'), initial_known_txs)
 
     # Establish coordinator ids using two-pass process:
     # 1. First pass: Count dominant already existing coordinator for cjtx inputs.
@@ -3453,33 +3457,18 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
                 if input_dominant_coord[0] != UNASSIGNED_COORD and output_dominant_coord[0] != UNASSIGNED_COORD:
                     print(f'  candidate for merger: {input_dominant_coord[0]} and {output_dominant_coord[0]}')
                     mergers[input_dominant_coord[0]].append(output_dominant_coord[0])
+
+
     print('Going to print detected candidates for merging. The merging shall be considered when multiple cases '
           'of same merge candidates are shown. '
           'E.g. {0: [1, 1], 1: [3, 3, 3, 3, 10], 2: [], 3: [1, 1, 1, 1], 4: [1], means that 1 and 3 shall be merged, while 1 and 4 likely not.')
     print(mergers)
     als.print_coordinators_counts(coord_txs, MIN_COORD_CJTXS)
-
     als.print_coordinators_counts(coord_txs, 2)
 
     DO_MERGING = False
+    merged_coord_cjtxs_list = {}
     if DO_MERGING:
-        # def complete_sets(d):
-        #     change_detected = False
-        #     # Iterate over each key-value pair in the dictionary
-        #     for key, value_set in d.items():
-        #         # For each value in the set of the current key
-        #         for value in value_set:
-        #             # Add the key to the set of the value, making it symmetrical
-        #             if key not in d[value]:
-        #                 d[value].add(key)
-        #                 change_detected = True
-        #     return change_detected
-        # Make mergers complete
-        # change_detected = True
-        # while change_detected:
-        #     change_detected = complete_sets(mergers)
-        #     print(mergers)
-
         def complete_bidirectional_closure(graph):
             # Function to perform DFS and return all reachable nodes from a given node
             def dfs(node, visited):
@@ -3505,12 +3494,16 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
                         graph[node] = list(reachable)
 
             return graph
-        #mergers = complete_bidirectional_closure(mergers)
+
+        # BUGBUG: this seems to merge too aggresively
+        # mergers = complete_bidirectional_closure(mergers)
 
         # Manually filtered merge:
         #mergers = {0: [0], 1: [1, 3, 10], 2: [2], 3: [3], 4: [4], 5: [5], 6: [6], 7: [7, 8, 9]}
         #print(f'Manual merges={mergers}')
-        mergers = {0: [0], 1: [1, 3, 10], 2: [2], 3: [3], 4: [4], 5: [5], 6: [6], 7: [7, 8, 9]}
+        #mergers = {0: [0], 1: [1, 3, 10], 2: [2], 3: [3], 4: [4], 5: [5], 6: [6], 7: [7, 8, 9]}
+        mergers = {0: [0, 35], 1: [1, 30], 2: [2], 3: [3], 4: [4], 5: [5], 6: [6, 39], 7: [7, 8, 9], 230: [230]}
+        # wasabi2_opencoordinator is 2 and is good
 
         # Now merge
         merged_coord_cjtxs = {}
@@ -3521,6 +3514,10 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
                 for other_coord_id in mergers[coord_id]:
                     merged_coord_cjtxs[coord_id].update([tx for tx in coord_txs[other_coord_id]])
         als.print_coordinators_counts(merged_coord_cjtxs, MIN_COORD_CJTXS)
+
+        # Turn from set to list
+        for coord_id in merged_coord_cjtxs.keys():
+            merged_coord_cjtxs_list[coord_id] = list(merged_coord_cjtxs[coord_id])
 
     # Detect coordinators
     # known_txs = {'kruw': ['0ec761ff2492659c86b416395d00bb7bd33d63ff0e9cbb896bf0acb3cf30456c',
@@ -3553,10 +3550,16 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
     # coord_txs = sorted_items
 
     # Save discovered coordinators
-    als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_discovered.json'), coord_txs)
+    if DO_MERGING:
+        coord_txs_to_save = merged_coord_cjtxs_list
+    else:
+        coord_txs_to_save = coord_txs
+
+    als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_discovered.json'), coord_txs_to_save)
     for coord_id in pair_coords.keys():
-        coord_txs[pair_coords[coord_id]] = coord_txs.pop(coord_id)
-    als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_discovered_renamed.json'), coord_txs)
+        if coord_id in coord_txs_to_save:
+            coord_txs_to_save[pair_coords[coord_id]] = coord_txs_to_save.pop(coord_id)
+    als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_discovered_renamed.json'), coord_txs_to_save)
 
     PRINT_FINAL = False
     if PRINT_FINAL:
