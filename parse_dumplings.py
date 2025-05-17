@@ -3003,6 +3003,49 @@ def wasabi2_recompute_inputs_outputs_other_pools(selected_coords: list, target_p
     return None
 
 
+def wasabi1_extract_other_pools(selected_coords: list, data: dict, target_path: str, interval_start_date: str, interval_stop_date: str, txid_coord_discovered: dict):
+    """
+    Takes dictionary with all post-zksnacks WW1 coinjoins and split it to separate coordinators.
+    :param selected_coords: list of coordinator names which shall be separated
+    :param data: Dictionary will all coinjoins for all coordinators
+    :param target_path: directory where to store jsons with separated coordinators
+    :param interval_stop_date: the last date to process (all coinjoins after it are ignored)
+    :param txid_coord_discovered: optional list with mapping between coordinators and their cjtxs
+    :return: dictionary with basic information regarding separated cooridnators
+    """
+    logging.debug('wasabi1_extract_other_pools() started')
+    interval_start_date_others = '2024-06-01 00:00:00.000'
+
+    def save_coinjoins_create_folder(cjtx_coord: dict, target_path: str, coord_full_name: str):
+        target_save_path = os.path.join(target_path, coord_full_name)
+        if not os.path.exists(target_save_path):
+            os.makedirs(target_save_path.replace('\\', '/'))
+        als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_coord})
+
+    split_pools_info = {}
+    # Extract selected post-zksnacks coordinators
+    # Note: For now, we simply split based on date
+
+    coord_full_name = f'wasabi1_zksnacks'
+    cjtx_coord_zknacks = {cjtx: data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys()
+                  if data["coinjoins"][cjtx]['broadcast_time'] < interval_start_date_others}
+    save_coinjoins_create_folder(cjtx_coord_zknacks, target_path, coord_full_name)
+    logging.info(f'Total cjtxs extracted for pool {coord_full_name}: {len(cjtx_coord_zknacks)}')
+    split_pools_info[coord_full_name] = {'pool_name': coord_full_name, 'start_date': interval_start_date,
+            'stop_date': interval_start_date_others,
+            'num_cjtxs': len(cjtx_coord_zknacks)}
+
+    coord_full_name = f'wasabi1_others'
+    cjtx_coord_others = {cjtx: data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys()
+                  if data["coinjoins"][cjtx]['broadcast_time'] >= interval_start_date_others}
+    save_coinjoins_create_folder(cjtx_coord_others, target_path, coord_full_name)
+    logging.info(f'Total cjtxs extracted for pool {coord_full_name}: {len(cjtx_coord_others)}')
+    split_pools_info[coord_full_name] = {'pool_name': coord_full_name, 'start_date': interval_start_date_others,
+            'stop_date': interval_stop_date,
+            'num_cjtxs': len(cjtx_coord_others)}
+
+    return split_pools_info
+
 def backup_log_files(target_path: str):
     """
     This code runs before exiting
@@ -3909,8 +3952,14 @@ if __name__ == "__main__":
 
     # WARNING: SW 100k pool does not match exactly mix_stay and active liqudity at the end - likely reason are neglected mining fees
 
-    DEBUG = False
-    if DEBUG:
+    #op.DEBUG = False
+    if op.DEBUG:
+        print('DEBUGING TIME!!!')
+        wasabi_plot_remixes('wasabi1_others', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1_others'),
+                            'coinjoin_tx_info.json', True, False, None,
+                            None, True, False)
+        exit(42)
+
         estimate_wallet_prediction_factor(target_path, 'wasabi2_kruw')
         estimate_wallet_prediction_factor(target_path, 'wasabi2_zksnacks')
         estimate_wallet_prediction_factor(target_path, 'wasabi1')
@@ -4769,7 +4818,23 @@ if __name__ == "__main__":
                                                               'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None,
                                                               SAVE_BASE_FILES_JSON, True)
                 logging.info(f'done for {pool_name}) *****************************')
-        else:
+
+        if op.CJ_TYPE == CoinjoinType.WW1:
+            data = als.load_json_from_file(os.path.join(target_path, 'wasabi1', 'coinjoin_tx_info.json'))
+            coord_tx_mapping = None
+            selected_coords = ['zksnacks', 'others']
+            split_pool_info = wasabi1_extract_other_pools(selected_coords, data, target_path, '2018-07-19 01:38:07.000', op.interval_stop_date, coord_tx_mapping)
+            # Perform splitting into month intervals for all processed coordinators
+            for pool_name in split_pool_info.keys():
+                logging.info(f'Going to process_and_save_intervals_filter({pool_name}) *****************************')
+                pool_data = process_and_save_intervals_filter(pool_name, MIX_PROTOCOL.WASABI1, target_path,
+                                                              split_pool_info[pool_name]['start_date'],
+                                                              split_pool_info[pool_name]['stop_date'],
+                                                              'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', None,
+                                                              SAVE_BASE_FILES_JSON, True)
+                logging.info(f'done for {pool_name}) *****************************')
+
+        if op.CJ_TYPE == CoinjoinType.SW:
             logging.error('Unsupported CJ_TYPE for SPLIT_COORDINATORS')
             exit(-1)
 
