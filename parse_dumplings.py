@@ -3818,10 +3818,10 @@ def estimate_wallet_prediction_factor(base_path, mix_id):
         x1, y1 = params
         return np.sum(np.abs(x_window / x1 - y_window / y1))
 
-    fig_single, ax = plt.subplots(figsize=(20, 10))  # Figure for single plot
+    fig_single, ax = plt.subplots(figsize=(10, 4))  # Figure for single plot
 
     ratios_list_every_cjtx = [num_all_inputs[offset] / (num_all_outputs[offset] / AVG_NUM_OUTPUTS) for offset in range(0, len(num_all_inputs))]  # Number of wallets in every
-    ax.plot(ratios_list_every_cjtx, label=f'Inputs/outputs-based ratio (every coinjoin)', alpha=0.3, color='black')
+    ax.plot(ratios_list_every_cjtx, label=f'Inputs/outputs-based factor (every coinjoin)', alpha=0.3, color='black')
 
     ratios_list = []
     WINDOW_LEN = 10
@@ -3840,14 +3840,14 @@ def estimate_wallet_prediction_factor(base_path, mix_id):
     LARGE_AVG_WINDOW = 100
     ratios_list_avg = als.compute_averages(ratios_list, LARGE_AVG_WINDOW)
     ax.plot(range(LARGE_AVG_WINDOW, len(ratios_list_avg) + LARGE_AVG_WINDOW), ratios_list_avg,
-             label=f'Average of L1 minimization, window={LARGE_AVG_WINDOW}', color='blue', alpha=0.5, linewidth=2)
+             label=f'Average of L1 minimization, window={LARGE_AVG_WINDOW}', color='red', alpha=0.5, linewidth=2)
     ax.set_xlabel('coinjoin in time')
-    ax.set_ylabel('prediction factor')
+    ax.set_ylabel('inputs prediction factor')
 
     #
     # Compute number of predicted wallets
-    COLOR_WALLETS_INPUTS = 'red'
-    COLOR_WALLETS_OUTPUTS = 'green'
+    COLOR_WALLETS_INPUTS = 'green'
+    COLOR_WALLETS_OUTPUTS = 'red'
     predicted_wallets_list_inputs = []
     predicted_wallets_list_outputs = []
     # Select ratios to use
@@ -3867,40 +3867,42 @@ def estimate_wallet_prediction_factor(base_path, mix_id):
         predicted_wallets_list_inputs.append(predicted_num_wallets)
         predicted_wallets_list_outputs.append(int(round(num_all_outputs[i] / AVG_NUM_OUTPUTS)))
 
-    predicted_wallets_inputs_avg = als.compute_averages(predicted_wallets_list_inputs, LARGE_AVG_WINDOW)
-    predicted_wallets_outputs_avg = als.compute_averages(predicted_wallets_list_outputs, LARGE_AVG_WINDOW)
-    ax2 = ax.twinx()
-    ax2.plot(predicted_wallets_list_inputs,
-             label=f'Predicted # wallets (inputs)', color=COLOR_WALLETS_INPUTS, alpha=0.2, linewidth=1)
-    ax2.plot(predicted_wallets_inputs_avg,
-             label=f'Average predicted # wallets (inputs), window={LARGE_AVG_WINDOW}', color=COLOR_WALLETS_INPUTS, alpha=0.7, linewidth=1)
-    ax2.plot(predicted_wallets_outputs_avg,
-             label=f'Average predicted # wallets (outputs), window={LARGE_AVG_WINDOW}', color=COLOR_WALLETS_OUTPUTS, alpha=0.7, linewidth=1)
+    PLOT_NUM_WALLETS = True
+    if PLOT_NUM_WALLETS:
+        predicted_wallets_inputs_avg = als.compute_averages(predicted_wallets_list_inputs, LARGE_AVG_WINDOW)
+        predicted_wallets_outputs_avg = als.compute_averages(predicted_wallets_list_outputs, LARGE_AVG_WINDOW)
+        ax2 = ax.twinx()
+        ax2.plot(predicted_wallets_list_inputs,
+                 label=f'Predicted # wallets (inputs)', color=COLOR_WALLETS_INPUTS, alpha=0.1, linewidth=1)
+        ax2.plot(predicted_wallets_inputs_avg,
+                 label=f'Average predicted # wallets (inputs), window={LARGE_AVG_WINDOW}', color=COLOR_WALLETS_INPUTS, alpha=0.7, linewidth=1)
+        # ax2.plot(predicted_wallets_outputs_avg,
+        #          label=f'Average predicted # wallets (outputs), window={LARGE_AVG_WINDOW}', color=COLOR_WALLETS_OUTPUTS, alpha=0.7, linewidth=1)
 
-    x = range(0, len(predicted_wallets_inputs_avg))
-    #x = range(LARGE_AVG_WINDOW // 2, len(predicted_wallets_inputs_avg) + LARGE_AVG_WINDOW // 2)
-    predicted_wallets_inputs_avg = np.full_like(x, predicted_wallets_inputs_avg)
-    predicted_wallets_outputs_avg = np.full_like(x, predicted_wallets_outputs_avg)
-    ax2.fill_between(x, predicted_wallets_inputs_avg, predicted_wallets_outputs_avg,
-                    where=predicted_wallets_inputs_avg>predicted_wallets_outputs_avg, interpolate=True,
-                    color=COLOR_WALLETS_INPUTS, alpha=0.3)
-    ax2.fill_between(x, predicted_wallets_inputs_avg, predicted_wallets_outputs_avg,
-                    where=predicted_wallets_outputs_avg>predicted_wallets_inputs_avg, interpolate=True,
-                    color=COLOR_WALLETS_OUTPUTS, alpha=0.3)
-    # Artificial entry with same settings to have legend complete on ax
-    ax.plot(predicted_wallets_list_inputs[0], label=f'Predicted # wallets (inputs)', color=COLOR_WALLETS_INPUTS, alpha=0.2, linewidth=1)
-    ax.plot(predicted_wallets_list_outputs[0], label=f'Predicted # wallets (outputs)', color=COLOR_WALLETS_OUTPUTS, alpha=0.2, linewidth=1)
-    ax.plot(predicted_wallets_inputs_avg[0],
-             label=f'Average predicted # wallets, window={LARGE_AVG_WINDOW}', color=COLOR_WALLETS_INPUTS, alpha=0.7, linewidth=1)
-    ax.plot(predicted_wallets_outputs_avg[0],
-             label=f'Average predicted # wallets (outputs), window={LARGE_AVG_WINDOW}', color=COLOR_WALLETS_OUTPUTS, alpha=0.7, linewidth=1)
+        # x = range(0, len(predicted_wallets_inputs_avg))
+        #x = range(LARGE_AVG_WINDOW // 2, len(predicted_wallets_inputs_avg) + LARGE_AVG_WINDOW // 2)
+        # predicted_wallets_inputs_avg = np.full_like(x, predicted_wallets_inputs_avg)
+        # predicted_wallets_outputs_avg = np.full_like(x, predicted_wallets_outputs_avg)
+        # ax2.fill_between(x, predicted_wallets_inputs_avg, predicted_wallets_outputs_avg,
+        #                 where=predicted_wallets_inputs_avg>predicted_wallets_outputs_avg, interpolate=True,
+        #                 color=COLOR_WALLETS_INPUTS, alpha=0.3)
+        # ax2.fill_between(x, predicted_wallets_inputs_avg, predicted_wallets_outputs_avg,
+        #                 where=predicted_wallets_outputs_avg>predicted_wallets_inputs_avg, interpolate=True,
+        #                 color=COLOR_WALLETS_OUTPUTS, alpha=0.3)
+        # Artificial entry with same settings to have legend complete on ax
+        ax.plot(predicted_wallets_list_inputs[0], label=f'Predicted # wallets (inputs)', color=COLOR_WALLETS_INPUTS, alpha=0.1, linewidth=1)
+        # ax.plot(predicted_wallets_list_outputs[0], label=f'Predicted # wallets (outputs)', color=COLOR_WALLETS_OUTPUTS, alpha=0.2, linewidth=1)
+        ax.plot(predicted_wallets_inputs_avg[0],
+                 label=f'Average predicted # wallets, window={LARGE_AVG_WINDOW}', color=COLOR_WALLETS_INPUTS, alpha=0.7, linewidth=1)
+        # ax.plot(predicted_wallets_outputs_avg[0],
+        #          label=f'Average predicted # wallets (outputs), window={LARGE_AVG_WINDOW}', color=COLOR_WALLETS_OUTPUTS, alpha=0.7, linewidth=1)
 
-    ax2.set_ylabel('number of wallets', color=COLOR_WALLETS_INPUTS, alpha=0.5)
-    ax2.tick_params(axis='y', colors=COLOR_WALLETS_INPUTS)
+        ax2.set_ylabel('number of wallets', color=COLOR_WALLETS_INPUTS)
+        ax2.tick_params(axis='y', colors=COLOR_WALLETS_INPUTS)
 
     # Finalize graph
     ax.set_title(f'Wallets prediction factor variability: {mix_id}')
-    ax.legend()
+    ax.legend(loc='upper left')
     save_path = os.path.join(target_load_path, f'{mix_id}_inputs_prediction_factor_dynamics')
     plt.savefig(f'{save_path}.png', dpi=300)
     plt.savefig(f'{save_path}.pdf', dpi=300)
@@ -4951,12 +4953,13 @@ if __name__ == "__main__":
         analyze_zksnacks_output_clusters('wasabi2', target_path)
 
     if op.ANALYSIS_WALLET_PREDICTION:
+        estimate_wallet_prediction_factor(target_path, 'wasabi2_gingerwallet')
+        estimate_wallet_prediction_factor(target_path, 'wasabi2_opencoordinator')
+        estimate_wallet_prediction_factor(target_path, 'wasabi2_wasabicoordinator')
         estimate_wallet_prediction_factor(target_path, 'wasabi2_kruw')
         estimate_wallet_prediction_factor(target_path, 'wasabi2_zksnacks')
         estimate_wallet_prediction_factor(target_path, 'wasabi1')
 
-
-    # TODO: Analyze difference of unmoved and dynamic liquidity for Whirlpool between 2024-04-24 and 2024-08-24 (impact of knowledge of whirlpool seizure). Show last 1 year.
 
     print('### SUMMARY #############################')
     SM.print_summary()
