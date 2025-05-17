@@ -3934,14 +3934,6 @@ if __name__ == "__main__":
 
     op.set_args(args)
 
-    # op.target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20241225\\'
-    # op.interval_stop_date = '2024-12-26 00:00:07.000'
-
-    #op.CJ_TYPE = CoinjoinType.WW2
-    #op.ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = True
-    #op.DETECT_FALSE_POSITIVES = True
-    #op.PLOT_REMIXES = True
-
     # Sorting strategy for coinjoins in time.
     # If False, coinjoins are sorted using 'broadcast_time' (which is equal to mining_time for on-chain cjtxs where we lack real broadcast time)
     # If True, then relative ordering based on connections in graph formed by remix inputs/outputs is used
@@ -4921,7 +4913,6 @@ if __name__ == "__main__":
 
     # Extract distribution of mix fresh input sizes
     if op.ANALYSIS_INPUTS_DISTRIBUTION:
-        # TODO: Compute input / output distributions from processed coinjoin_tx_info.json files including removal of false positives
         # Produce figure with distribution of diffferent pools merged
         if op.CJ_TYPE == CoinjoinType.WW1:
             process_inputs_distribution('wasabi1', MIX_PROTOCOL.WASABI1,  target_path, 'WasabiCoinJoins.txt', True)
@@ -4978,6 +4969,8 @@ if __name__ == "__main__":
     # https://mempool.space/tx/57a8ea3ba1568fed4d9f7d7b3b84cdec552d9c49d4849bebf77a1053c180d0d1
     #
 
+    # TODO: Analyze difference of unmoved and dynamic liquidity for Whirlpool between 2024-04-24 and 2024-08-24 (impact of knowledge of whirlpool seizure). Show last 1 year.
+
     # Analyze dominance cost:
     # 1. Coordinator fee to maintain X% pool liquidity at the time (put new input in if current liquidity below X%)
     # 2. Mining fees to maintain X% control of all inputs / outputs of each coinjoin. Disregard outliers with large sudden
@@ -4987,17 +4980,9 @@ if __name__ == "__main__":
     # Have X% control of all standard output denominations
     # (=> for whirlpool, have X% of all active remixing liquidity => will be selected )
 
-    # Fee rates download
-    # curl -sSL "https://mempool.space/api/v1/mining/blocks/fee-rates/all" > fee_rates.json.all
-    # curl -sSL "https://mempool.space/api/v1/mining/blocks/fee-rates/3y" > fee_rates.json.3y
-
-    # TODO: Filter overall smaller and bigger cjtxs and plot separately
-
     # TODO: Plot graph of remix rates (values, num_inputs) as line plot for all months into single graph
 
     # TODO: Recompute fresh inflows for post-zksnacks coordinators
-
-    # TODO: Detect cooridnator transactions and find start and end of given coordinator (requires update for cjtxstats coinjoin structure)
 
 # b71981909c440bcb29e9a2d1cde9992cc97d3ca338c925c4b0547566bdc62f4d
 # ec9d5c2c678a70e304fa6e06a6430c9aff49e75107ac33f10165b14f0fa9a1f4
@@ -5024,23 +5009,3 @@ if __name__ == "__main__":
 
 # cjtx with no output remixes (possibly end of coordinator): https://mempool.space/tx/22f64af816772533696b15677b00b780acff6fe39cd09b98d84ab95bb3c46c3a
 #
-
-
-# 1. Download fees from mempool.space: fee_rates.json (add action)
-# 2. Copy existing false positives files from previous runs (if already done): false_cjtxs.json (add link to current version of our files)
-# 3. Set op.target_base_path to root folder with Dumplings results (first-level subfolders are Scanner and Stats from Dumplings)
-# Note: After every analysis step, disable previous flag and run again next one (multiargs argument, execute sequentially)
-# 4. Do initial processing of Dumpling results into coinjoin_tx_info.json and split by folders (for WW2 takes 2-3 hours)
-#      - op.CJ_TYPE = CoinjoinType.WW2
-#      - op.ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = True
-# 5. Detect false positives, asses manually -> no_remix_txs.json;
-#      - op.DETECT_FALSE_POSITIVES = True
-#  - after false positives are confirmed in mempool.space, then put them into false_cjtxs.json and rerun => smaller no_remix_txs.json
-#  - 'both_reuse' txs are almost certainly false positives (too many address reuse, default 0.7)
-#  - 'both' analyze one by one, confirm
-#  - the typical stop point is when "both", "inputs_address_reuse", "outputs_address_reuse" and "both_reuse" are empty
-#  - txs left in "inputs" are typically the starting cjtx of some pool
-#  - txs left in "outputs" are typically the last cjtx of some pool (either pool closed or last mined cjtxs)
-#  - copy false_cjtxs.json into other folders if multiple pools exists (e.g., wasabi2, wasabi2_others, wasabi2_zksnacks)
-# 6. Detect coordinators: Use ground-truth coordinators collected by API polling: txid_coord.json
-#  -
