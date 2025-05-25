@@ -3016,7 +3016,8 @@ def wasabi1_extract_other_pools(selected_coords: list, data: dict, target_path: 
     :return: dictionary with basic information regarding separated cooridnators
     """
     logging.debug('wasabi1_extract_other_pools() started')
-    interval_start_date_others = '2024-06-01 00:00:00.000'
+    interval_start_date_others = '2023-07-13 11:28:08'  # 2023-07-13 11:27:08 (based on last WW1 cjtx 635fa30bfb56b6f24f6474142a57ee58306a98b9c2887ee8a799ccb4fea4a219 )
+
 
     def save_coinjoins_create_folder(cjtx_coord: dict, target_path: str, coord_full_name: str):
         target_save_path = os.path.join(target_path, coord_full_name)
@@ -4996,3 +4997,6 @@ if __name__ == "__main__":
 
 # cjtx with no output remixes (possibly end of coordinator): https://mempool.space/tx/22f64af816772533696b15677b00b780acff6fe39cd09b98d84ab95bb3c46c3a
 #
+
+# WW1 last cjtx?
+# 2023-07-13 11:27:08 635fa30bfb56b6f24f6474142a57ee58306a98b9c2887ee8a799ccb4fea4a219 0.10143340
