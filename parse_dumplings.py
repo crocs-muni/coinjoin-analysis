@@ -114,7 +114,9 @@ WHIRLPOOL_FUNDING_TXS[50000000] = {'start_date': '2019-08-02 17:45:23.000', 'fun
 
 WASABI2_FUNDING_TXS = {}
 WASABI2_FUNDING_TXS['zksnacks'] = {'start_date': '2022-06-18 01:38:00.000', 'funding_txs': ['d31c2b4d71eb143b23bb87919dda7fdfecee337ffa1468d1c431ece37698f918']}
-WASABI2_FUNDING_TXS['kruw.io'] = {'start_date': '2024-05-31 10:33:00.000', 'funding_txs': ['8c28787b4f5014cab20be23204c1889191dacd2e4622e1250ca16dba78cf915e', 'f861aa534a5efe7212a0c1bdb61f7a581b0d262452a79e807afaa2d20d73c8f5', 'b5e839299bfc0e50ed6b6b6c932a38b544d9bb6541cd0ab0b8ddcc44255bfb78']}
+WASABI2_FUNDING_TXS['kruw.io'] = {'start_date': '2024-05-18 00:06:06.000', 'funding_txs': ['1be2abf3434a74c3fa76f6b24294fa9ce7cc6afc3a741ee4332c48da657784ac', 'f861aa534a5efe7212a0c1bdb61f7a581b0d262452a79e807afaa2d20d73c8f5', 'b5e839299bfc0e50ed6b6b6c932a38b544d9bb6541cd0ab0b8ddcc44255bfb78']}
+WASABI2_FUNDING_TXS['gingerwallet'] = {'start_date': '2024-06-02 18:20:36.000', 'funding_txs': ['75d060816ca08d067a91ba982e330aba7c5a2d50db2605403567989370120a66', 'f861aa534a5efe7212a0c1bdb61f7a581b0d262452a79e807afaa2d20d73c8f5', 'b5e839299bfc0e50ed6b6b6c932a38b544d9bb6541cd0ab0b8ddcc44255bfb78']}
+WASABI2_FUNDING_TXS['opencoordinator'] = {'start_date': '2025-05-02 21:43:13.000', 'funding_txs': ['9a15e204577d2a7c7c1861d2f9225a24add5cbdb64ade6c9b90bc2f9a6f21260', 'f861aa534a5efe7212a0c1bdb61f7a581b0d262452a79e807afaa2d20d73c8f5', 'b5e839299bfc0e50ed6b6b6c932a38b544d9bb6541cd0ab0b8ddcc44255bfb78']}
 
 
 
