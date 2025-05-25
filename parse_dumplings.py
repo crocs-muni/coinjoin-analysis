@@ -3248,24 +3248,16 @@ def print_remix_stats(target_base_path):
 
 def print_liquidity_summary_all(target_path: str):
     #
-    # WW2
+    # WW2, WW1
     #
     coords = [('wasabi2', 'zksnacks'), ('wasabi2', 'others'), ('wasabi2', 'kruw'), ('wasabi2', 'gingerwallet'),
               ('wasabi2', 'opencoordinator'), ('wasabi2', 'coinjoin_nl'), ('wasabi2', 'wasabicoordinator'),
-              ('wasabi2', 'mega'), ('wasabi2', 'btip')]
+              ('wasabi2', 'mega'), ('wasabi2', 'btip'),
+              ('wasabi1', 'zksnacks'), ('wasabi1', 'others')]
     for coord in coords:
         cjtx_coord = als.load_coinjoins_from_file(os.path.join(target_path, f'{coord[0]}_{coord[1]}'), None, True)
         SM.print(f'{coord[0]}_{coord[1]}')
         als.print_liquidity_summary(cjtx_coord["coinjoins"], f'{coord[0]}_{coord[1]}')
-
-    #
-    # WW1
-    #
-    data = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi1'), None, True)
-    cjtx_ww1 = {cjtx: data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys() if data["coinjoins"][cjtx][
-        'broadcast_time'] < "2024-06-02 00:00:00.000"}
-    SM.print(f'WW1 zkSNACKs:')
-    als.print_liquidity_summary(cjtx_ww1, 'wasabi1')
 
     #
     # WHIRLPOOL
@@ -3285,32 +3277,6 @@ def print_liquidity_summary_all(target_path: str):
     data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool'), None, True)
     SM.print(f'whirlpool:')
     als.print_liquidity_summary(data["coinjoins"], 'whirlpool')
-
-
-
-    # # data = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi2'), None, True)
-    # #
-    # # cjtx_others = {cjtx: data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys() if data["coinjoins"][cjtx][
-    # #     'broadcast_time'] > "2024-06-02 00:00:00.000"}
-    # # cjtx_others_overlap = {cjtx:data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys() if data["coinjoins"][cjtx][
-    # #     'broadcast_time'] > "2024-05-20 00:00:00.000" and data["coinjoins"][cjtx][
-    # #     'broadcast_time'] < "2024-06-02 00:00:00.000" and len(data["coinjoins"][cjtx]['inputs']) < 150}
-    # # cjtx_others.update(cjtx_others_overlap)
-    # # als.save_json_to_file(os.path.join(target_path, 'wasabi2_others', 'coinjoin_tx_info.json'), {'coinjoins': cjtx_others})
-    # cjtx_others = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi2_others'), None, True)
-    # #
-    # # cjtx_zksnacks = {cjtx: data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys() if data["coinjoins"][cjtx][
-    # #     'broadcast_time'] < "2024-05-20 00:00:00.000"}
-    # # cjtx_zksnacks_overlap = {cjtx:data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys() if data["coinjoins"][cjtx][
-    # #     'broadcast_time'] > "2024-05-20 00:00:00.000" and data["coinjoins"][cjtx]['broadcast_time'] < "2024-06-02 00:00:00.000" and len(data["coinjoins"][cjtx]['inputs']) >= 150}
-    # # cjtx_zksnacks.update(cjtx_zksnacks_overlap)
-    # #als.save_json_to_file(os.path.join(target_path, 'wasabi2_zksnacks', 'coinjoin_tx_info.json'), {'coinjoins': cjtx_zksnacks})
-    # cjtx_zksnacks = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi2_zksnacks'), None, True)
-    #
-    # SM.print(f'WW2 others:')
-    # als.print_liquidity_summary(cjtx_others["coinjoins"])
-    # SM.print(f'WW2 zkSNACKs:')
-    # als.print_liquidity_summary(cjtx_zksnacks["coinjoins"])
 
 
 def discover_coordinators(cjtxs: dict, sorted_cjtxs: list, coord_txs: dict, in_or_out: str,
