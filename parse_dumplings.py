@@ -1874,8 +1874,8 @@ def wasabi_plot_remixes_parallel(mix_id: str, mix_protocol: MIX_PROTOCOL, target
         with ProcessPoolExecutor(max_workers=max_processes) as executor:
             futures = {
                 executor.submit(
-                    wasabi_plot_remixes_worker, mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
-                      restrict_to_out_size, restrict_to_in_size, plot_multigraph, plot_only_intervals, [file]
+                    wasabi_plot_remixes_worker, mix_id, mix_protocol, target_path, tx_file, op.SORT_COINJOINS_BY_RELATIVE_ORDER,
+                    analyze_values, normalize_values, restrict_to_out_size, restrict_to_in_size, plot_multigraph, plot_only_intervals, [file]
                 ): file for file in files
             }
             with tqdm(total=len(files)) as progress:
@@ -1894,7 +1894,7 @@ def wasabi_plot_remixes_parallel(mix_id: str, mix_protocol: MIX_PROTOCOL, target
         #
         # Plot all graphs together
         #
-        wasabi_plot_remixes_worker(mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
+        wasabi_plot_remixes_worker(mix_id, mix_protocol, target_path, tx_file, op.SORT_COINJOINS_BY_RELATIVE_ORDER, analyze_values, normalize_values,
                             restrict_to_out_size, restrict_to_in_size, plot_multigraph, False, None)
 
 
@@ -1908,21 +1908,23 @@ def wasabi_plot_remixes_serial(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
         # Plot only single intervals
         #
         fig_single, ax_single = plt.subplots()
-        wasabi_plot_remixes_worker(mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
+        wasabi_plot_remixes_worker(mix_id, mix_protocol, target_path, tx_file, op.SORT_COINJOINS_BY_RELATIVE_ORDER, analyze_values, normalize_values,
                             restrict_to_out_size, restrict_to_in_size, plot_multigraph, True)
     else:
         #
         # Plot all graphs together
         #
-        wasabi_plot_remixes_worker(mix_id, mix_protocol, target_path, tx_file, analyze_values, normalize_values,
+        wasabi_plot_remixes_worker(mix_id, mix_protocol, target_path, tx_file, op.SORT_COINJOINS_BY_RELATIVE_ORDER, analyze_values, normalize_values,
                             restrict_to_out_size, restrict_to_in_size, plot_multigraph, False)
 
 
-def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_file: str,
+def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_file: str, sort_coinjoins_relative_order: bool,
                         analyze_values: bool = True, normalize_values: bool = True,
                         restrict_to_out_size = None, restrict_to_in_size = None,
                         plot_multigraph: bool = True, plot_only_intervals: bool=False, filter_paths: list=None):
     logging.info(f"[{time.time()}] Starting next worker")
+
+    als.SORT_COINJOINS_BY_RELATIVE_ORDER = sort_coinjoins_relative_order
 
     files = os.listdir(target_path) if os.path.exists(target_path) else print(
         f'Path {target_path} does not exist')
