@@ -47,8 +47,6 @@ SATS_IN_BTC = 100000000
 # TODO: Systematic solution requires merging and resolving different cluster ids
 CLUSTER_ID_CHECK_HARD_ASSERT = False
 
-SAVE_BASE_FILES_JSON = True
-
 # SLOT_WIDTH_SECONDS = 3600 * 24 * 7  # week
 #SLOT_WIDTH_SECONDS = 3600 * 24  # day
 SLOT_WIDTH_SECONDS = 3600   # hour
@@ -951,7 +949,7 @@ def process_and_save_coinjoins(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
     # Problems: 1) Time consuming (not a big problem), 2) address resuse will break analysis later (need fix)
     #compute_real_addresses(data['coinjoins'])
 
-    if SAVE_BASE_FILES_JSON:
+    if op.SAVE_BASE_FILES_JSON:
         als.save_json_to_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'), data)
         als.save_json_to_file(os.path.join(target_save_path, f'coinjoin_tx_info_extended.json'), data_extended)
 
@@ -1058,9 +1056,9 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
         else:
             #
             # Convert all Dumplings files into json (time intensive)
-            SAVE_BASE_FILES_JSON = False
+            op.SAVE_BASE_FILES_JSON = False
             data = process_and_save_coinjoins(mix_id, mix_protocol, target_path, mix_filename, postmix_filename, premix_filename, None, None, target_save_path)
-            SAVE_BASE_FILES_JSON = save_base_files
+            op.SAVE_BASE_FILES_JSON = save_base_files
     else:
         data = preloaded_data
 
@@ -2816,7 +2814,7 @@ def wasabi2_extract_pools_original(data: dict, target_path: str, interval_stop_d
     als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_others})
     logging.info(f'Total cjtxs extracted for pool WW2-others: {len(cjtx_others)}')
     # process_and_save_intervals_filter('wasabi2_others', MIX_PROTOCOL.WASABI2, target_path, interval_start_date_others,
-    #                                   interval_stop_date, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+    #                                   interval_stop_date, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, op.SAVE_BASE_FILES_JSON,
     #                                   True, {'coinjoins': cjtx_others})
 
     # Extract zksnacks coordinator
@@ -2840,7 +2838,7 @@ def wasabi2_extract_pools_original(data: dict, target_path: str, interval_stop_d
     als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_zksnacks})
     logging.info(f'Total cjtxs extracted for pool WW2-zkSNACKs: {len(cjtx_zksnacks)}')
     # process_and_save_intervals_filter('wasabi2_zksnacks', MIX_PROTOCOL.WASABI2, target_path, split_pools_info['wasabi2_zksnacks']['start_date'],
-    #                                   split_pools_info['wasabi2_zksnacks']['stop_date'],'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+    #                                   split_pools_info['wasabi2_zksnacks']['stop_date'],'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, op.SAVE_BASE_FILES_JSON,
     #                                   True, {'coinjoins': cjtx_zksnacks})
 
     # Detect transactions which were not assigned to any pool
@@ -2996,7 +2994,7 @@ def wasabi2_recompute_inputs_outputs_other_pools(selected_coords: list, target_p
         pool_data = process_and_save_intervals_filter(coord_full_name, MIX_PROTOCOL.WASABI2, target_path,
                                                       '2024-05-01 00:00:07.000', op.interval_stop_date,
                                                       'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None,
-                                                      SAVE_BASE_FILES_JSON, True, data)
+                                                      op.SAVE_BASE_FILES_JSON, True, data)
 
         logging.info(f'Recomputed mix events for pool {coord_full_name}: {len(data['coinjoins'])}')
 
@@ -3616,6 +3614,7 @@ class DumplingsParseOptions:
     CJ_TYPE = CoinjoinType.WW2
     MIX_IDS = ""
     SORT_COINJOINS_BY_RELATIVE_ORDER = True
+    SAVE_BASE_FILES_JSON = True
 
     ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
     DETECT_FALSE_POSITIVES = False
@@ -3706,8 +3705,10 @@ class DumplingsParseOptions:
             self.SORT_COINJOINS_BY_RELATIVE_ORDER = True
         else:
             self.SORT_COINJOINS_BY_RELATIVE_ORDER = False
+        als.SORT_COINJOINS_BY_RELATIVE_ORDER = self.SORT_COINJOINS_BY_RELATIVE_ORDER
         self.MIX_IDS = ""
 
+        self.SAVE_BASE_FILES_JSON = True
         self.ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
         self.DETECT_FALSE_POSITIVES = False
         self.PLOT_REMIXES = False
@@ -3752,6 +3753,12 @@ class DumplingsParseOptions:
         #self.interval_stop_date = '2024-12-26 00:00:07.000'
         # If not set, then use current date => take all coinjoins, no limit
         self.interval_stop_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+
+
+    def print_attributes(self):
+        print('DumplingsParseOptions parameters:')
+        for attr, value in vars(self).items():
+            print(f'  {attr}={value}')
 
 
 def free_memory(data_to_free):
@@ -3942,19 +3949,20 @@ if __name__ == "__main__":
     #     op.SORT_COINJOINS_BY_RELATIVE_ORDER = True
     # else:
     #     op.SORT_COINJOINS_BY_RELATIVE_ORDER = False
-    # als.SORT_COINJOINS_BY_RELATIVE_ORDER = op.SORT_COINJOINS_BY_RELATIVE_ORDER
 
+    als.SORT_COINJOINS_BY_RELATIVE_ORDER = op.SORT_COINJOINS_BY_RELATIVE_ORDER
     target_path = os.path.join(op.target_base_path, 'Scanner')
-    SM.print(f'Starting analysis of {target_path}, SAVE_BASE_FILES_JSON={SAVE_BASE_FILES_JSON}')
+    SM.print(f'Starting analysis of {target_path}')
+    op.print_attributes()
 
     # WARNING: SW 100k pool does not match exactly mix_stay and active liqudity at the end - likely reason are neglected mining fees
 
-    #op.DEBUG = False
+    op.DEBUG = True
     if op.DEBUG:
         print('DEBUGING TIME!!!')
-        wasabi_plot_remixes('wasabi1_others', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1_others'),
-                            'coinjoin_tx_info.json', True, False, None,
-                            None, True, False)
+        wasabi_plot_remixes('wasabi1_zksnacks', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1_zksnacks'),
+                            'coinjoin_tx_info.json', False, True, None,
+                            None, True, True)
         exit(42)
 
         estimate_wallet_prediction_factor(target_path, 'wasabi2_kruw')
@@ -4229,7 +4237,7 @@ if __name__ == "__main__":
         data = process_and_save_intervals_filter(mix_id, MIX_PROTOCOL.WASABI2, target_path,
                                                  '2022-06-01 00:00:07.000', op.interval_stop_date,
                                                  'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None,
-                                                 SAVE_BASE_FILES_JSON, True)
+                                                 op.SAVE_BASE_FILES_JSON, True)
         wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
                     'coinjoin_tx_info.json', False, False, None, None, op.PLOT_REMIXES_MULTIGRAPH)
         wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id),
@@ -4283,7 +4291,7 @@ if __name__ == "__main__":
         exit(42)
         process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000',
                                           interval_stop_date,
-                                          'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+                                          'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, op.SAVE_BASE_FILES_JSON,
                                           True)
         exit(42)
         target_load_path = os.path.join(target_path, 'wasabi2')
@@ -4318,7 +4326,7 @@ if __name__ == "__main__":
 
         process_and_save_intervals_filter('wasabi2_zksnacks', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000',
                                   '2024-06-03 00:00:07.000',
-                                  'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+                                  'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, op.SAVE_BASE_FILES_JSON,
                                   True)
         exit(42)
 
@@ -4345,8 +4353,7 @@ if __name__ == "__main__":
         target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240802\\'
         target_path = os.path.join(target_base_path, 'Scanner')
         interval_stop_date = '2024-08-03 00:00:07.000'
-        SORT_COINJOINS_BY_RELATIVE_ORDER = False
-        als.SORT_COINJOINS_BY_RELATIVE_ORDER = SORT_COINJOINS_BY_RELATIVE_ORDER
+        als.SORT_COINJOINS_BY_RELATIVE_ORDER = False
         wasabi_plot_remixes('whirlpool_100k', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
                             False, True, None, None, False)
         wasabi_plot_remixes('whirlpool_1M', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
@@ -4452,18 +4459,15 @@ if __name__ == "__main__":
         wasabi_plot_remixes('whirlpool_5M_test', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_5M_test'), 'coinjoin_tx_info.json',
                             True, False, None, None, False)
         exit(42)
-        SORT_COINJOINS_BY_RELATIVE_ORDER = False
-        als.SORT_COINJOINS_BY_RELATIVE_ORDER = SORT_COINJOINS_BY_RELATIVE_ORDER
+        als.SORT_COINJOINS_BY_RELATIVE_ORDER = False
         target_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240701\\Scanner\\'
         wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json',
                             True, False, None, None, False)
         exit(42)
-        SORT_COINJOINS_BY_RELATIVE_ORDER = True
-        als.SORT_COINJOINS_BY_RELATIVE_ORDER = SORT_COINJOINS_BY_RELATIVE_ORDER
+        als.SORT_COINJOINS_BY_RELATIVE_ORDER = True
         wasabi_plot_remixes('wasabi2', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json',
                             True, False, None, None, False)
-        SORT_COINJOINS_BY_RELATIVE_ORDER = False
-        als.SORT_COINJOINS_BY_RELATIVE_ORDER = SORT_COINJOINS_BY_RELATIVE_ORDER
+        als.SORT_COINJOINS_BY_RELATIVE_ORDER = False
         wasabi_plot_remixes('whirlpool_100k', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json',
                             True, False, None, None, False)
         wasabi_plot_remixes('whirlpool_1M', MIX_PROTOCOL.SW, os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json',
@@ -4494,7 +4498,7 @@ if __name__ == "__main__":
 
         process_and_save_intervals_filter('wasabi2_as25', MIX_PROTOCOL.WASABI2, target_path, '2024-05-01 00:00:07.000',
                                           '2024-06-01 00:00:07.000',
-                                          'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+                                          'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, op.SAVE_BASE_FILES_JSON,
                                           False)
         fix_ww2_for_fdnp_ww1('wasabi2_as25', target_path)  # WW2 requires detection of WW1 inflows as friends
         exit(42)
@@ -4558,13 +4562,13 @@ if __name__ == "__main__":
         exit(42)
         # process_and_save_single_interval('wasabi2_select', MIX_PROTOCOL.WASABI2, target_path, '2024-05-01 00:00:07.000',
         #                                   '2024-06-01 23:38:07.000',
-        #                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+        #                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, op.SAVE_BASE_FILES_JSON,
         #                                   True)
         # exit(42)
 
         # process_and_save_single_interval('wasabi2_select', MIX_PROTOCOL.WASABI2, target_path, '2024-06-01 00:00:07.000',
         #                                   '2024-06-07 23:38:07.000',
-        #                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON,
+        #                                   'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, op.SAVE_BASE_FILES_JSON,
         #                                   True)
         # exit(42)
 
@@ -4664,7 +4668,7 @@ if __name__ == "__main__":
         if op.CJ_TYPE == CoinjoinType.SW:
             all_data = process_and_save_intervals_filter('whirlpool', MIX_PROTOCOL.WHIRLPOOL, target_path, '2019-04-17 01:38:07.000', op.interval_stop_date,
                                        'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt',
-                                                SAVE_BASE_FILES_JSON, False)
+                                                op.SAVE_BASE_FILES_JSON, False)
 
             # Split Whirlpool based on pools
             whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_100k', 100000)
@@ -4675,49 +4679,28 @@ if __name__ == "__main__":
             # 100k pool
             process_and_save_intervals_filter('whirlpool_100k', MIX_PROTOCOL.WHIRLPOOL, target_path,
                                               WHIRLPOOL_FUNDING_TXS[100000]["start_date"], op.interval_stop_date,
-                                              None, None, None, SAVE_BASE_FILES_JSON, True)
+                                              None, None, None, op.SAVE_BASE_FILES_JSON, True)
             # 1M pool
             process_and_save_intervals_filter('whirlpool_1M', MIX_PROTOCOL.WHIRLPOOL, target_path,
                                               WHIRLPOOL_FUNDING_TXS[1000000]["start_date"], op.interval_stop_date,
-                                              None, None, None, SAVE_BASE_FILES_JSON, True)
+                                              None, None, None, op.SAVE_BASE_FILES_JSON, True)
             # 5M pool
             process_and_save_intervals_filter('whirlpool_5M', MIX_PROTOCOL.WHIRLPOOL, target_path,
                                               WHIRLPOOL_FUNDING_TXS[5000000]["start_date"], op.interval_stop_date,
-                                              None, None, None, SAVE_BASE_FILES_JSON, True)
+                                              None, None, None, op.SAVE_BASE_FILES_JSON, True)
             # 50M pool
             process_and_save_intervals_filter('whirlpool_50M', MIX_PROTOCOL.WHIRLPOOL, target_path,
                                               WHIRLPOOL_FUNDING_TXS[50000000]["start_date"], op.interval_stop_date,
-                                              None, None, None, SAVE_BASE_FILES_JSON, True)
+                                              None, None, None, op.SAVE_BASE_FILES_JSON, True)
 
         if op.CJ_TYPE == CoinjoinType.WW1:
             process_and_save_intervals_filter('wasabi1', MIX_PROTOCOL.WASABI1, target_path, '2018-07-19 01:38:07.000', op.interval_stop_date,
-                                       'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
-
-        # if op.CJ_TYPE == CoinjoinType.WW2:
-        #     data = process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', op.interval_stop_date,
-        #                                'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
-        #
-        #     # # Fix the large aggregate file (may crash due to huge memory requirements)
-        #     # data = fix_ww2_for_fdnp_ww1('wasabi2', target_path)
-        #
-        #     # Split zkSNACKs (-> wasabi2_zksnacks) and post-zkSNACKs (-> wasabi2_others) pools
-        #     # This splitting will allow to analyze separate pools, but also to make data files smaller and easier to process later
-        #     logging.info('*****************************')
-        #     logging.info('Going to wasabi2_extract_pools()')
-        #     split_pool_paths = wasabi2_extract_pools(data, target_path, op.interval_stop_date)
-        #     logging.info('done wasabi2_extract_pools() *****************************')
-        #
-        #     # WW2 needs additional treatment - detect and fix origin of WW1 inflows as friends
-        #     # Do first separated pools, then the original (large) unseparated one
-        #     for pool_path in split_pool_paths:
-        #         fix_ww2_for_fdnp_ww1(pool_path, target_path)
-        #     # Fix the large aggregate file (may crash due to huge memory requirements)
-        #     fix_ww2_for_fdnp_ww1('wasabi2', target_path)
+                                       'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', None, op.SAVE_BASE_FILES_JSON, False)
 
 
         if op.CJ_TYPE == CoinjoinType.WW2:
             data = process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', op.interval_stop_date,
-                    'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, False)
+                    'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, op.SAVE_BASE_FILES_JSON, False)
 
             # Split zkSNACKs (-> wasabi2_zksnacks) and post-zkSNACKs (-> wasabi2_others) pools
             # This splitting will allow to analyze separate pools, but also to make data files smaller and easier to process later
@@ -4736,7 +4719,7 @@ if __name__ == "__main__":
                 pool_data = process_and_save_intervals_filter(pool_name, MIX_PROTOCOL.WASABI2, target_path,
                                                          split_pool_info[pool_name]['start_date'], split_pool_info[pool_name]['stop_date'],
                                                          'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None,
-                                                         SAVE_BASE_FILES_JSON, True)
+                                                         op.SAVE_BASE_FILES_JSON, True)
                 free_memory(pool_data)
                 logging.info(f'done for {pool_name}) *****************************')
 
@@ -4746,7 +4729,7 @@ if __name__ == "__main__":
             logging.info(f'done fix_ww2_for_fdnp_ww1(wasabi2) *****************************')
             logging.info(f'Going to process_and_save_intervals_filter(wasabi2) *****************************')
             process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', op.interval_stop_date,
-                                       'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, SAVE_BASE_FILES_JSON, True)
+                                       'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, op.SAVE_BASE_FILES_JSON, True)
             logging.info(f'done process_and_save_intervals_filter(wasabi2) *****************************')
 
     if op.VISUALIZE_ALL_COINJOINS_INTERVALS:
@@ -4813,7 +4796,7 @@ if __name__ == "__main__":
                                                               split_pool_info[pool_name]['start_date'],
                                                               split_pool_info[pool_name]['stop_date'],
                                                               'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None,
-                                                              SAVE_BASE_FILES_JSON, True)
+                                                              op.SAVE_BASE_FILES_JSON, True)
                 logging.info(f'done for {pool_name}) *****************************')
 
         if op.CJ_TYPE == CoinjoinType.WW1:
@@ -4828,7 +4811,7 @@ if __name__ == "__main__":
                                                               split_pool_info[pool_name]['start_date'],
                                                               split_pool_info[pool_name]['stop_date'],
                                                               'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', None,
-                                                              SAVE_BASE_FILES_JSON, True)
+                                                              op.SAVE_BASE_FILES_JSON, True)
                 logging.info(f'done for {pool_name}) *****************************')
 
         if op.CJ_TYPE == CoinjoinType.SW:
