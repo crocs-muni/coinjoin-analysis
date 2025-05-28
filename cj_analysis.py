@@ -766,6 +766,45 @@ def print_coordinators_counts(coord_txs: dict, min_print_txs: int):
     print('*********')
 
 
+
+def recompute_enter_remix_liquidity_after_removed_cjtxs(coinjoins, mix_protocol: MIX_PROTOCOL):
+    """
+    Call after some changes to existing set of coinjoins were made to update MIX_ENTER and MIX_REMIX values.
+    Expected to be called after full analysis by analyze_input_out_liquidity()
+    :param coinjoins: dictionary with coinjoins
+    :param mix_protocol: type of protocol
+    :return:
+    """
+    logging.debug('recompute_enter_remix_liquidity_after_removed_cjtxs() started')
+
+    # Idea: Coinjoins may have been removed from the set of coinjoins, changing MIX_REMIX -> MIX_ENTER for inputs
+    # and MIX_REMIX -> MIX_LEAVE for outputs
+    # Detect these cases and rectify.
+
+    for cjtx in coinjoins:
+        for input in coinjoins[cjtx]['inputs']:
+            if 'spending_tx' in coinjoins[cjtx]['inputs'][input].keys():
+                spending_tx, index = extract_txid_from_inout_string(coinjoins[cjtx]['inputs'][input]['spending_tx'])
+                if coinjoins[cjtx]['inputs'][input]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name and spending_tx not in coinjoins.keys():
+                    # Change to MIX_ENTER as original cjtx is no longer in coinjoin set
+                    logging.debug(f'Changing MIX_REMIX -> MIX_ENTER for input {cjtx}[{input}]')
+                    coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_ENTER.name
+                    coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs_as_mined'] = 0
+                    coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs_relative'] = 0
+                    coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] = 0
+
+        for output in coinjoins[cjtx]['outputs']:
+            if 'spend_by_tx' in coinjoins[cjtx]['outputs'][output].keys():
+                spend_by_tx, index = extract_txid_from_inout_string(coinjoins[cjtx]['outputs'][output]['spend_by_tx'])
+                if coinjoins[cjtx]['outputs'][output]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name and spend_by_tx not in coinjoins.keys():
+                    # Change to MIX_LEAVE as original spending tx is no longer in coinjoin set
+                    logging.debug(f'Changing MIX_REMIX -> MIX_LEAVE for output {cjtx}[{output}]')
+                    coinjoins[cjtx]['outputs'][output]['mix_event_type'] = MIX_EVENT_TYPE.MIX_LEAVE.name
+                    coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs_as_mined'] = 0
+                    coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs_relative'] = 0
+                    coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] = 0
+
+
 def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins:dict = None, ww1_postmix_spend:dict = None, warn_if_not_found_in_postmix:bool = True):
     """
     Requires performance speedup, will not finish (after 8 hours) for Whirlpool with very large number of coins

@@ -3005,6 +3005,13 @@ def wasabi2_recompute_inputs_outputs_other_pools(selected_coords: list, target_p
     return None
 
 
+def save_coinjoins_create_folder(cjtx_coord: dict, target_path: str, coord_full_name: str):
+    target_save_path = os.path.join(target_path, coord_full_name)
+    if not os.path.exists(target_save_path):
+        os.makedirs(target_save_path.replace('\\', '/'))
+    als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_coord})
+
+
 def wasabi1_extract_other_pools(selected_coords: list, data: dict, target_path: str, interval_start_date: str, interval_stop_date: str, txid_coord_discovered: dict):
     """
     Takes dictionary with all post-zksnacks WW1 coinjoins and split it to separate coordinators.
@@ -3016,38 +3023,103 @@ def wasabi1_extract_other_pools(selected_coords: list, data: dict, target_path: 
     :return: dictionary with basic information regarding separated cooridnators
     """
     logging.debug('wasabi1_extract_other_pools() started')
-    interval_start_date_others = '2023-07-13 11:28:08'  # 2023-07-13 11:27:08 (based on last WW1 cjtx 635fa30bfb56b6f24f6474142a57ee58306a98b9c2887ee8a799ccb4fea4a219 )
 
+    # Splitting idea:
+    # 1. WW1-zksnacks are coinjoins between 2018-07-19 18:09:16 and 2023-07-13 11:27:08
+    #       AND having higher 'relative_order' AND having lower ratio of MIX_ENTER
+    #       the exceptions are early WW1 coinjoins with naturally low 'relative_order' and having higher
+    #       ratio of MIX_ENTER - these are filtered manually by false_cjtx.json
+    # 2. WW1-others are all other coinjoins
 
-    def save_coinjoins_create_folder(cjtx_coord: dict, target_path: str, coord_full_name: str):
-        target_save_path = os.path.join(target_path, coord_full_name)
-        if not os.path.exists(target_save_path):
-            os.makedirs(target_save_path.replace('\\', '/'))
-        als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_coord})
+    # WW1 starts 2018-07-19 18:09:16 f250e997dc1a2d68861e03689d1709973e1964a62f929ba5727fe8607dafb676
+    # WW1 ends   2023-07-13 11:27:08 635fa30bfb56b6f24f6474142a57ee58306a98b9c2887ee8a799ccb4fea4a219
+    interval_start_ww1_zksnacks = '2018-07-19 18:08:16.000'  # 1 minute before
+    interval_stop_ww1_zksnacks = '2023-07-13 11:28:08.000'   # 1 minute after
 
     split_pools_info = {}
     # Extract selected post-zksnacks coordinators
     # Note: For now, we simply split based on date
 
     coord_full_name = f'wasabi1_zksnacks'
-    cjtx_coord_zknacks = {cjtx: data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys()
-                  if data["coinjoins"][cjtx]['broadcast_time'] < interval_start_date_others}
-    save_coinjoins_create_folder(cjtx_coord_zknacks, target_path, coord_full_name)
-    logging.info(f'Total cjtxs extracted for pool {coord_full_name}: {len(cjtx_coord_zknacks)}')
-    split_pools_info[coord_full_name] = {'pool_name': coord_full_name, 'start_date': interval_start_date,
-            'stop_date': interval_start_date_others,
-            'num_cjtxs': len(cjtx_coord_zknacks)}
+    # Basic filtering for WW1-zksnacks time interval
+    cjtx_coord_zksnacks = {cjtx: data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys()
+                          if interval_start_ww1_zksnacks < data["coinjoins"][cjtx]['broadcast_time'] < interval_stop_ww1_zksnacks}
+    # Additional filtering based on relative_order and MIX_ENTER ratios
+    # If 'broadcast_time' is over '2018-12-01 00:00:00.000' and 'relative_order' > 100 (after few initial WW1 transactions,
+    # no stream of non-WW1 txs longer than 20 was detected)
+    cjtx_coord_zknacks_filtered = {cjtx: cjtx_coord_zksnacks[cjtx] for cjtx in cjtx_coord_zksnacks.keys()
+                                   if cjtx_coord_zksnacks[cjtx]['broadcast_time'] < '2018-12-01 00:00:00.000'
+                                   or cjtx_coord_zksnacks[cjtx]['relative_order'] > 100}
+    to_remove = {}
+    # Additional filtering check - the ~0.1 output value shall be the most common one
+    for cjtx in cjtx_coord_zknacks_filtered.keys():
+        most_common_output_value = Counter([cjtx_coord_zknacks_filtered[cjtx]['outputs'][index]['value']
+                                     for index in cjtx_coord_zknacks_filtered[cjtx]['outputs'].keys()]
+                                    ).most_common(1)[0][0]
+        most_common_output_value = most_common_output_value / SATS_IN_BTC
+        if most_common_output_value < 0.08 or most_common_output_value > 0.12:
+            print(f'{cjtx} ({data["coinjoins"][cjtx]['broadcast_time']}) has suspicious most common output of {most_common_output_value}')
+            to_remove[cjtx] = True
+    # Remove found candidates for filtering
+    cjtx_coord_zknacks_filtered2 = {cjtx: cjtx_coord_zknacks_filtered[cjtx] for cjtx in cjtx_coord_zknacks_filtered.keys()
+                                   if cjtx not in to_remove.keys()}
+    cjtx_coord_zknacks_filtered = cjtx_coord_zknacks_filtered2
 
+    # Recompute liquidity events based on the current coinjoin set
+    als.recompute_enter_remix_liquidity_after_removed_cjtxs(cjtx_coord_zknacks_filtered, MIX_PROTOCOL.WASABI1)
+    #save_coinjoins_create_folder(cjtx_coord_zknacks_filtered, target_path, coord_full_name + '_after_sus_output')
+
+    # Additional filtering check - too many fresh inputs are suspicious
+    to_remove = {}
+    SUS_MIX_ENTER_RATIO = 0.7
+    for cjtx in cjtx_coord_zknacks_filtered.keys():
+        num_inputs_enter = sum([1 for index in cjtx_coord_zknacks_filtered[cjtx]['inputs'].keys()
+                          if cjtx_coord_zknacks_filtered[cjtx]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name])
+        fresh_ratio = (num_inputs_enter / len(cjtx_coord_zknacks_filtered[cjtx]['inputs']))
+        if fresh_ratio > SUS_MIX_ENTER_RATIO:
+            print(f'{cjtx} ({data["coinjoins"][cjtx]['broadcast_time']}) has suspiciously high fresh inputs of {fresh_ratio}')
+            if cjtx != 'f250e997dc1a2d68861e03689d1709973e1964a62f929ba5727fe8607dafb676':  # Very first WW1 transaction, keep
+                to_remove[cjtx] = True
+    # Remove found candidates for filtering
+    cjtx_coord_zknacks_filtered2 = {cjtx: cjtx_coord_zknacks_filtered[cjtx] for cjtx in cjtx_coord_zknacks_filtered.keys()
+                                   if cjtx not in to_remove.keys()}
+    cjtx_coord_zknacks_filtered = cjtx_coord_zknacks_filtered2
+
+    # Recompute liquidity events based on the current coinjoin set
+    als.recompute_enter_remix_liquidity_after_removed_cjtxs(cjtx_coord_zknacks_filtered, MIX_PROTOCOL.WASABI1)
+    #save_coinjoins_create_folder(cjtx_coord_zknacks_filtered, target_path, coord_full_name + '_after_sus_fresh_rate')
+
+    save_coinjoins_create_folder(cjtx_coord_zknacks_filtered, target_path, coord_full_name)
+    logging.info(f'Total cjtxs extracted for pool {coord_full_name}: {len(cjtx_coord_zknacks_filtered)}')
+    split_pools_info[coord_full_name] = {'pool_name': coord_full_name, 'start_date': interval_start_date,
+            'stop_date': interval_stop_ww1_zksnacks,
+            'num_cjtxs': len(cjtx_coord_zknacks_filtered)}
+
+    # Early Wasabi1 mystery coordinator
+    # First tx: 2018-08-02 15:57:32 38a83a9766357871a77992ecaead52f70c5f9f703769e6ebd4dcdb05172b28a9
+    # Last tx: 2019-01-02 12:57:09 db73c667fd25aa6cf56a24cd4909d3d4b28479f79ba6ec86fe91125dc12e2022
+    coord_full_name = f'wasabi1_mystery'
+    cjtx_coord_mystery = {cjtx: data['coinjoins'][cjtx] for cjtx in data['coinjoins'].keys()
+                         if cjtx not in cjtx_coord_zknacks_filtered.keys() and
+                         '2018-08-02 15:57:00.000' < data['coinjoins'][cjtx]['broadcast_time'] < '2019-01-02 12:57:10.000'}
+    save_coinjoins_create_folder(cjtx_coord_mystery, target_path, coord_full_name)
+    logging.info(f'Total cjtxs extracted for pool {coord_full_name}: {len(cjtx_coord_mystery)}')
+    split_pools_info[coord_full_name] = {'pool_name': coord_full_name, 'start_date': '2018-08-02 15:57:00.000',
+            'stop_date': '2019-01-02 12:57:10.000',
+            'num_cjtxs': len(cjtx_coord_mystery)}
+
+    # All other cooridnators
     coord_full_name = f'wasabi1_others'
     cjtx_coord_others = {cjtx: data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys()
-                  if data["coinjoins"][cjtx]['broadcast_time'] >= interval_start_date_others}
+                         if cjtx not in cjtx_coord_zknacks_filtered.keys()}
     save_coinjoins_create_folder(cjtx_coord_others, target_path, coord_full_name)
     logging.info(f'Total cjtxs extracted for pool {coord_full_name}: {len(cjtx_coord_others)}')
-    split_pools_info[coord_full_name] = {'pool_name': coord_full_name, 'start_date': interval_start_date_others,
+    split_pools_info[coord_full_name] = {'pool_name': coord_full_name, 'start_date': interval_start_ww1_zksnacks,
             'stop_date': interval_stop_date,
             'num_cjtxs': len(cjtx_coord_others)}
 
     return split_pools_info
+
 
 def backup_log_files(target_path: str):
     """
@@ -4773,7 +4845,7 @@ if __name__ == "__main__":
         if op.CJ_TYPE == CoinjoinType.WW1:
             data = als.load_json_from_file(os.path.join(target_path, 'wasabi1', 'coinjoin_tx_info.json'))
             coord_tx_mapping = None
-            selected_coords = ['zksnacks', 'others']
+            selected_coords = ['zksnacks', 'mystery', 'others']
             split_pool_info = wasabi1_extract_other_pools(selected_coords, data, target_path, '2018-07-19 01:38:07.000', op.interval_stop_date, coord_tx_mapping)
             # Perform splitting into month intervals for all processed coordinators
             for pool_name in split_pool_info.keys():
@@ -4807,7 +4879,7 @@ if __name__ == "__main__":
                     logging.warning(f'Path {target_base_path} does not exists.')
 
         if op.CJ_TYPE == CoinjoinType.WW1:
-            ww_plot_remixes_helper(['wasabi1_zksnacks', 'wasabi1_others'], MIX_PROTOCOL.WASABI1)
+            ww_plot_remixes_helper(['wasabi1_mystery', 'wasabi1_zksnacks', 'wasabi1_others'], MIX_PROTOCOL.WASABI1)
             # wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
             # wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
             # wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
@@ -4985,3 +5057,9 @@ if __name__ == "__main__":
 
 # WW1 last cjtx?
 # 2023-07-13 11:27:08 635fa30bfb56b6f24f6474142a57ee58306a98b9c2887ee8a799ccb4fea4a219 0.10143340
+
+
+# WW1 paralell early coinjoin coordinator :
+# start 2018-08-02 15:57:32   38a83a9766357871a77992ecaead52f70c5f9f703769e6ebd4dcdb05172b28a9
+# end 2019-01-02 12:57:09 db73c667fd25aa6cf56a24cd4909d3d4b28479f79ba6ec86fe91125dc12e2022
+# Then large consolidations
