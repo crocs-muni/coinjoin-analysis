@@ -333,10 +333,10 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
                     logging.debug(f"Outputs: ")
                     for index in record['outputs'].keys():
                         logging.debug(f"  [{index}]: {coinjoins[txid]['outputs'][index]['value']} sats")
-                hidden_cfee = -tx['amount'] - wallet_fair_mfee_sats
-                if hidden_cfee < -10:
-                    logging.debug(f"Sligthly smaller hidden fee than expected: {hidden_cfee} sats")
-                assert hidden_cfee >= -100, f"Incorrect hidden fee of {hidden_cfee} sats"
+                hidden_ctip = -tx['amount'] - wallet_fair_mfee_sats
+                if hidden_ctip < -10:
+                    logging.debug(f"Sligthly smaller hidden tip than expected: {hidden_ctip} sats")
+                assert hidden_ctip >= -100, f"Incorrect hidden tip of {hidden_ctip} sats"
 
                 record['total_mining_fee'] = total_mining_fee
                 record['mining_fee_rate'] = fee_rate
@@ -344,7 +344,7 @@ def analyze_multisession_mix_experiments(target_base_path: str, mix_name: str, t
                 record['wallet_vsize'] = wallet_vsize
                 record['wallet_fair_mfee'] = wallet_fair_mfee_sats
                 record['wallet_fee_paid'] = -tx['amount']
-                record['wallet_hidden_cfee_paid'] = hidden_cfee
+                record['wallet_hidden_ctip_paid'] = hidden_ctip
             else:
                 logging.warning(f'{tx_file_path} is missing')
             session_cjtxs[txid] = record
@@ -821,17 +821,17 @@ def analyze_ww2_artifacts(target_path: str, experiment_start_cut_date: str, expe
     # Plot histogram of hidden coordination fees (cfee)
     ax = mfig.add_subplot()
     data_mfee = [all_cjs['sessions'][session_label]['coinjoins'][cjtxid]['wallet_fair_mfee'] for session_label in all_cjs['sessions'].keys() for cjtxid in all_cjs['sessions'][session_label]['coinjoins'].keys()]
-    data_cfee = [all_cjs['sessions'][session_label]['coinjoins'][cjtxid]['wallet_hidden_cfee_paid'] for session_label in all_cjs['sessions'].keys() for cjtxid in all_cjs['sessions'][session_label]['coinjoins'].keys()]
-    data_cfee_small = [value for value in data_cfee if value < 10000]
+    data_ctips = [all_cjs['sessions'][session_label]['coinjoins'][cjtxid]['wallet_hidden_ctip_paid'] for session_label in all_cjs['sessions'].keys() for cjtxid in all_cjs['sessions'][session_label]['coinjoins'].keys()]
+    data_ctips_small = [value for value in data_ctips if value < 10000]
     print(f'Mining fee sum={sum(data_mfee)}')
-    print(f'Hidden cfee (sum={sum(data_cfee)}): {sorted(data_cfee)}')
+    print(f'Hidden ctip (sum={sum(data_ctips)}): {sorted(data_ctips)}')
     label = f'Fair mining fee: {sum(data_mfee)} sats' if LONG_LEGEND else f'Mining fee'
     ax.hist(data_mfee, bins=30, color='green', edgecolor='black', alpha=0.5, label=label)
-    label = f'Hidden coord. fee: {sum(data_cfee)} sats' if LONG_LEGEND else f'Hidden coord. fee'
-    ax.hist(data_cfee_small, bins=100, color='red', edgecolor='black', alpha=0.5, label=label)
+    label = f'Hidden coord. tips: {sum(data_ctips)} sats' if LONG_LEGEND else f'Hidden coord. tips'
+    ax.hist(data_ctips_small, bins=100, color='red', edgecolor='black', alpha=0.5, label=label)
     ax.set_xlabel('fee (sats)')
     ax.set_ylabel('# occurences')
-    title = 'Distribution of mining and hidden coordination fees' if LONG_LEGEND else 'Mining & hidden coord. fees'
+    title = 'Distribution of mining and hidden coordination tips' if LONG_LEGEND else 'Mining & hidden coord. tips'
     ax.set_title(title)
     ax.legend()
 
@@ -1015,9 +1015,6 @@ if __name__ == "__main__":
 
     # TODO: limits stats
     # TODO: Prison time distribution
-    # TODO: Compute cost of mixing including hidden coordination fee
+    # TODO: Compute cost of mixing including hidden coordination tips
     # TODO: Compute remixed liquidity when as limited to 5
-    # TODO: plot how long it takes (#coinjoins, walltime) to achieve desired anonscore target
     # TODO: Add wallclock time for coinjoin
-    # TODO: predict number of wallets roughly based on number of avg inputs as well as number of avg outputs! (and compare)
-    # TODO:
