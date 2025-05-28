@@ -3799,9 +3799,11 @@ class DumplingsParseOptions:
 
 
     def print_attributes(self):
+        print('*******************************************')
         print('DumplingsParseOptions parameters:')
         for attr, value in vars(self).items():
             print(f'  {attr}={value}')
+        print('*******************************************')
 
 
 def free_memory(data_to_free):
@@ -4000,7 +4002,7 @@ if __name__ == "__main__":
 
     # WARNING: SW 100k pool does not match exactly mix_stay and active liqudity at the end - likely reason are neglected mining fees
 
-    op.DEBUG = True
+    #op.DEBUG = True
     if op.DEBUG:
         print('DEBUGING TIME!!!')
         wasabi_plot_remixes('wasabi1_zksnacks', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1_zksnacks'),
@@ -4934,7 +4936,6 @@ if __name__ == "__main__":
         wasabi_plot_remixes_flows('wasabi2_select',
                              os.path.join(target_path, 'wasabi2_select'),
                              'coinjoin_tx_info.json', False, True)
-        exit(42)
 
     if op.ANALYSIS_CLUSTERS:
         if op.CJ_TYPE == CoinjoinType.WW1:
