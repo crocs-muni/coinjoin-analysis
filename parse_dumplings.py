@@ -4799,26 +4799,6 @@ if __name__ == "__main__":
             wasabi_detect_false(os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json')
             wasabi_detect_false(os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json')
 
-    if op.SPLIT_WHIRLPOOL_POOLS:
-        if op.CJ_TYPE == CoinjoinType.SW:
-            # Load txs for all pools
-            target_load_path = os.path.join(target_path, 'whirlpool')
-            logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
-            data = als.load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
-
-            # Separate per pool
-            pool_100k = whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_100k', 100000)
-            pool_1M = whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_1M', 1000000)
-            pool_5M = whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_5M', 5000000)
-            pool_50M = whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_50M', 50000000)
-
-            # Detect transactions which were not assigned to any pool
-            missed_cjtxs = list(set(data["coinjoins"].keys()) - set(pool_100k["coinjoins"].keys()) - set(pool_1M["coinjoins"].keys())
-                                - set(pool_5M["coinjoins"].keys()) - set(pool_50M["coinjoins"].keys()))
-            als.save_json_to_file_pretty(os.path.join(target_load_path, f'coinjoin_tx_info__missed.json'), missed_cjtxs)
-            print(f'Total transactions not separated into pools: {len(missed_cjtxs)}')
-            print(missed_cjtxs)
-
     if op.DETECT_COORDINATORS:
         if op.CJ_TYPE == CoinjoinType.WW2:
             # Detect coordinators for others (wasabi2_others)
@@ -4860,8 +4840,24 @@ if __name__ == "__main__":
                 logging.info(f'done for {pool_name}) *****************************')
 
         if op.CJ_TYPE == CoinjoinType.SW:
-            logging.error('Unsupported CJ_TYPE for SPLIT_COORDINATORS')
-            exit(-1)
+            # Load txs for all pools
+            target_load_path = os.path.join(target_path, 'whirlpool')
+            logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
+            data = als.load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
+
+            # Separate per pool
+            pool_100k = whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_100k', 100000)
+            pool_1M = whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_1M', 1000000)
+            pool_5M = whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_5M', 5000000)
+            pool_50M = whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_50M', 50000000)
+
+            # Detect transactions which were not assigned to any pool
+            missed_cjtxs = list(set(data["coinjoins"].keys()) - set(pool_100k["coinjoins"].keys()) - set(pool_1M["coinjoins"].keys())
+                                - set(pool_5M["coinjoins"].keys()) - set(pool_50M["coinjoins"].keys()))
+            als.save_json_to_file_pretty(os.path.join(target_load_path, f'coinjoin_tx_info__missed.json'), missed_cjtxs)
+            print(f'Total transactions not separated into pools: {len(missed_cjtxs)}')
+            print(missed_cjtxs)
+
 
     if op.PLOT_INTERMIX_FLOWS:
         analyze_mixes_flows(target_path)
