@@ -1,10 +1,12 @@
 import copy
+import json
 import math
 import multiprocessing
 import os
 import pickle
 import random
 import shutil
+import subprocess
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing.pool import ThreadPool
 from datetime import datetime, timedelta
@@ -32,6 +34,7 @@ import time
 import ast
 import requests
 from tqdm import tqdm
+import tracemalloc
 
 # Configure the logging module
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -2886,29 +2889,29 @@ def wasabi2_extract_pools_destroys_data(data: dict, target_path: str, interval_s
     interval_start_date_others = '2024-05-01 00:00:00.000'
     cjtx_others = {cjtx: data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys() if data["coinjoins"][cjtx][
         'broadcast_time'] > "2024-06-02 00:00:00.000"}
-    print(f'cjtx_others len={len(cjtx_others)}')
+    logging.debug(f'cjtx_others len={len(cjtx_others)}')
     cjtx_others_overlap = {cjtx:data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys() if data["coinjoins"][cjtx][
         'broadcast_time'] > interval_start_date_others and data["coinjoins"][cjtx][
         'broadcast_time'] < "2024-06-02 00:00:00.000" and len(data["coinjoins"][cjtx]['inputs']) < 150}
-    print(f'cjtx_others_overlap len={len(cjtx_others_overlap)}')
+    logging.debug(f'cjtx_others_overlap len={len(cjtx_others_overlap)}')
     cjtx_others.update(cjtx_others_overlap)
-    print(f'cjtx_others joined len={len(cjtx_others)}')
+    logging.debug(f'cjtx_others joined len={len(cjtx_others)}')
     split_pools_info['wasabi2_others'] = save_split_coordinator(cjtx_others, target_path,
                                                                 'wasabi2_others', interval_start_date_others, interval_stop_date)
-    logging.info(f'Total cjtxs extracted for pool WW2-others: {len(cjtx_others)}')
+    SM.print(f'Total cjtxs extracted for pool WW2-others: {len(cjtx_others)}')
 
     # Extract zksnacks coordinator
     # Rule: All till 2024-06-02 00:00:00.000, in final 10 days must have >= 150 inputs
     interval_stop_date_zksnacks = "2024-06-03 00:00:00.000"
     cjtx_zksnacks_keys = {cjtx: None for cjtx in data["coinjoins"].keys() if data["coinjoins"][cjtx][
         'broadcast_time'] < "2024-05-20 00:00:00.000"}
-    print(f'cjtx_zksnacks len={len(cjtx_zksnacks_keys)}')
+    logging.debug(f'cjtx_zksnacks len={len(cjtx_zksnacks_keys)}')
     cjtx_zksnacks_overlap_keys = {cjtx: None for cjtx in data["coinjoins"].keys() if data["coinjoins"][cjtx][
         'broadcast_time'] > "2024-05-20 00:00:00.000" and data["coinjoins"][cjtx]['broadcast_time'] < interval_stop_date_zksnacks
                              and len(data["coinjoins"][cjtx]['inputs']) >= 150}
-    print(f'cjtx_zksnacks_overlap len={len(cjtx_zksnacks_overlap_keys)}')
+    logging.debug(f'cjtx_zksnacks_overlap len={len(cjtx_zksnacks_overlap_keys)}')
     cjtx_zksnacks_keys.update(cjtx_zksnacks_overlap_keys)
-    print(f'cjtx_zksnacks joined len={len(cjtx_zksnacks_keys)}')
+    logging.debug(f'cjtx_zksnacks joined len={len(cjtx_zksnacks_keys)}')
 
     # We have coinjoins to keep - delete all others. Use in place deletion not to cause high peak memory
     non_zksnacks_cjtxs = [cjtx for cjtx in data["coinjoins"].keys() if cjtx not in cjtx_zksnacks_keys]
@@ -2922,7 +2925,7 @@ def wasabi2_extract_pools_destroys_data(data: dict, target_path: str, interval_s
     if not os.path.exists(target_save_path):
         os.makedirs(target_save_path.replace('\\', '/'))
     als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), data)
-    logging.info(f'Total cjtxs extracted for pool WW2-zkSNACKs: {len(data)}')
+    SM.print(f'Total cjtxs extracted for pool WW2-zkSNACKs: {len(data)}')
     # IMPORTANT Explicitly change data dictionary to empty one as we already modified it inplace for peak memory requirements
     data.clear()  # Clears the original dictionary
     data["deleted"] = "deleted"
@@ -2930,8 +2933,8 @@ def wasabi2_extract_pools_destroys_data(data: dict, target_path: str, interval_s
     # Detect transactions which were not assigned to any pool (neither zksnacks, nor others)
     missed_cjtxs = list(set(non_zksnacks_cjtxs) - set(cjtx_others.keys()))
     als.save_json_to_file_pretty(os.path.join(target_path, f'coinjoin_tx_info__missed.json'), missed_cjtxs)
-    print(f'Total transactions not separated into pools: {len(missed_cjtxs)}')
-    print(missed_cjtxs)
+    SM.print(f'Total transactions not separated into pools: {len(missed_cjtxs)}')
+    logging.debug(missed_cjtxs)
 
     # Backup corresponding log file
     backup_log_files(target_path)
