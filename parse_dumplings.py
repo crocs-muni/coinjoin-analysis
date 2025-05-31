@@ -4002,9 +4002,58 @@ if __name__ == "__main__":
 
     # WARNING: SW 100k pool does not match exactly mix_stay and active liqudity at the end - likely reason are neglected mining fees
 
-    #op.DEBUG = True
+    op.DEBUG = True
     if op.DEBUG:
         print('DEBUGING TIME!!!')
+        coord = 'wasabi2_others'
+        #coord = 'wasabi1_mystery'
+        #coord = 'wasabi1_others'
+        target_load_path = os.path.join(target_path, coord)
+
+        tracemalloc.start()
+        start_snapshot = tracemalloc.take_snapshot()
+
+        all_data = als.load_coinjoins_from_file(target_load_path, None, False)
+
+        end_snapshot = tracemalloc.take_snapshot()
+        stats = end_snapshot.compare_to(start_snapshot, 'lineno')
+
+        #
+        all_data_slim = {'coinjoins': {}}
+        all_data_slim['coinjoins'][txid] =
+
+
+        # Print top memory differences
+        for stat in stats[:10]:
+            print(stat)
+        exit(42)
+
+        coord = 'wasabi2_others'
+        coord = 'wasabi1_mystery'
+        #coord = 'wasabi1_others'
+        target_load_path = os.path.join(target_path, coord)
+
+        # In RAM processing
+        all_data = als.load_coinjoins_from_file(target_load_path, None, False)
+        tic = time.perf_counter()
+        als.print_liquidity_summary(all_data["coinjoins"], f'{coord}')
+        print(f"print_liquidity_summary() for legacy in RAM {time.perf_counter() - tic:.4f}s")
+        del(all_data)
+
+        # SQL processing
+        all_data = als.load_coinjoins_from_file_sqlite(target_load_path, None, False)
+        tic = time.perf_counter()
+        als.print_liquidity_summary(all_data["coinjoins"], f'{coord}')
+        print(f"print_liquidity_summary() for SQL {time.perf_counter() - tic:.4f}s")
+
+        #print(list(all_data["coinjoins"].keys())[3])
+        #als.print_liquidity_summary(all_data["coinjoins"], f'{coord}')
+
+        exit(42)
+
+        data = detect_additional_cjtxs('wasabi1_mystery', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1_mystery'))
+        exit(42)
+
         wasabi_plot_remixes('wasabi1_zksnacks', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1_zksnacks'),
                             'coinjoin_tx_info.json', False, True, None,
                             None, True, True)

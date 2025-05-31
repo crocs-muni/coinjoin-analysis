@@ -1,15 +1,19 @@
 import logging
 import os
+import subprocess
 from collections import Counter
+import sqlite3, pathlib
 
+import msgpack
 import orjson
 import json
-
+import time
 import numpy as np
 from datetime import datetime, timedelta
 from enum import Enum
 import re
 import math
+from  txstore import TxStore, TxStoreMsgPack
 
 from bitcoin.core import CTransaction, CMutableTransaction, CTxWitness
 # from bitcoin.core import CScript, x
@@ -1427,6 +1431,58 @@ def sort_coinjoins(cjtxs: dict, sort_by_order: bool = False):
         sorted_cj_time = sorted(cj_time, key=lambda x: x['broadcast_time'])
         return sorted_cj_time
 
+
+def dump_json_to_db(cjtx_dict, db_path):
+    # Dump to sqlite db
+    con = sqlite3.connect(db_path)
+    con.execute("PRAGMA journal_mode=WAL")  # faster + concurrent reads
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS txs (
+            txid TEXT PRIMARY KEY,
+            data BLOB        
+        )
+    """)
+
+    tic = time.perf_counter()
+
+    BATCH = 1_000
+    it = iter(cjtx_dict.items())
+    with con:
+        batch = []
+        for txid, tx in it:
+            #batch.append((txid, orjson.dumps(tx)))
+            batch.append((txid, msgpack.packb(tx, use_bin_type=True)))
+
+            if len(batch) == BATCH:
+                con.executemany("INSERT OR REPLACE INTO txs VALUES (?, ?)", batch)
+                batch.clear()
+        if batch:  # leftovers
+            con.executemany("INSERT OR REPLACE INTO txs VALUES (?, ?)", batch)
+
+    print(f"Wrote {len(cjtx_dict):,d} rows in {time.perf_counter() - tic:.1f}s")
+
+def load_coinjoins_from_file_sqlite(target_load_path: str, false_cjtxs: dict, filter_false_positives: bool) -> dict:
+    logging.debug(f'load_coinjoins_from_file_sqlite {target_load_path}/coinjoin_tx_info.json ...')
+    data = load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
+    logging.debug(f'  ... loaded.')
+    db_path = os.path.join(target_load_path, f'coinjoin_tx_info.sqlite')
+    logging.debug(f'Transforming to sqlite...')
+    dump_json_to_db(data['coinjoins'], db_path)
+    logging.debug(f'   ... done')
+    del(data['coinjoins'])
+    #data['coinjoins'] = TxStore(db_path)
+    data['coinjoins'] = TxStoreMsgPack(db_path)
+
+    # # Filter false positives if required
+    # if filter_false_positives:
+    #     if false_cjtxs is None:
+    #         fp_file = os.path.join(target_load_path, 'false_cjtxs.json')
+    #         false_cjtxs = load_json_from_file(fp_file)
+    #     for false_tx in false_cjtxs:
+    #         if false_tx in data['coinjoins'].keys():
+    #             data['coinjoins'].pop(false_tx)
+
+    return data
 
 def load_coinjoins_from_file(target_load_path: str, false_cjtxs: dict, filter_false_positives: bool) -> dict:
     logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
