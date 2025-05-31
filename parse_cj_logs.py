@@ -152,30 +152,6 @@ def print_round_logs(filename, round_id):
     print('**************************************')
 
 
-def run_command(command, verbose):
-    """
-    Execute shell command and return results
-    :param command: command line to be executed
-    :param verbose: if True, print intermediate results
-    :return: command results with stdout, stderr and returncode (see subprocess CompletedProcess for documentation)
-    """
-    try:
-        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
-        if verbose:
-            if result.returncode == 0:
-                print("Command executed successfully.")
-                print("Output:")
-                print(result.stdout)
-            else:
-                print("Command failed.")
-                print("Error:")
-                print(result.stderr)
-    except Exception as e:
-        print("An error occurred:", e)
-
-    return result
-
-
 def get_input_address(txid, txid_in_out, raw_txs: dict = {}):
     """
     Returns address which was used in transaction given by 'txid' as 'txid_in_out' output index
@@ -188,7 +164,7 @@ def get_input_address(txid, txid_in_out, raw_txs: dict = {}):
     if len(raw_txs) > 0 and txid in raw_txs.keys():
         tx_info = raw_txs[txid]
     else:
-        result = run_command(
+        result = als.run_command(
             '{} -regtest getrawtransaction {} true'.format(BTC_CLI_PATH, txid), False)
         tx_info = json.loads(result.stdout)
 
@@ -220,7 +196,7 @@ def extract_tx_info(txid: str, raw_txs: dict):
         tx_info = raw_txs[txid]
     else:
         # retrieve from fullnode via RPC
-        result = run_command(
+        result = als.run_command(
             '{} -regtest getrawtransaction {} true'.format(BTC_CLI_PATH, txid), False)
         if result.returncode != 0:
             print(f'Cannot retrieve tx info for {txid} with {result.stderr} error')
@@ -2528,7 +2504,7 @@ def load_rawtx_database(base_tx_path):
     for tx_file in files:
         with open(tx_file, "r") as file:
             raw_tx = json.load(file)
-            result = run_command(
+            result = als.run_command(
                 '{} -regtest decoderawtransaction \"{}\" '.format(BTC_CLI_PATH, raw_tx['txRawHex']), False)
             tx_info = result.stdout
             parsed_tx_info = json.loads(tx_info)

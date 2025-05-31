@@ -1697,3 +1697,27 @@ def extract_tx_info(txid: str, raw_txs: dict):
         return None
 
     return tx_record
+
+
+def run_command(command, verbose):
+    """
+    Execute shell command and return results
+    :param command: command line to be executed
+    :param verbose: if True, print intermediate results
+    :return: command results with stdout, stderr and returncode (see subprocess CompletedProcess for documentation)
+    """
+    try:
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, text=True)
+        if verbose:
+            if result.returncode == 0:
+                print("Command executed successfully.")
+                print("Output:")
+                print(result.stdout)
+            else:
+                print("Command failed.")
+                print("Error:")
+                print(result.stderr)
+    except Exception as e:
+        print("An error occurred:", e)
+
+    return result
