@@ -1048,7 +1048,7 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
             # Load base files from already stored json
             logging.info(f'Loading {target_save_path}/coinjoin_tx_info.json ...')
 
-            data = als.load_json_from_file(os.path.join(target_save_path, f'coinjoin_tx_info.json'))
+            data = als.load_coinjoins_from_file(target_save_path, None, False)
 
             # If found, enrich data with coinjoin-specific metadata
             metadata_file = os.path.join(target_path, f'{mix_id}_wallet_predictions.json')
@@ -1795,7 +1795,7 @@ def whirlpool_analyze_coordinator_fees(mix_id: str, data: dict):
 
 
 def whirlpool_analyse_remixes(mix_id: str, target_path: str):
-    data = als.load_json_from_file(os.path.join(target_path, mix_id, 'coinjoin_tx_info.json'))
+    data = als.load_coinjoins_from_file(os.path.join(target_path, mix_id), None, True)
     als.analyze_input_out_liquidity(data["coinjoins"], data['postmix'], data['premix'], MIX_PROTOCOL.WHIRLPOOL)
     whirlpool_analyze_fees(mix_id, data)
     inputs_value_burntime_heatmap(mix_id, data)
@@ -1803,7 +1803,7 @@ def whirlpool_analyse_remixes(mix_id: str, target_path: str):
 
 
 def wasabi2_analyse_remixes(mix_id: str, target_path: str):
-    data = als.load_json_from_file(os.path.join(target_path, mix_id, 'coinjoin_tx_info.json'))
+    data = als.load_coinjoins_from_file(os.path.join(target_path, mix_id), None, False)
     cj_relative_order = als.analyze_input_out_liquidity(data["coinjoins"], data['postmix'], [], MIX_PROTOCOL.WASABI2)
     als.save_json_to_file_pretty(os.path.join(target_path, mix_id, f'cj_relative_order.json'), cj_relative_order)
 
@@ -1940,8 +1940,7 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
     mining_fee_rates = als.load_json_from_file(os.path.join(target_path, 'fee_rates.json'))
 
     # Load false positives
-    fp_file = os.path.join(target_path, 'false_cjtxs.json')
-    false_cjtxs = als.load_json_from_file(fp_file)
+    false_cjtxs = als.load_false_cjtxs_from_file(os.path.join(target_path, 'false_cjtxs.json'))
 
     # Compute number of required month subgraphs
     num_months = sum([1 for dir_name in files
@@ -2329,8 +2328,7 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
     REUSE_THRESHOLD = 0.7
     print(f'Going to process the following subfolders of {target_path}: {files}')
     # Load false positives
-    fp_file = os.path.join(target_path, 'false_cjtxs.json')
-    false_cjtxs = als.load_json_from_file(fp_file)
+    false_cjtxs = als.load_false_cjtxs_from_file(os.path.join(target_path, 'false_cjtxs.json'))
 
     no_remix_all = {'inputs_noremix': {}, 'outputs_noremix': {}, 'both_noremix': {},
                     f'inputs_address_reuse': {}, f'outputs_address_reuse': {},
@@ -2367,7 +2365,7 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
 
 
 def wasabi1_analyse_remixes(mix_id: str, target_path: str):
-    data = als.load_json_from_file(os.path.join(target_path, mix_id, 'coinjoin_tx_info.json'))
+    data = als.load_coinjoins_from_file(os.path.join(target_path, mix_id), None, False)
     als.analyze_input_out_liquidity(data["coinjoins"], data['postmix'], [], MIX_PROTOCOL.WASABI1)
 
     wasabi1_analyze_fees(mix_id, data)
@@ -2411,7 +2409,7 @@ def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: str):
     for path in sorted(paths_to_process):
         logging.info(f'Processing {path}...')
 
-        ww2_data = als.load_json_from_file(os.path.join(path, f'coinjoin_tx_info.json'))
+        ww2_data = als.load_coinjoins_from_file(path, None, False)
 
         # For all values with mix_event_type equal to MIX_ENTER check if they are not from WW1
         # with friends-do-not-pay rule
@@ -2991,7 +2989,7 @@ def wasabi2_recompute_inputs_outputs_other_pools(selected_coords: list, target_p
         coord_full_name = f'wasabi2_{coord_name}'
 
         target_save_path = os.path.join(target_path, coord_full_name)
-        data = als.load_json_from_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'))
+        data = als.load_coinjoins_from_file(target_save_path, None, False)
 
         als.analyze_input_out_liquidity(data["coinjoins"], data.get('postmix', {}), data.get('premix', {}),
                                         mix_protocol, None, None, False)
@@ -4793,7 +4791,7 @@ if __name__ == "__main__":
 
         if op.CJ_TYPE == CoinjoinType.WW1:
             target_load_path = os.path.join(target_path, 'wasabi1')
-            all_data = als.load_coinjoins_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'), None, True)
+            all_data = als.load_coinjoins_from_file(target_load_path, None, True)
 
             # Large inflows into WW1 in 2019-08-09, mixed and the all taken out
             process_joint_interval('wasabi1', 'wasabi1__2019_08-09', all_data, MIX_PROTOCOL.WASABI1, target_path, '2019-08-01 00:00:07.000', '2019-09-30 23:59:59.000')
@@ -4874,6 +4872,12 @@ if __name__ == "__main__":
                 logging.info(f'done for {pool_name}) *****************************')
 
             # Fix the large aggregate file (may crash due to huge memory requirements)
+            # Precaution: Let's streamline large dictionary first and save
+            ww2_data = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi2'), None, False)
+            als.streamline_coinjoins_structure(ww2_data)
+            als.save_json_to_file(os.path.join(target_path, 'wasabi2', 'coinjoin_tx_info.json'), ww2_data)
+            del ww2_data
+
             logging.info(f'Going to fix_ww2_for_fdnp_ww1(wasabi2) *****************************')
             fix_ww2_for_fdnp_ww1('wasabi2', target_path)
             logging.info(f'done fix_ww2_for_fdnp_ww1(wasabi2) *****************************')
@@ -4914,7 +4918,8 @@ if __name__ == "__main__":
 
     if op.SPLIT_COORDINATORS:
         if op.CJ_TYPE == CoinjoinType.WW2:
-            data = als.load_json_from_file(os.path.join(target_path, 'wasabi2_others', 'coinjoin_tx_info.json'))
+            data = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi2'), None, False)
+
             coord_tx_mapping = als.load_json_from_file(os.path.join(target_path, 'wasabi2_others', 'txid_coord_discovered_renamed.json'))
             selected_coords = ["kruw", "mega", "btip", "gingerwallet", "wasabicoordinator", "coinjoin_nl",
                                "opencoordinator", "dragonordnance", "wasabist"]
@@ -4930,7 +4935,7 @@ if __name__ == "__main__":
                 logging.info(f'done for {pool_name}) *****************************')
 
         if op.CJ_TYPE == CoinjoinType.WW1:
-            data = als.load_json_from_file(os.path.join(target_path, 'wasabi1', 'coinjoin_tx_info.json'))
+            data = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi1'), None, False)
             coord_tx_mapping = None
             selected_coords = ['zksnacks', 'mystery', 'others']
             split_pool_info = wasabi1_extract_other_pools(selected_coords, data, target_path, '2018-07-19 01:38:07.000', op.interval_stop_date, coord_tx_mapping)
@@ -4948,7 +4953,7 @@ if __name__ == "__main__":
             # Load txs for all pools
             target_load_path = os.path.join(target_path, 'whirlpool')
             logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
-            data = als.load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
+            data = als.load_coinjoins_from_file(target_load_path, None, False)
 
             # Separate per pool
             pool_100k = whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_100k', 100000)
