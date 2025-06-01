@@ -233,19 +233,6 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
     return cj_stats
 
 
-def load_coinjoin_txids_from_file(target_file, start_date: str = None, stop_date: str = None):
-    cjtxs = {}
-    logging.debug(f'load_coinjoin_txids_from_file() Processing file {target_file}')
-    with open(target_file, "r") as file:
-        for line in file.readlines():
-            parts = line.split(VerboseTransactionInfoLineSeparator)
-            tx_id = None if parts[0] is None else parts[0]
-            if tx_id:
-                cjtxs[tx_id] = None
-
-    return cjtxs
-
-
 def load_coinjoin_stats(base_path):
     coinjoin_stats = {}
     files = []
@@ -2387,8 +2374,8 @@ def fix_ww2_for_fdnp_ww1(mix_id: str, target_path: str):
     #'wasabi2', target_path, os.path.join(target_path, 'wasabi1_burn', 'coinjoin_tx_info.json.full'))
     # Load Wasabi1 files, then update MIX_ENTER for Wasabi2 where friends-do-not-pay rule does not apply
     # We will need only WW1 txids, drop all other values to decrease peak memory requirements
-    ww1_coinjoins = load_coinjoin_txids_from_file(os.path.join(target_path, 'WasabiCoinJoins.txt'))
-    ww1_postmix_spend = load_coinjoin_txids_from_file(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
+    ww1_coinjoins = als.load_coinjoin_txids_from_file(os.path.join(target_path, 'WasabiCoinJoins.txt'))
+    ww1_postmix_spend = als.load_coinjoin_txids_from_file(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
     # ww1_coinjoins = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiCoinJoins.txt'))
     # ww1_postmix_spend = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
 

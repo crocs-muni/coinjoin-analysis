@@ -1495,6 +1495,22 @@ def load_false_cjtxs_from_file(fp_file):
     else:
         return false_cjtxs
 
+
+def load_coinjoin_txids_from_file(target_file, start_date: str = None, stop_date: str = None):
+    cjtxs = {}
+    logging.debug(f'load_coinjoin_txids_from_file() Processing file {target_file}')
+    with open(target_file, "r") as file:
+        for line in file.readlines():
+            parts = line.split(VerboseTransactionInfoLineSeparator)
+            tx_id = None if parts[0] is None else parts[0]
+            if tx_id:
+                if als.PERF_USE_SHORT_TXID:
+                    tx_id = tx_id[0:als.PERF_TX_SHORT_LEN]
+                cjtxs[tx_id] = None
+
+    return cjtxs
+
+
 def load_coinjoins_from_file(target_load_path: str, false_cjtxs: dict, filter_false_positives: bool) -> dict:
     logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
     data = load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
