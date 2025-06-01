@@ -748,11 +748,11 @@ def print_liquidity_summary(coinjoins: dict, mix_id: str):
     SM.print(f'  {(total_mix_entering_value - total_mix_leaving_nonstd_value) / SATS_IN_BTC} btc, total fresh entering mix without non-standard leaving')
 
     mix_id_latex = mix_id.replace('_', '\\_' )
-    SM.print(f'  \hline   '
+    SM.print(f'  \\hline   '
              + f'{mix_id_latex} & {earliest_time}--{latest_time} & '
              + f'{len(coinjoins.keys())} & {total_mix_entering_number} / {round(total_mix_entering_value / SATS_IN_BTC, 1)}~\\bitcoinSymbol' + '{} & '
-             + f'{get_ratio(total_mix_remix_value, total_inputs_value)}\% & '
-             + f'{get_ratio(total_mix_staying_number, total_outputs_number - total_mix_remix_out_number)}\%, {round(total_mix_staying_value / SATS_IN_BTC, 1)}~\\bitcoinSymbol' + '{} & '
+             + f'{get_ratio(total_mix_remix_value, total_inputs_value)}\\% & '
+             + f'{get_ratio(total_mix_staying_number, total_outputs_number - total_mix_remix_out_number)}\\%, {round(total_mix_staying_value / SATS_IN_BTC, 1)}~\\bitcoinSymbol' + '{} & '
              + f'{min(total_inputs_len)} / {round(np.average(total_inputs_len), 1)} / {max(total_inputs_len)} \\\\')
 
 
@@ -1169,8 +1169,8 @@ def joinmarket_find_coinjoins(filename):
             lines = file.readlines()
             line_index = 0
             while line_index < len(lines):
-                regex_pattern = "(?P<timestamp>.*) \[INFO\]  obtained tx"
-                #regex_pattern = "(?P<timestamp>.*) [INFO]  obtained tx"
+                #regex_pattern = "(?P<timestamp>.*) \[INFO\]  obtained tx"
+                regex_pattern = r"(?P<timestamp>.*) [INFO]  obtained tx"
                 match = re.search(regex_pattern, lines[line_index])
                 line_index = line_index + 1
                 if match is None:
@@ -1460,6 +1460,7 @@ def dump_json_to_db(cjtx_dict, db_path):
             con.executemany("INSERT OR REPLACE INTO txs VALUES (?, ?)", batch)
 
     print(f"Wrote {len(cjtx_dict):,d} rows in {time.perf_counter() - tic:.1f}s")
+
 
 def load_coinjoins_from_file_sqlite(target_load_path: str, false_cjtxs: dict, filter_false_positives: bool) -> dict:
     logging.debug(f'load_coinjoins_from_file_sqlite {target_load_path}/coinjoin_tx_info.json ...')
