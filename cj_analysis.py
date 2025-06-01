@@ -30,6 +30,10 @@ SATS_IN_BTC = 100000000
 
 SORT_COINJOINS_BY_RELATIVE_ORDER = True  # If True then relative ordering of transactions based on remix connections
 
+PERF_USE_COMPACT_CJTX_STRUCTURE = False
+PERF_USE_SHORT_TXID = False
+PERF_TX_SHORT_LEN = 16
+
 avg_input_ratio = {'all': [], 'per_interval': {}}
 
 class CJ_LOG_TYPES(Enum):
@@ -1068,7 +1072,7 @@ def extract_wallets_info(data):
     for cjtxid in txs_data.keys():
         for index in txs_data[cjtxid]['outputs'].keys():
             target_addr = txs_data[cjtxid]['outputs'][index]['address']
-            wallet_name = txs_data[cjtxid]['outputs'][index]['wallet_name']
+            wallet_name = txs_data[cjtxid]['outputs'][index].get('wallet_name', 'real_unknown')
             if wallet_name not in wallets_info.keys():
                 wallets_info[wallet_name] = {}
                 wallets_coins_info[wallet_name] = []
@@ -1101,7 +1105,7 @@ def extract_wallets_info(data):
     for cjtxid in txs_data.keys():
         for index in txs_data[cjtxid]['inputs'].keys():
             target_addr = txs_data[cjtxid]['inputs'][index]['address']
-            wallet_name = txs_data[cjtxid]['inputs'][index]['wallet_name']
+            wallet_name = txs_data[cjtxid]['inputs'][index].get('wallet_name', 'real_unknown')
             if wallet_name not in wallets_info.keys():
                 wallets_info[wallet_name] = {}
             wallets_info[wallet_name][target_addr] = {'address': target_addr}
@@ -1373,11 +1377,9 @@ def parse_client_coinjoin_logs(base_directory):
 def remove_link_between_inputs_and_outputs(coinjoins):
     for txid in coinjoins.keys():
         for index, input in coinjoins[txid]['inputs'].items():
-            if 'spending_tx' in coinjoins[txid]['inputs'][index]:
-                coinjoins[txid]['inputs'][index].pop('spending_tx')
+            coinjoins[txid]['inputs'][index].pop('spending_tx', None)
         for index, output in coinjoins[txid]['outputs'].items():
-            if 'spend_by_txid' in coinjoins[txid]['outputs'][index]:
-                coinjoins[txid]['outputs'][index].pop('spend_by_txid')
+            coinjoins[txid]['outputs'][index].pop('spend_by_txid', None)
 
 
 def compute_link_between_inputs_and_outputs(coinjoins, sorted_cjs_in_scope):
@@ -1485,15 +1487,26 @@ def load_coinjoins_from_file_sqlite(target_load_path: str, false_cjtxs: dict, fi
 
     return data
 
+
+def load_false_cjtxs_from_file(fp_file):
+    false_cjtxs = load_json_from_file(fp_file)
+    if PERF_USE_SHORT_TXID:
+        return [txid[0:PERF_TX_SHORT_LEN] for txid in false_cjtxs]
+    else:
+        return false_cjtxs
+
 def load_coinjoins_from_file(target_load_path: str, false_cjtxs: dict, filter_false_positives: bool) -> dict:
     logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
     data = load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
 
+    if PERF_USE_COMPACT_CJTX_STRUCTURE:
+        logging.warning(f'IMPORTANT: PERF_USE_COMPACT_CJTX_STRUCTURE==True => compacting in-memory data structure')
+        streamline_coinjoins_structure(data)
+
     # Filter false positives if required
     if filter_false_positives:
         if false_cjtxs is None:
-            fp_file = os.path.join(target_load_path, 'false_cjtxs.json')
-            false_cjtxs = load_json_from_file(fp_file)
+            false_cjtxs = load_false_cjtxs_from_file(os.path.join(target_load_path, 'false_cjtxs.json'))
         for false_tx in false_cjtxs:
             if false_tx in data['coinjoins'].keys():
                 data['coinjoins'].pop(false_tx)
@@ -1583,7 +1596,7 @@ def detect_bybit_hack(target_path: str, interval: str, bybit_hack_addresses: dic
     for tx in sorted_cjtxs:
         cjtx = tx['txid']
         for index in data['coinjoins'][cjtx]['inputs'].keys():
-            script_type = data['coinjoins'][cjtx]['inputs'][index]['script_type']
+            #script_type = data['coinjoins'][cjtx]['inputs'][index]['script_type']
             address, _ = get_address(data['coinjoins'][cjtx]['inputs'][index]['script'])
             # print(address)
             if address in bybit_hack_addresses:
@@ -1597,7 +1610,7 @@ def detect_bybit_hack(target_path: str, interval: str, bybit_hack_addresses: dic
                     f"{data['coinjoins'][cjtx]['broadcast_time']} {cjtx}:input[{index}]: {data['coinjoins'][cjtx]['inputs'][index]['value'] / float(SATS_IN_BTC)} btc")
 
         for index in data['coinjoins'][cjtx]['outputs'].keys():
-            script_type = data['coinjoins'][cjtx]['outputs'][index]['script_type']
+            #script_type = data['coinjoins'][cjtx]['outputs'][index]['script_type']
             address, _ = get_address(data['coinjoins'][cjtx]['outputs'][index]['script'])
             # print(address)
             if address in bybit_hack_addresses:
@@ -1722,3 +1735,53 @@ def run_command(command, verbose):
         print("An error occurred:", e)
 
     return result
+
+
+def streamline_coinjoins_structure(all_data:dict, compact_strong: bool=False):
+    full_txid_mapping = {'full_txid_map': {}}
+
+    cjtxs_list = list(all_data['coinjoins'].keys())
+    for cjtx in cjtxs_list:
+        short_cjtx = cjtx[0:PERF_TX_SHORT_LEN] if compact_strong else cjtx
+        full_txid_mapping['full_txid_map'][short_cjtx] = cjtx
+        full_txid_mapping['full_txid_map'][cjtx] = short_cjtx
+
+        all_data['coinjoins'][short_cjtx] = all_data['coinjoins'][cjtx]
+        # Shorten
+        all_data['coinjoins'][short_cjtx]['txid'] = short_cjtx
+        # Remove
+        all_data['coinjoins'][short_cjtx].pop('block_hash', None)
+        all_data['coinjoins'][short_cjtx].pop('block_index', None)
+
+        for index in all_data['coinjoins'][short_cjtx]['inputs'].keys():
+            # Remove
+            #all_data['coinjoins'][short_cjtx]['inputs'][index].pop('script', None)
+            all_data['coinjoins'][short_cjtx]['inputs'][index].pop('script_type', None)
+            all_data['coinjoins'][short_cjtx]['inputs'][index].pop('wallet_name', None)
+            # Shorten
+            if compact_strong:
+                if 'spending_tx' in all_data['coinjoins'][short_cjtx]['inputs'][index]:
+                    id = all_data['coinjoins'][short_cjtx]['inputs'][index]['spending_tx']
+                    shorter = id[0:5 + PERF_TX_SHORT_LEN] + id[id.rfind('_'):]  # 'vout_TX_SHORT_LENchars_index'
+                    all_data['coinjoins'][short_cjtx]['inputs'][index]['spending_tx'] = shorter
+
+        for index in all_data['coinjoins'][short_cjtx]['outputs'].keys():
+            # Remove
+            #all_data['coinjoins'][short_cjtx]['outputs'][index].pop('script', None)
+            all_data['coinjoins'][short_cjtx]['outputs'][index].pop('script_type', None)
+            all_data['coinjoins'][short_cjtx]['outputs'][index].pop('wallet_name', None)
+            # Shorten
+            if compact_strong:
+                if 'spend_by_tx' in all_data['coinjoins'][short_cjtx]['outputs'][index]:
+                    id = all_data['coinjoins'][short_cjtx]['outputs'][index]['spend_by_tx']
+                    shorter = id[0:4 + PERF_TX_SHORT_LEN] + id[id.rfind('_'):]  # 'vin_TX_SHORT_LENchars_index'
+                    all_data['coinjoins'][short_cjtx]['outputs'][index]['spend_by_tx'] = shorter
+
+        # Remove original long key
+        if compact_strong and short_cjtx != cjtx:
+            # Shorter cjtx id used, new record already created
+            all_data['coinjoins'][cjtx] = None
+            all_data['coinjoins'].pop(cjtx)
+
+    return full_txid_mapping
+

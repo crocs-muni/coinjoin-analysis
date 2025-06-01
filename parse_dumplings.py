@@ -907,7 +907,7 @@ def filter_liquidity_events(data):
     events = {}
     for txid in data["coinjoins"]:
         events[txid] = copy.deepcopy(data["coinjoins"][txid])
-        events[txid].pop('block_hash')
+        events[txid].pop('block_hash', None)
         # Process inputs
         events[txid]['num_inputs'] = len(events[txid]['inputs'])
         for input in list(events[txid]['inputs'].keys()):
@@ -3661,6 +3661,7 @@ class DumplingsParseOptions:
     MIX_IDS = ""
     SORT_COINJOINS_BY_RELATIVE_ORDER = True
     SAVE_BASE_FILES_JSON = True
+    USE_COMPACT_MEMORY_STRUCTURE = True
 
     ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
     DETECT_FALSE_POSITIVES = False
@@ -3999,37 +4000,89 @@ if __name__ == "__main__":
     #     op.SORT_COINJOINS_BY_RELATIVE_ORDER = False
 
     als.SORT_COINJOINS_BY_RELATIVE_ORDER = op.SORT_COINJOINS_BY_RELATIVE_ORDER
+    als.PERF_USE_COMPACT_CJTX_STRUCTURE = op.USE_COMPACT_MEMORY_STRUCTURE
     target_path = os.path.join(op.target_base_path, 'Scanner')
     SM.print(f'Starting analysis of {target_path}')
     op.print_attributes()
 
     # WARNING: SW 100k pool does not match exactly mix_stay and active liqudity at the end - likely reason are neglected mining fees
 
-    op.DEBUG = True
+    #op.DEBUG = True
     if op.DEBUG:
         print('DEBUGING TIME!!!')
+
         coord = 'wasabi2_others'
         #coord = 'wasabi1_mystery'
-        #coord = 'wasabi1_others'
         target_load_path = os.path.join(target_path, coord)
 
         tracemalloc.start()
+
         start_snapshot = tracemalloc.take_snapshot()
-
-        all_data = als.load_coinjoins_from_file(target_load_path, None, False)
-
+        all_data = als.load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
         end_snapshot = tracemalloc.take_snapshot()
         stats = end_snapshot.compare_to(start_snapshot, 'lineno')
+        for stat in stats[:10]:
+            print(stat)
 
-        #
-        all_data_slim = {'coinjoins': {}}
-        all_data_slim['coinjoins'][txid] =
+        all_data_slim = all_data
 
+        tic = time.perf_counter()
+        txid_map = als.streamline_coinjoins_structure(all_data_slim)
+        print(f"streamline_coinjoins_structure() {time.perf_counter() - tic:.4f}s")
+
+        als.save_json_to_file(os.path.join(target_load_path, 'coinjoin_tx_info_slim.json'), all_data_slim)
+        als.save_json_to_file_pretty(os.path.join(target_load_path, 'txid_map.json'), txid_map)
+
+        start_snapshot = tracemalloc.take_snapshot()
+        data = als.load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info_slim.json'))
+        end_snapshot = tracemalloc.take_snapshot()
+        stats = end_snapshot.compare_to(start_snapshot, 'lineno')
 
         # Print top memory differences
         for stat in stats[:10]:
             print(stat)
         exit(42)
+
+
+        # als.PERF_USE_COMPACT_CJTX_STRUCTURE = True
+        # wasabi_plot_remixes('wasabi1_mystery', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1_mystery'),
+        #                     'coinjoin_tx_info.json', False, True, None,
+        #                     None, True, False)
+        # exit(42)
+
+        coord = 'wasabi2_others'
+        #coord = 'wasabi1_mystery'
+        target_load_path = os.path.join(target_path, coord)
+        all_data = als.load_coinjoins_from_file(target_load_path, None, True)
+        print(list(all_data['coinjoins'].keys())[0:3])
+        als.PERF_USE_COMPACT_CJTX_STRUCTURE = True
+        all_data = als.load_coinjoins_from_file(target_load_path, None, True)
+        print(list(all_data['coinjoins'].keys())[0:3])
+        exit(42)
+
+        coord = 'wasabi2_others'
+        #coord = 'wasabi1_mystery'
+        #coord = 'wasabi1_others'
+        target_load_path = os.path.join(target_path, coord)
+
+        tic = time.perf_counter()
+        all_data = als.load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
+        print(f"load_json_from_file() {time.perf_counter() - tic:.4f}s")
+
+        als.print_liquidity_summary(all_data["coinjoins"], f'{coord}')
+
+        tic = time.perf_counter()
+        all_data_slim = all_data
+        als.streamline_coinjoins_structure(all_data_slim)
+        print(f"streamline_coinjoins_structure() {time.perf_counter() - tic:.4f}s")
+
+        als.print_liquidity_summary(all_data["coinjoins"], f'{coord}')
+
+        als.save_json_to_file(os.path.join(target_load_path, 'coinjoin_tx_info_slim.json'), all_data_slim)
+        als.save_json_to_file_pretty(os.path.join(target_load_path, 'txid_map.json'), txid_map)
+        exit(42)
+
+
 
         coord = 'wasabi2_others'
         coord = 'wasabi1_mystery'
