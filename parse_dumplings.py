@@ -1061,9 +1061,10 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
         else:
             #
             # Convert all Dumplings files into json (time intensive)
-            op.SAVE_BASE_FILES_JSON = False
+            bkp_save_base_files = op.SAVE_BASE_FILES_JSON
+            #op.SAVE_BASE_FILES_JSON = False
             data = process_and_save_coinjoins(mix_id, mix_protocol, target_path, mix_filename, postmix_filename, premix_filename, None, None, target_save_path)
-            op.SAVE_BASE_FILES_JSON = save_base_files
+            op.SAVE_BASE_FILES_JSON = bkp_save_base_files
     else:
         data = preloaded_data
 
