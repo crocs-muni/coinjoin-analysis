@@ -41,8 +41,6 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 logger_to_disable = logging.getLogger("mathplotlib")
 logger_to_disable.setLevel(logging.WARNING)
 
-VerboseTransactionInfoLineSeparator = ':::'
-VerboseInOutInfoInLineSeparator = '}'
 SATS_IN_BTC = 100000000
 
 # If True, difference between assigned and existing cluster id is checked and failed upon if different
@@ -161,7 +159,7 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                 #     print('.', end="")
                 # if num_lines % 1000 == 0:
                 #     print(f"{num_lines}")
-                parts = line.split(VerboseTransactionInfoLineSeparator)
+                parts = line.split(als.VerboseTransactionInfoLineSeparator)
                 record = {}
 
                 # Be careful, broadcast time and blocktime can be significantly different
@@ -180,7 +178,7 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                 block_index = None if parts[2] is None else int(parts[2])
                 record['block_index'] = block_index
 
-                inputs = [input.strip('{') for input in parts[4].split(VerboseInOutInfoInLineSeparator)] if parts[4] else None
+                inputs = [input.strip('{') for input in parts[4].split(als.VerboseInOutInfoInLineSeparator)] if parts[4] else None
                 record['inputs'] = {}
                 index = 0
                 for input in inputs:
@@ -207,7 +205,7 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                     record['inputs'][f'{index}'] = this_input
                     index += 1
 
-                outputs = [output.strip('{') for output in parts[5].split(VerboseInOutInfoInLineSeparator)] if parts[5] else None
+                outputs = [output.strip('{') for output in parts[5].split(als.VerboseInOutInfoInLineSeparator)] if parts[5] else None
                 record['outputs'] = {}
                 index = 0
                 for output in outputs:
