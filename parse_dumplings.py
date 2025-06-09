@@ -3305,37 +3305,35 @@ def print_remix_stats(target_base_path):
             print(e)
 
 
-def print_liquidity_summary_all(target_path: str):
-    #
-    # WW2, WW1
-    #
-    coords = [('wasabi2', 'zksnacks'), ('wasabi2', 'others'), ('wasabi2', 'kruw'), ('wasabi2', 'gingerwallet'),
-              ('wasabi2', 'opencoordinator'), ('wasabi2', 'coinjoin_nl'), ('wasabi2', 'wasabicoordinator'),
-              ('wasabi2', 'mega'), ('wasabi2', 'btip'),
-              ('wasabi1', 'zksnacks'), ('wasabi1', 'others')]
-    for coord in coords:
-        cjtx_coord = als.load_coinjoins_from_file(os.path.join(target_path, f'{coord[0]}_{coord[1]}'), None, True)
-        SM.print(f'{coord[0]}_{coord[1]}')
-        als.print_liquidity_summary(cjtx_coord["coinjoins"], f'{coord[0]}_{coord[1]}')
-
-    #
-    # WHIRLPOOL
-    #
-    data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_100k'), None, True)
-    SM.print(f'whirlpool_100k:')
-    als.print_liquidity_summary(data["coinjoins"], 'whirlpool_100k')
-    data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_1M'), None, True)
-    SM.print(f'whirlpool_1M:')
-    als.print_liquidity_summary(data["coinjoins"], 'whirlpool_1M')
-    data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_5M'), None, True)
-    SM.print(f'whirlpool_5M:')
-    als.print_liquidity_summary(data["coinjoins"], 'whirlpool_5M')
-    data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_50M'), None, True)
-    SM.print(f'whirlpool_50M:')
-    als.print_liquidity_summary(data["coinjoins"], 'whirlpool_50M')
-    data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool'), None, True)
-    SM.print(f'whirlpool:')
-    als.print_liquidity_summary(data["coinjoins"], 'whirlpool')
+def print_liquidity_summary_all(mix_protocol: MIX_PROTOCOL, target_path: str):
+    if mix_protocol == CoinjoinType.SW:
+        data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_100k'), None, True)
+        SM.print(f'whirlpool_100k:')
+        als.print_liquidity_summary(data["coinjoins"], 'whirlpool_100k')
+        data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_1M'), None, True)
+        SM.print(f'whirlpool_1M:')
+        als.print_liquidity_summary(data["coinjoins"], 'whirlpool_1M')
+        data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_5M'), None, True)
+        SM.print(f'whirlpool_5M:')
+        als.print_liquidity_summary(data["coinjoins"], 'whirlpool_5M')
+        data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_50M'), None, True)
+        SM.print(f'whirlpool_50M:')
+        als.print_liquidity_summary(data["coinjoins"], 'whirlpool_50M')
+        data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool'), None, True)
+        SM.print(f'whirlpool:')
+        als.print_liquidity_summary(data["coinjoins"], 'whirlpool')
+    else:
+        coords = []
+        if op.CJ_TYPE == CoinjoinType.WW2:
+            coords = [('wasabi2', 'zksnacks'), ('wasabi2', 'others'), ('wasabi2', 'kruw'), ('wasabi2', 'gingerwallet'),
+                      ('wasabi2', 'opencoordinator'), ('wasabi2', 'coinjoin_nl'), ('wasabi2', 'wasabicoordinator'),
+                      ('wasabi2', 'mega'), ('wasabi2', 'btip')]
+        if op.CJ_TYPE == CoinjoinType.WW1:
+            coords = [('wasabi1', 'zksnacks'), ('wasabi1', 'others')]
+        for coord in coords:
+            cjtx_coord = als.load_coinjoins_from_file(os.path.join(target_path, f'{coord[0]}_{coord[1]}'), None, True)
+            SM.print(f'{coord[0]}_{coord[1]}')
+            als.print_liquidity_summary(cjtx_coord["coinjoins"], f'{coord[0]}_{coord[1]}')
 
 
 def discover_coordinators(cjtxs: dict, sorted_cjtxs: list, coord_txs: dict, in_or_out: str,
@@ -4481,7 +4479,7 @@ if __name__ == "__main__":
         target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240802\\'
         target_path = os.path.join(target_base_path, 'Scanner')
         interval_stop_date = '2024-08-03 00:00:07.000'
-        print_liquidity_summary_all(target_path)
+        print_liquidity_summary_all(op.CJ_TYPE, target_path)
         exit(42)
 
         target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240802\\'
@@ -4521,7 +4519,7 @@ if __name__ == "__main__":
         target_path = os.path.join(target_base_path, 'Scanner')
         interval_stop_date = '2024-08-03 00:00:07.000'
 
-        print_liquidity_summary_all(target_path)
+        print_liquidity_summary_all(op.CJ_TYPE, target_path)
         exit(42)
 
         analyze_zksnacks_output_clusters('wasabi2', target_path)
@@ -5076,7 +5074,7 @@ if __name__ == "__main__":
         print_remix_stats(op.target_base_path)
 
     if op.ANALYSIS_LIQUIDITY:
-        print_liquidity_summary_all(target_path)
+        print_liquidity_summary_all(op.CJ_TYPE, target_path)
 
     if op.ANALYSIS_OUTPUT_CLUSTERS:
         analyze_zksnacks_output_clusters('wasabi2', target_path)
