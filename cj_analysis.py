@@ -2,9 +2,9 @@ import logging
 import os
 import subprocess
 from collections import Counter
-import sqlite3, pathlib
+import sqlite3
 
-import msgpack
+#import msgpack
 import orjson
 import json
 import time
@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 import re
 import math
-from  txstore import TxStore, TxStoreMsgPack
+#from  txstore import TxStore, TxStoreMsgPack
 
 from bitcoin.core import CTransaction, CMutableTransaction, CTxWitness
 # from bitcoin.core import CScript, x
@@ -27,6 +27,8 @@ from bitcoinlib.transactions import Output
 
 
 SATS_IN_BTC = 100000000
+VerboseTransactionInfoLineSeparator = ':::'
+VerboseInOutInfoInLineSeparator = '}'
 
 SORT_COINJOINS_BY_RELATIVE_ORDER = True  # If True then relative ordering of transactions based on remix connections
 
@@ -1452,8 +1454,8 @@ def dump_json_to_db(cjtx_dict, db_path):
     with con:
         batch = []
         for txid, tx in it:
-            #batch.append((txid, orjson.dumps(tx)))
-            batch.append((txid, msgpack.packb(tx, use_bin_type=True)))
+            batch.append((txid, orjson.dumps(tx)))
+            #batch.append((txid, msgpack.packb(tx, use_bin_type=True)))
 
             if len(batch) == BATCH:
                 con.executemany("INSERT OR REPLACE INTO txs VALUES (?, ?)", batch)
@@ -1473,9 +1475,10 @@ def load_coinjoins_from_file_sqlite(target_load_path: str, false_cjtxs: dict, fi
     dump_json_to_db(data['coinjoins'], db_path)
     logging.debug(f'   ... done')
     del(data['coinjoins'])
+    assert False, 'Unfinished, enable TxStore for use'
     #data['coinjoins'] = TxStore(db_path)
-    data['coinjoins'] = TxStoreMsgPack(db_path)
-
+    #data['coinjoins'] = TxStoreMsgPack(db_path)
+    assert False, 'Missing filtering of false positives, add'
     # # Filter false positives if required
     # if filter_false_positives:
     #     if false_cjtxs is None:
