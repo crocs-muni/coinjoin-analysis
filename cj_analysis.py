@@ -544,7 +544,7 @@ def  get_wallets_prediction_ratios(mix_id: str):
 
     # Wasabi 1.x
     if 'wasabi1' in mix_id:
-        AVG_NUM_OUTPUTS = 2.0 # real value taken from wasabi1 experiments (one standard denomination, one change output)
+        AVG_NUM_OUTPUTS = 2.31 # real value taken from wasabi1 experiments (typically one standard denomination, one change output)
         AVG_NUM_INPUTS = 1.15  # synthetic value
 
     # Whirlpool
