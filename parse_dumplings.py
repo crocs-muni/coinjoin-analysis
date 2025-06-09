@@ -612,7 +612,7 @@ def visualize_coinjoins_in_time(data, ax_num_coinjoins):
     ax_num_coinjoins.set_title('Number of coinjoin transactions in given time period')
 
 
-def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_boxplot, ax_output_values_boxplot,
+def visualize_liquidity_in_time(mix_id, events, ax_number, ax_boxplot, ax_input_values_boxplot, ax_output_values_boxplot,
                                 ax_input_values_bar, ax_output_values_bar, ax_burn_time, legend_labels: list, events_premix: dict = None):
     #
     # Number of coinjoins per given time interval (e.g., day)
@@ -763,7 +763,7 @@ def visualize_liquidity_in_time(events, ax_number, ax_boxplot, ax_input_values_b
         ax_burn_time.set_ylim(0)
 
 
-def visualize_coinjoins(data, events, base_path, experiment_name):
+def visualize_coinjoins(mix_id, data, events, base_path, experiment_name):
     fig = plt.figure(figsize=(30, 20))
     ax_num_coinjoins = fig.add_subplot(4, 3, 1)
     ax_inputs_outputs = fig.add_subplot(4, 3, 2)
@@ -782,7 +782,7 @@ def visualize_coinjoins(data, events, base_path, experiment_name):
     visualize_coinjoins_in_time(data, ax_num_coinjoins)
 
     # All inputs and outputs
-    visualize_liquidity_in_time(data["coinjoins"], ax_inputs_outputs, ax_inputs_outputs_boxplot, ax_inputs_value_boxplot,
+    visualize_liquidity_in_time(mix_id, data["coinjoins"], ax_inputs_outputs, ax_inputs_outputs_boxplot, ax_inputs_value_boxplot,
                                 ax_outputs_value_boxplot, None, None, ax_input_time_to_burn, ['all inputs', 'all outputs', 'remixed inputs'])
     ax_inputs_outputs.set_ylabel('Number of inputs / outputs')
     ax_inputs_outputs.set_title('Number of all inputs and outputs in cjtx')
@@ -801,7 +801,7 @@ def visualize_coinjoins(data, events, base_path, experiment_name):
     ax_input_time_to_burn.set_title('Distribution of coin burn times (log scale)')
 
     # Fresh liquidity in/out of mix
-    visualize_liquidity_in_time(events, ax_liquidity, ax_liquidity_boxplot, ax_fresh_inputs_value_boxplot,
+    visualize_liquidity_in_time(mix_id, events, ax_liquidity, ax_liquidity_boxplot, ax_fresh_inputs_value_boxplot,
                                 ax_fresh_outputs_value_boxplot, ax_inputs_value_bar, ax_outputs_value_bar,
                                 None, ['fresh inputs mixed', 'outputs leaving mix', ''], data.get('premix', None))
     ax_liquidity.set_ylabel('Number of new inputs / outputs')
