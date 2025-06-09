@@ -1,14 +1,19 @@
 import json
 import os
+import random
+from collections import defaultdict
 from itertools import groupby
 
+import numpy as np
 import plotly.graph_objects as go
+from matplotlib import pyplot as plt
 from orjson import orjson
 import cj_analysis as als
+SATS_IN_BTC = 100000000
 
 
 def build_intercoord_flows_sankey_good(base_path: str, entity_dict: dict, transaction_outputs: dict, counts: bool, start_date: str = None):
-    output_file_template = f"coordinator_flows_{'counts' if counts else 'values'}"
+    output_file_template = f"coordinator_flows_{'counts' if counts else 'values'}_{start_date[0:10] if start_date else ''}"
     entity_names = list(entity_dict.keys())
     entity_index = {name: i for i, name in enumerate(entity_names)}
 
@@ -17,6 +22,7 @@ def build_intercoord_flows_sankey_good(base_path: str, entity_dict: dict, transa
 
     flows_all = {}  # All flows including to same coordinator
     flows_only_inter = {}  # Only flows to another coordinator
+    flows_only_inter_btc = {} # Only flows to another coordinator denominated in sats
 
     for entity, tx_ids in entity_dict.items():
         print(f'Processing {entity} coordinator', end="")
@@ -47,8 +53,12 @@ def build_intercoord_flows_sankey_good(base_path: str, entity_dict: dict, transa
                                     flows_only_inter[key] = flows_only_inter.get(key, 0) + output_data.get("value", 0)
         print('... done')
 
-    #flows = flows_all
-    flows = flows_only_inter
+    if not counts:
+        flows_only_inter_btc = {key: round(flows_only_inter[key] / SATS_IN_BTC, 1) for key in flows_only_inter.keys()}
+        flows = flows_only_inter_btc
+    else:
+        #flows = flows_all
+        flows = flows_only_inter
 
     print(f'Inter-coordinators flows ({'counts' if counts else 'values'}): {flows}')
     #als.save_json_to_file_pretty(f'{output_file_template}.json', flows)
@@ -56,17 +66,32 @@ def build_intercoord_flows_sankey_good(base_path: str, entity_dict: dict, transa
     sources, targets, values = zip(
         *[(entity_index[src], entity_index[tgt], val) for (src, tgt), val in flows.items()]) if flows else ([], [], [])
 
+    def grayscale_color_shades(n, alpha=0.8):
+        grays = np.linspace(50, 200, n).astype(int)  # Avoid extremes like pure black/white
+        return [f"rgba({g},{g},{g},{alpha})" for g in grays]
+
+    link_colors = grayscale_color_shades(len(values)) if values else []
+    # def random_color():
+    #     return f"rgba({random.randint(0, 255)}, {random.randint(0, 255)}, {random.randint(0, 255)}, 0.8)"
+    # link_colors = [random_color() for _ in values]
+
+    # Create the Sankey diagram
     fig = go.Figure(go.Sankey(
         node=dict(
-            pad=15, thickness=20,
+            pad=15,
+            thickness=20,
             label=entity_names
         ),
         link=dict(
             source=sources,
             target=targets,
             value=values,
+            color=link_colors
         )
     ))
+    fig.update_layout(
+        font=dict(size=18)  # This affects all text in the Sankey diagram
+    )
     fig.update_layout(title_text=f"Inter-coordinators flows for Wasabi 2.x ({'output counts' if counts else 'output values'})"
                                  f" [{'all coinjoins' if start_date is None else 'coinjoins after ' + start_date}]", font_size=10)
     print(f"Sankey diagram updated")
@@ -147,9 +172,9 @@ def gant_coordinators_plotly():
         dict(Task="Wasabi 2.x (kruw.io)", Start="2024-05-31", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=3),
         dict(Task="Wasabi 2.x (gingerwallet)", Start="2024-05-21", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=2),
         #dict(Task="Wasabi 2.x (wasabicoordinator)", Start="2024-06-11", Finish="2024-08-11", y_pos=4),
-        dict(Task="Wasabi 2.x (others)", Start="2024-06-13", Finish="2024-09-14", y_pos=4),
-        dict(Task="Wasabi 2.x (opencoordinator)", Start="2024-07-08", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=5),
-#        dict(Task="Wasabi 2.x (wasabist)", Start="2024-07-23", Finish="2024-08-03", y_pos=9),
+        dict(Task="Wasabi 2.x (opencoordinator)", Start="2024-07-08", Finish=datetime.today().strftime("%Y-%m-%d"), y_pos=4),
+        dict(Task="Wasabi 2.x (others)", Start="2024-06-13", Finish="2024-09-14", y_pos=5),
+        #        dict(Task="Wasabi 2.x (wasabist)", Start="2024-07-23", Finish="2024-08-03", y_pos=9),
     ]
 
     df = pd.DataFrame(base_tasks)
@@ -236,8 +261,6 @@ def gant_coordinators_plotly():
                 values = real_values
         values = values / values.max()
 
-
-
         for i in range(num_bins):
             start_day = row.Start + timedelta(days=i * bin_width)
             end_day = start_day + timedelta(days=bin_width)
@@ -304,7 +327,7 @@ def gant_coordinators_plotly():
     fig_height = min(max_chart_height, 200 + len(df) * bar_padding)
 
     fig.update_layout(
-        title="Minimalist Gantt Chart with Trend Lines (Monthly Ticks)",
+        #title="Minimalist Gantt Chart with Trend Lines (Monthly Ticks)",
         template='simple_white',
         plot_bgcolor='white',
         paper_bgcolor='white',
@@ -314,11 +337,40 @@ def gant_coordinators_plotly():
 
     # --- Output ---
     fig.write_html("gantt_monthly_ticks_trend_lines.html", auto_open=True)
-    fig.write_image("gantt_monthly_ticks_trend_lines.svg")
+    #fig.write_image("gantt_monthly_ticks_trend_lines.pdf")
+    #fig.write_image("gantt_monthly_ticks_trend_lines.svg")
+    #plt.savefig(f'gantt_monthly_ticks_trend_lines.pdf', dpi=300)
 
+
+def compute_reorder_stats(base_path: str):
+    reorder_stats = als.load_json_from_file(os.path.join(base_path, 'Scanner', 'tx_reordering_stats.json'))
+
+    # Group into 10-minute bins
+    grouped = defaultdict(int)
+    for minute, value in reorder_stats.items():
+        bin_start = (int(minute) // 10) * 10
+        grouped[bin_start] += value
+
+    grouped.pop(0, None)
+    sorted_items = sorted(grouped.items())
+    keys, values = zip(*sorted_items)
+
+    # Plot
+    plt.bar(keys, values)
+    plt.xlabel('Reordering')
+    plt.ylabel('Frequency')
+    #plt.title('Bar Plot Sorted by Keys')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
 
 
 if __name__ == "__main__":
-    base_path = 'c:/!blockchains/CoinJoin/Dumplings_Stats_20250302/'
-    gant_coordinators_plotly()
-    #visualize_coord_flows(base_path)
+    base_path = 'c:/!blockchains/CoinJoin/Dumplings_Stats_20250502/'
+    #base_path = '/home/xsvenda/btc/dumplings_temp/'
+
+    #compute_reorder_stats(base_path)
+    #gant_coordinators_plotly()
+    visualize_coord_flows(base_path)
+
+
