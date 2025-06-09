@@ -1097,10 +1097,11 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
 def visualize_interval(mix_id: str, target_save_path: str, last_stop_date_str: str, current_stop_date_str: str):
     logging.info(f'Processing interval {last_stop_date_str} - {current_stop_date_str}')
 
+    false_cjtxs = als.load_false_cjtxs_from_file(os.path.join(target_save_path, 'false_cjtxs.json'))
+
     interval_path = os.path.join(target_save_path, f'{last_stop_date_str.replace(":", "-")}--{current_stop_date_str.replace(":", "-")}_unknown-static-100-1utxo')
     assert os.path.exists(interval_path), f'{interval_path} does not exist'
-    false_ctxs = als.load_false_cjtxs_from_file(target_save_path, 'false_cjtxs.json')
-    interval_data = als.load_coinjoins_from_file(interval_path, false_ctxs, True)
+    interval_data = als.load_coinjoins_from_file(interval_path, false_cjtxs, True)
     events = filter_liquidity_events(interval_data)
 
     # Visualize coinjoins
@@ -1119,8 +1120,10 @@ def visualize_intervals(mix_id: str, target_path: os.path, start_date: str, stop
     # data = als.load_coinjoins_from_file(target_save_path, None, True)
     #logging.info(f'{target_save_path}/coinjoin_tx_info.json loaded with {len(data["coinjoins"])} conjoins')
 
+    false_cjtxs = als.load_false_cjtxs_from_file(os.path.join(target_save_path, 'false_cjtxs.json'))
+
     # Visualize all data
-    interval_data = als.load_coinjoins_from_file(target_save_path, None, True)
+    interval_data = als.load_coinjoins_from_file(target_save_path, false_cjtxs, True)
     if len(interval_data["coinjoins"]) > 0:
         events = filter_liquidity_events(interval_data)
         visualize_coinjoins(mix_id, interval_data, events, target_save_path, os.path.basename(target_save_path))
