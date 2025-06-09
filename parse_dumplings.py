@@ -1101,13 +1101,13 @@ def visualize_interval(mix_id: str, target_save_path: str, last_stop_date_str: s
 
     interval_path = os.path.join(target_save_path, f'{last_stop_date_str.replace(":", "-")}--{current_stop_date_str.replace(":", "-")}_unknown-static-100-1utxo')
     assert os.path.exists(interval_path), f'{interval_path} does not exist'
-
-    interval_data = als.load_coinjoins_from_file(interval_path, None, True)
+    false_ctxs = als.load_false_cjtxs_from_file(target_save_path, 'false_cjtxs.json')
+    interval_data = als.load_coinjoins_from_file(interval_path, false_ctxs, True)
     events = filter_liquidity_events(interval_data)
 
     # Visualize coinjoins
     if len(interval_data["coinjoins"]) > 0:
-        visualize_coinjoins(interval_data, events, interval_path, os.path.basename(interval_path))
+        visualize_coinjoins(mix_id, interval_data, events, interval_path, os.path.basename(interval_path))
 
 
 def visualize_intervals(mix_id: str, target_path: os.path, start_date: str, stop_date: str):
@@ -1125,7 +1125,7 @@ def visualize_intervals(mix_id: str, target_path: os.path, start_date: str, stop
     interval_data = als.load_coinjoins_from_file(target_save_path, None, True)
     if len(interval_data["coinjoins"]) > 0:
         events = filter_liquidity_events(interval_data)
-        visualize_coinjoins(interval_data, events, target_save_path, os.path.basename(target_save_path))
+        visualize_coinjoins(mix_id, interval_data, events, target_save_path, os.path.basename(target_save_path))
 
     # Find first day of a month when first coinjoin occured
     start_date_obj = precomp_datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S.%f")
