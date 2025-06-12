@@ -106,6 +106,7 @@ def replace_name_in_dict(data, str_to_replace, str_value):
 
 
 def check_coinjoin_files(base_path):
+    print(f'Processing check_coinjoin_files({base_path})')
     mix_results_check = {}
     all_status = ''
     # Get top-level folders => mix_names
@@ -169,7 +170,7 @@ def check_coinjoin_files(base_path):
         mix_status += '' if interval_found_num == interval_expected_num else '[!]'
         mix_status += '   '
 
-        all_status += '[CHECK] ' if '[!]' in mix_status else '[OK   ] '
+        all_status += '[CHECK] ' if '[!]' in mix_status else '[OK] '
         all_status += mix_status
 
     mix_results_all = {'results': mix_results_check}
@@ -178,7 +179,10 @@ def check_coinjoin_files(base_path):
     with open(os.path.join(base_path, "coinjoin_results_check.json"), "w") as file:
         file.write(json.dumps(dict(sorted(mix_results_all.items())), indent=4))
 
-    print(f'{all_status.replace('   ', '\n')}')
+    all_status = all_status.replace('   ', '\n')
+    print(f'{all_status}')
+    with open(os.path.join(base_path, "coinjoin_results_check_summary.txt"), "w") as file:
+        file.write(all_status)
 
 
 if __name__ == "__main__":
