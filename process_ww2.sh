@@ -1,7 +1,12 @@
 #!/bin/bash
 BASE_PATH=$HOME
 
-TMP_DIR="$BASE_PATH/btc/dumplings_temp"
+TMP_DIR="$BASE_PATH/btc/dumplings_temp2"
+
+
+# Start processing in virtual environment
+source $BASE_PATH/btc/coinjoin-analysis/myenv/bin/activate 
+
 
 # Remove previous temporary directory
 rm -rf $TMP_DIR/
@@ -11,9 +16,6 @@ mkdir $TMP_DIR/
 
 # Unzip processed dumplings files
 unzip $BASE_PATH/btc/dumplings.zip -d $TMP_DIR/
-
-# Start processing in virtual environment
-source $BASE_PATH/btc/coinjoin-analysis/myenv/bin/activate 
 
 # Go to analysis folder with scripts
 cd $BASE_PATH/btc/coinjoin-analysis
@@ -41,6 +43,7 @@ python3 parse_dumplings.py --cjtype ww2 --action detect_false_positives --target
 # Run coordinators detection
 for dir in wasabi2 wasabi2_others wasabi2_zksnacks; do
     cp $BASE_PATH/btc/coinjoin-analysis/data/wasabi2/txid_coord.json $TMP_DIR/Scanner/$dir/
+    cp $BASE_PATH/btc/coinjoin-analysis/data/wasabi2/txid_coord_t.json $TMP_DIR/Scanner/$dir/
 done
 python3 parse_dumplings.py --cjtype ww2 --action detect_coordinators --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
@@ -63,6 +66,29 @@ python3 parse_dumplings.py --cjtype ww2 --action plot_coinjoins --env_vars "PLOT
 python3 parse_dumplings.py --cjtype ww2 --action plot_coinjoins --target-path $TMP_DIR/ --env_vars "PLOT_REMIXES_SINGLE_INTERVAL=True" | tee parse_dumplings.py.log
 #python3 parse_dumplings.py --cjtype ww2 --action plot_coinjoins --target-path $TMP_DIR/ --env_vars "PLOT_REMIXES_SINGLE_INTERVAL=True;MIX_IDS=['wasabi2_zksnacks']" | tee parse_dumplings.py.log
 
+# Run generation of multigraph plots
+python3 parse_dumplings.py --cjtype ww2 --action plot_coinjoins --env_vars "PLOT_REMIXES_MULTIGRAPH=True" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
+
+
+# Analyse liquidity 
+python3 parse_dumplings.py --cjtype ww2 --target-path $TMP_DIR/ --env_vars "ANALYSIS_LIQUIDITY=True" | tee parse_dumplings.py.log
+
+# Visualize stats for all multigraphs
+python3 parse_dumplings.py --cjtype ww2 --action plot_coinjoins --target-path $TMP_DIR/ --env_vars "PLOT_REMIXES_MULTIGRAPH=True;MIX_IDS=['wasabi2_zksnacks', 'wasabi2_kruw']" | tee parse_dumplings.py.log
+
+
+# Another visualization graphs (older)
+python3 parse_dumplings.py --cjtype ww2 --target-path $TMP_DIR/ --env_vars "VISUALIZE_ALL_COINJOINS_INTERVALS=True" | tee parse_dumplings.py.log
+
+
+
+#
+# Run check for created files
+#
+python3 file_check.py $TMP_DIR/Scanner/  | tee parse_dumplings.py.log
+
+
+
 
 #
 # Backup outputs
@@ -77,7 +103,7 @@ SOURCE_DIR=$(realpath "$TMP_DIR")
 DEST_DIR=$(realpath "$DEST_DIR")
 
 # Use find to locate all .json files except info_*.json and copy them while preserving structure
-find "$TMP_DIR" -type f \( -name "*.json" -o -name "*.pdf" -o -name "*.png" \) ! -name "coinjoin_tx_info*.json" ! -name "*_events.json"| while read -r file; do
+find "$TMP_DIR" -type f \( -name "*.json" -o -name "*.pdf" -o -name "*.png" -o -name "coinjoin_results_check_summary.txt" \) ! -name "coinjoin_tx_info*.json" ! -name "*_events.json"| while read -r file; do
     # Compute relative path
     REL_PATH="${file#$SOURCE_DIR/}"
     # Create target directory if it does not exist
