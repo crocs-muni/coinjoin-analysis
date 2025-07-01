@@ -153,6 +153,25 @@ def detect_address_reuse_txs(coinjoins, reuse_threshold: float):
     return addr_reuse
 
 
+def detect_specific_cj_denoms(coinjoins: dict, specific_denoms_list: list, min_times_most_frequent_denom: int, exact_times_least_frequent_denom: int):
+    specific_denoms = {'specific_denoms': {}}
+    for cjtx in coinjoins.keys():
+        output_denoms = [coinjoins[cjtx]['outputs'][index]['value'] for index in coinjoins[cjtx]['outputs'].keys()]
+        out_counts = Counter(output_denoms)
+
+        used_denoms = [coinjoins[cjtx]['inputs'][index]['value'] for index in coinjoins[cjtx]['inputs'].keys()]
+        used_denoms.extend(output_denoms)
+
+        a_counts = Counter(used_denoms)
+        result = {b: a_counts[b] for b in specific_denoms_list if b in a_counts}
+
+        if len(result) > 0 and max(result.values()) >= min_times_most_frequent_denom and min(out_counts.values()) == exact_times_least_frequent_denom:
+            specific_denoms['specific_denoms'][cjtx] = coinjoins[cjtx]['broadcast_time']
+
+    logging.warning(f'Txs with specific input/output values: {specific_denoms["specific_denoms"]}')
+    return specific_denoms
+
+
 class MIX_EVENT_TYPE(Enum):
     MIX_ENTER = 'MIX_ENTER'  # New liquidity coming to mix
     MIX_LEAVE = 'MIX_LEAVE'  # Liquidity leaving mix (postmix spend)

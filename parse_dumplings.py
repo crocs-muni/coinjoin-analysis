@@ -2315,13 +2315,21 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
             f'Path {target_path} does not exist')
 
     REUSE_THRESHOLD = 0.7
+
+    STRANGE_2025_CJ_DENOMS = [86093442, 43046721, 28697814, 14348907, 1062882]  # Multiplication of 1062882
+    STRANGE_2025_CJ_DENOMS.extend([134217728, 67108864, 33554432, 16777216, 8388608])  # Multiplication of 8388608
+    #STRANGE_2025_CJ_DENOMS.extend([50000000, 20000000, 10000000])  # Multiplication of 10000000 - present in 2025 strange txs, but too common elsewhere as well
+    STRANGE_2025_CJ_DENOMS_MIN_OCCURENCE = 2     # Manual analysis of 25 coinjoins shown that at least some of the specific values are present at least several times
+    STRANGE_2025_CJ_TIMES_LEAST_FREQUENT = 1     # Number of least common denomination
+
     print(f'Going to process the following subfolders of {target_path}: {files}')
     # Load false positives
     false_cjtxs = als.load_false_cjtxs_from_file(os.path.join(target_path, 'false_cjtxs.json'))
 
     no_remix_all = {'inputs_noremix': {}, 'outputs_noremix': {}, 'both_noremix': {},
-                    f'inputs_address_reuse': {}, f'outputs_address_reuse': {},
-                    f'both_reuse': {}}
+                    'inputs_address_reuse': {}, 'outputs_address_reuse': {},
+                    'both_reuse': {}, 'specific_denoms_noremix_in': {}, 'specific_denoms_noremix_out':{},
+                    'specific_denoms_noremix_both':{}, 'specific_denoms_noremix_inorout': {}}
     for dir_name in files:
         target_base_path = os.path.join(target_path, dir_name)
         tx_json_file = os.path.join(target_base_path, f'{tx_file}')
@@ -2342,6 +2350,29 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
             address_reuse = als.detect_address_reuse_txs(data["coinjoins"], REUSE_THRESHOLD)
             for key in address_reuse.keys():
                 no_remix_all[key].update(address_reuse[key])
+
+            # Detect transactions with specific WW2-like input/output denominations and structure
+            strange_2025_cj = als.detect_specific_cj_denoms(data["coinjoins"], STRANGE_2025_CJ_DENOMS, STRANGE_2025_CJ_DENOMS_MIN_OCCURENCE, STRANGE_2025_CJ_TIMES_LEAST_FREQUENT)
+            print(f'Strange CJs: {len(strange_2025_cj['specific_denoms'].keys())}')
+            # Keep only these which are also no_remix
+            strange_2025_cj_noremix_in =  {'specific_denoms_noremix_in': {cjtx: strange_2025_cj['specific_denoms'][cjtx] for cjtx in strange_2025_cj['specific_denoms'].keys() if cjtx in no_remix['inputs_noremix'].keys()}}
+            strange_2025_cj_noremix_out = {'specific_denoms_noremix_out': {cjtx: strange_2025_cj['specific_denoms'][cjtx] for cjtx in strange_2025_cj['specific_denoms'].keys() if cjtx in no_remix['outputs_noremix'].keys()}}
+            strange_2025_cj_noremix_both = {'specific_denoms_noremix_both': {cjtx: strange_2025_cj['specific_denoms'][cjtx] for cjtx in strange_2025_cj['specific_denoms'].keys() if cjtx in no_remix['both_noremix'].keys()}}
+            strange_2025_cj_noremix_inorout = {}
+            strange_2025_cj_noremix_inorout['specific_denoms_noremix_inorout'] = copy.deepcopy(strange_2025_cj_noremix_in['specific_denoms_noremix_in'])
+            strange_2025_cj_noremix_inorout['specific_denoms_noremix_inorout'].update(strange_2025_cj_noremix_out['specific_denoms_noremix_out'])
+            print(f'Strange CJs noremix_in: {len(strange_2025_cj_noremix_in['specific_denoms_noremix_in'].keys())}')
+            print(f'Strange CJs noremix_out: {len(strange_2025_cj_noremix_out['specific_denoms_noremix_out'].keys())}')
+            print(f'Strange CJs noremix_both: {len(strange_2025_cj_noremix_both['specific_denoms_noremix_both'].keys())}')
+            print(f'Strange CJs noremix_inorout: {len(strange_2025_cj_noremix_inorout['specific_denoms_noremix_inorout'].keys())}')
+            for key in strange_2025_cj_noremix_in.keys():
+                no_remix_all[key].update(strange_2025_cj_noremix_in[key])
+            for key in strange_2025_cj_noremix_out.keys():
+                no_remix_all[key].update(strange_2025_cj_noremix_out[key])
+            for key in strange_2025_cj_noremix_both.keys():
+                no_remix_all[key].update(strange_2025_cj_noremix_both[key])
+            for key in strange_2025_cj_noremix_inorout.keys():
+                no_remix_all[key].update(strange_2025_cj_noremix_inorout[key])
 
     # Add used threshold value into key value in dictionary
     reuse_threshold_string = f"{REUSE_THRESHOLD:.2f}".replace('.', '_')
