@@ -1492,7 +1492,8 @@ def load_coinjoins_from_file_sqlite(target_load_path: str, false_cjtxs: dict, fi
 
 
 def load_false_cjtxs_from_file(fp_file):
-    false_cjtxs = load_json_from_file(fp_file)
+    data = load_json_from_file(fp_file)
+    false_cjtxs = [item for sublist in data.values() for item in sublist]
     if PERF_USE_SHORT_TXID:
         logging.warning(f'Loading load_false_cjtxs_from_file() making short {PERF_TX_SHORT_LEN} txid')
         return [txid[0:PERF_TX_SHORT_LEN] for txid in false_cjtxs]
