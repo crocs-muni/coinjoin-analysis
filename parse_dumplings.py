@@ -4940,7 +4940,7 @@ if __name__ == "__main__":
 
             coord_tx_mapping = als.load_json_from_file(os.path.join(target_path, 'wasabi2_others', 'txid_coord_discovered_renamed.json'))
             selected_coords = ["kruw", "mega", "btip", "gingerwallet", "wasabicoordinator", "coinjoin_nl",
-                               "opencoordinator", "dragonordnance", "wasabist"]
+                               "opencoordinator", "dragonordnance", "wasabist", "strange_2025"]
             split_pool_info = wasabi2_extract_other_pools(selected_coords, data, target_path, op.interval_stop_date, coord_tx_mapping)
             # Perform splitting into month intervals for all processed coordinators
             for pool_name in split_pool_info.keys():
@@ -5014,7 +5014,7 @@ if __name__ == "__main__":
         if op.CJ_TYPE == CoinjoinType.WW2:
             ww_plot_remixes_helper(['wasabi2_kruw', 'wasabi2_gingerwallet', 'wasabi2_opencoordinator',
                                     'wasabi2_coinjoin_nl', 'wasabi2_wasabicoordinator', 'wasabi2_wasabist',
-                                    'wasabi2_dragonordnance', 'wasabi2_mega', 'wasabi2_btip', 'wasabi2_others',
+                                    'wasabi2_dragonordnance', 'wasabi2_mega', 'wasabi2_btip', 'wasabi2_strange_2025', 'wasabi2_others',
                                     'wasabi2_zksnacks', 'wasabi2'], MIX_PROTOCOL.WASABI2)
             #
             # if op.MIX_IDS == "":
@@ -5188,3 +5188,6 @@ if __name__ == "__main__":
 # start 2018-08-02 15:57:32   38a83a9766357871a77992ecaead52f70c5f9f703769e6ebd4dcdb05172b28a9
 # end 2019-01-02 12:57:09 db73c667fd25aa6cf56a24cd4909d3d4b28479f79ba6ec86fe91125dc12e2022
 # Then large consolidations
+
+# Coinjoin-looking transaction, but having just 0.5 outputs eventually which are then spread again
+# a35b759d3cc0ebda98b4be110498d50cb0a270a1053fe5ab910e5b350950255c
