@@ -25,6 +25,9 @@ jobs:
     - name: Show pip version
       run: python -m pip -V
 
+    - name: Install dependencies
+      run: python -m pip install -r requirements.txt
+
     - name: Install project in editable mode
       run: python -m pip install -e .
 
