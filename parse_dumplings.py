@@ -502,17 +502,39 @@ def assign_merge_cluster(tx_dict: dict) -> dict:
 
 
 def is_whirlpool_coinjoin_tx(test_tx):
-    # The transaction is whirlpool coinjoin transaction if number of inputs is bigger than 4
-    if len(test_tx['inputs']) >= 5:
-        # ... number of inputs and outputs is the same
-        if len(test_tx['inputs']) == len(test_tx['outputs']):
-            # ... all outputs are the same value
-            if all(test_tx['outputs'][vout]['value'] == test_tx['outputs']['0']['value']
-                   for vout in test_tx['outputs'].keys()):
-                # ... and output sizes are one of the pool sizes [100k, 1M, 5M, 50M]
-                if all(test_tx['outputs'][vout]['value'] in [100000, 1000000, 5000000, 50000000]
+    return is_coinjoin_tx(test_tx, MIX_PROTOCOL.WHIRLPOOL)
+
+
+def is_coinjoin_tx(test_tx, mix_protocol: MIX_PROTOCOL):
+    if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
+        # The transaction is whirlpool coinjoin transaction if number of inputs is bigger than 4
+        if len(test_tx['inputs']) >= 5:
+            # ... number of inputs and outputs is the same
+            if len(test_tx['inputs']) == len(test_tx['outputs']):
+                # ... all outputs are the same value
+                if all(test_tx['outputs'][vout]['value'] == test_tx['outputs']['0']['value']
                        for vout in test_tx['outputs'].keys()):
-                    return True
+                    # ... and output sizes are one of the pool sizes [100k, 1M, 5M, 50M]
+                    if all(test_tx['outputs'][vout]['value'] in [100000, 1000000, 5000000, 50000000]
+                           for vout in test_tx['outputs'].keys()):
+                        return True
+
+    if mix_protocol == MIX_PROTOCOL.WASABI1:
+        # The transaction is wasabi1 coinjoin transaction if number of inputs is at least MIN_WASABI1_INPUTS
+        WASABI1_MIN_INPUTS = 5
+        WASABI1_MAX_INPUTS = 5
+        WASABI1_MIN_MIXED_OUTPUT = 3
+        if len(test_tx['inputs']) >= WASABI1_MIN_INPUTS and len(test_tx['outputs']) >= WASABI1_MAX_INPUTS:
+            output_values = Counter([test_tx['outputs'][index]['value'] for index in test_tx['outputs'].keys()])
+            most_common_output_value, count = output_values.most_common(1)[0]
+            most_common_output_value = most_common_output_value / SATS_IN_BTC
+            # ... and the most common outputs size is around 0.1btc and
+            # is at least WASABI1_MIN_MIXED_OUTPUTS
+            if count >= WASABI1_MIN_MIXED_OUTPUT and 0.08 < most_common_output_value < 0.12:
+                return True
+
+    if mix_protocol == MIX_PROTOCOL.WASABI2:
+        assert False, 'is_coinjoin_tx() not supported for WASABI2'
 
     return False
 
@@ -3834,38 +3856,38 @@ def free_memory(data_to_free):
 
 
 def generate_normalized_json(base_path: str, base_txs: list):
-        # 1. Generate base download script for provided base transactions
-        download_base_file = os.path.join(base_path, 'download_base_txs.sh')
-        als.generate_tx_download_script(base_txs, download_base_file)
+    # 1. Generate base download script for provided base transactions
+    download_base_file = os.path.join(base_path, 'download_base_txs.sh')
+    als.generate_tx_download_script(base_txs, download_base_file)
 
-        # 2. Load base_txs from hex (after downloading) and generate download script for all input transactions
-        raw_txs = {}
-        for txid in base_txs:
-            raw_txs[txid] = als.load_json_from_file(os.path.join(base_path, f'{txid}.json'))['result']
-        txids = set(base_txs)
-        for txid in raw_txs:
-            for tx in raw_txs[txid]['vin']:
-                txids.add(tx['txid'])
-        download_base_file = os.path.join(base_path, 'download_all_txs.sh')
-        als.generate_tx_download_script(list(txids), download_base_file)
+    # 2. Load base_txs from hex (after downloading) and generate download script for all input transactions
+    raw_txs = {}
+    for txid in base_txs:
+        raw_txs[txid] = als.load_json_from_file(os.path.join(base_path, f'{txid}.json'))['result']
+    txids = set(base_txs)
+    for txid in raw_txs:
+        for tx in raw_txs[txid]['vin']:
+            txids.add(tx['txid'])
+    download_base_file = os.path.join(base_path, 'download_all_txs.sh')
+    als.generate_tx_download_script(list(txids), download_base_file)
 
-        # 3. Load all txs downloaded in folder and create normalized coinjoin_tx_info.json
-        json_files = [f for f in os.listdir(base_path) if f.endswith('.json')]
-        raw_txs = {}
-        for filename in json_files:
-            if filename == 'coinjoin_tx_info.json':
-                continue
-            txid, extension = os.path.splitext(filename)
-            tx = als.load_json_from_file(os.path.join(base_path, filename))
-            if 'result' in tx:
-                raw_txs[txid] = tx['result']
-            else:
-                print(f'Skipping {filename}')
+    # 3. Load all txs downloaded in folder and create normalized coinjoin_tx_info.json
+    json_files = [f for f in os.listdir(base_path) if f.endswith('.json')]
+    raw_txs = {}
+    for filename in json_files:
+        if filename == 'coinjoin_tx_info.json':
+            continue
+        txid, extension = os.path.splitext(filename)
+        tx = als.load_json_from_file(os.path.join(base_path, filename))
+        if 'result' in tx:
+            raw_txs[txid] = tx['result']
+        else:
+            print(f'Skipping {filename}')
 
-        cjtxs = {'coinjoins': {}}
-        for txid in base_txs:
-            cjtxs['coinjoins'][txid] = als.extract_tx_info(txid, raw_txs)
-        als.save_json_to_file_pretty(os.path.join(base_path, f'coinjoin_tx_info.json'), cjtxs)
+    cjtxs = {'coinjoins': {}}
+    for txid in base_txs:
+        cjtxs['coinjoins'][txid] = als.extract_tx_info(txid, raw_txs)
+    als.save_json_to_file_pretty(os.path.join(base_path, f'coinjoin_tx_info.json'), cjtxs)
 
 
 def list_get(lst, idx, default=None):
@@ -3996,6 +4018,77 @@ def estimate_wallet_prediction_factor(base_path, mix_id):
     return ratios_list
 
 
+# # noinspection PyUnboundLocalVariable
+# def detect_additional_cjtxs(mix_id: str, mix_protocol: MIX_PROTOCOL, base_path: Path):
+#     """
+#     Use existing set of coinjoin transactions to detect additional ones missed during previous analysis.
+#     Iteratively query bitcoin fullnode until coinjoin tx set stabilizes
+#     :param mix_id: id of mix
+#     :param base_path: basic path to coordinator
+#     :return: updated dict
+#     """
+#
+#     # Idea: Explore txids for inputs/outputs of existing coinjoins transactions. If more than defined X of existing coinjoins
+#     # accepts outputs from a given txid, assume it might be coinjoin => fetch and analyze
+#
+#     data = als.load_coinjoins_from_file(base_path, None, True)
+#
+#     change_detected = True
+#     new_coinjoins = {}
+#     while change_detected:
+#         change_detected = False
+#         txid_dict = {}
+#         for cjtx in data['coinjoins'].keys():
+#             for input in data['coinjoins'][cjtx]['inputs'].keys():
+#                 if 'spending_tx' in data['coinjoins'][cjtx]['inputs'][input].keys():
+#                     prev_tx, prev_tx_index = als.extract_txid_from_inout_string(data['coinjoins'][cjtx]['inputs'][input]['spending_tx'])
+#                     if prev_tx not in data['coinjoins']:
+#                         if prev_tx not in txid_dict.keys():
+#                             txid_dict[prev_tx] = 1
+#                         else:
+#                             txid_dict[prev_tx] = txid_dict[prev_tx] + 1
+#         for cjtx in data['coinjoins'].keys():
+#             for output in data['coinjoins'][cjtx]['outputs'].keys():
+#                 if 'spend_by_tx' in data['coinjoins'][cjtx]['outputs'][output].keys():
+#                     prev_tx, prev_tx_index = als.extract_txid_from_inout_string(data['coinjoins'][cjtx]['outputs'][output]['spend_by_tx'])
+#                     if prev_tx not in data['coinjoins']:
+#                         if prev_tx not in txid_dict.keys():
+#                             txid_dict[prev_tx] = 1
+#                         else:
+#                             txid_dict[prev_tx] = txid_dict[prev_tx] + 1
+#         # Now check transactions which has at least X hits
+#         MIN_HITS_THRESHOLD = 5  # Number of times given transaction must be referenced by known coinjoins
+#         frequent_txids = [txid for txid in txid_dict.keys() if txid_dict[txid] > MIN_HITS_THRESHOLD]
+#         print(frequent_txids)
+#
+#
+#         raw_txs = {}
+#         to_fetch_txs = set()
+#         to_fetch_txs.update(frequent_txids)
+#         # Fetch tx info from fullnode and check if it looks like coinjoins
+#         for txid in frequent_txids:
+#             if txid not in raw_txs:
+#                 txid_raw_file = f'{txid}.json'
+#                 curl_str = "curl --user user:password --data-binary \'{\"jsonrpc\": \"1.0\", \"id\": \"curltest\", \"method\": \"getrawtransaction\", \"params\": [\"" + txid + "\", true]}\' -H \'Content-Type: application/json\' http://127.0.0.1:8332/" + f" > {txid_raw_file}\n"
+#                 result = als.run_command(curl_str, True)
+#                 if result.returncode != 0:
+#                     print(f'Cannot retrieve tx info for {txid} with {result.stderr} error')
+#                 else:
+#                     tx_info = json.loads(result.stdout)
+#                     raw_txs[txid] = tx_info['result']
+#                     inputs = tx_info['vin']
+#                     index = 0
+#                     for input in inputs:
+#                         to_fetch_txs.update(inputs['txid'])
+#
+#         txinfo = als.extract_tx_info(txid, raw_txs)
+#         if is_coinjoin_tx(txinfo, mix_protocol):
+#             new_coinjoins[txid] = txinfo
+#             #change_detected = True
+#
+#     print(new_coinjoins)
+#     return data
+
 
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn")  # Set safer process spawning variant for multiprocessing
@@ -4026,6 +4119,9 @@ if __name__ == "__main__":
     #op.DEBUG = True
     if op.DEBUG:
         print('DEBUGING TIME!!!')
+
+        wasabi_detect_false(os.path.join(target_path, 'wasabi2_kruw'), 'coinjoin_tx_info.json')
+        exit(42)
 
         coord = 'wasabi2_others'
         #coord = 'wasabi1_mystery'
