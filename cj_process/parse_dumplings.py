@@ -21,10 +21,10 @@ import numpy as np
 import seaborn as sns
 from scipy import stats
 import logging
-from cj_analysis import MIX_EVENT_TYPE, get_output_name_string, get_input_name_string
-from cj_analysis import MIX_PROTOCOL
-from cj_analysis import precomp_datetime
-import cj_analysis as als
+from .cj_analysis import MIX_EVENT_TYPE, get_output_name_string, get_input_name_string
+from .cj_analysis import MIX_PROTOCOL
+from .cj_analysis import precomp_datetime
+from . import cj_analysis as als
 import mpl_toolkits.axisartist as AA
 from matplotlib import pyplot as plt
 from matplotlib.ticker import MaxNLocator
