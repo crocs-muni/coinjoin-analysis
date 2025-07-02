@@ -3339,7 +3339,7 @@ def print_remix_stats(target_base_path):
             print(e)
 
 
-def print_liquidity_summary_all(mix_protocol: MIX_PROTOCOL, target_path: str):
+def print_liquidity_summary_all(mix_protocol, target_path: str):
     if mix_protocol == CoinjoinType.SW:
         data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_100k'), None, True)
         SM.print(f'whirlpool_100k:')
