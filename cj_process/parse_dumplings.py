@@ -3101,7 +3101,7 @@ def wasabi1_extract_other_pools(selected_coords: list, data: dict, target_path: 
                                     ).most_common(1)[0][0]
         most_common_output_value = most_common_output_value / SATS_IN_BTC
         if most_common_output_value < 0.08 or most_common_output_value > 0.12:
-            print(f'{cjtx} ({data["coinjoins"][cjtx]['broadcast_time']}) has suspicious most common output of {most_common_output_value}')
+            print(f'{cjtx} ({data["coinjoins"][cjtx]["broadcast_time"]}) has suspicious most common output of {most_common_output_value}')
             to_remove[cjtx] = True
     # Remove found candidates for filtering
     cjtx_coord_zknacks_filtered2 = {cjtx: cjtx_coord_zknacks_filtered[cjtx] for cjtx in cjtx_coord_zknacks_filtered.keys()
@@ -3120,7 +3120,7 @@ def wasabi1_extract_other_pools(selected_coords: list, data: dict, target_path: 
                           if cjtx_coord_zknacks_filtered[cjtx]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name])
         fresh_ratio = (num_inputs_enter / len(cjtx_coord_zknacks_filtered[cjtx]['inputs']))
         if fresh_ratio > SUS_MIX_ENTER_RATIO:
-            print(f'{cjtx} ({data["coinjoins"][cjtx]['broadcast_time']}) has suspiciously high fresh inputs of {fresh_ratio}')
+            print(f'{cjtx} ({data["coinjoins"][cjtx]["broadcast_time"]}) has suspiciously high fresh inputs of {fresh_ratio}')
             if cjtx != 'f250e997dc1a2d68861e03689d1709973e1964a62f929ba5727fe8607dafb676':  # Very first WW1 transaction, keep
                 to_remove[cjtx] = True
     # Remove found candidates for filtering
