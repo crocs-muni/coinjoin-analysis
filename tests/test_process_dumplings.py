@@ -1,4 +1,4 @@
-from cj-process import parse_dumplings
+from cj_process import parse_dumplings
 import pytest
 
 def test_placeholder():
