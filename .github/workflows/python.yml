@@ -41,8 +41,6 @@ jobs:
       run: |
         export BTC_ROOT="$GITHUB_WORKSPACE/test_root"
         mkdir -p "$BTC_ROOT"
-        cp -r . "$BTC_ROOT"
-        cp coinjoin-analysis/tests/fixtures/dumplings__end_zksnacks_202505.zip "$BTC_ROOT/dumplings.zip"
 
     - name: Run tests
       run: |
