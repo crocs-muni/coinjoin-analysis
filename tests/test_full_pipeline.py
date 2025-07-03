@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def test_run_ct_process():
-    source_zip = os.path.join("test", "fixtures", "dumplings__end_zksnacks_202505.zip")
+    source_zip = os.path.join("tests", "fixtures", "dumplings__end_zksnacks_202505.zip")
     target_zip = "dumplings.zip"
     extract_dir = "temp_dumplings"
 
