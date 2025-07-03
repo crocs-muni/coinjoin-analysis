@@ -50,4 +50,5 @@ jobs:
     - name: Run tests
       run: |
         source myenv/bin/activate
-        pytest tests
+        python -m pip install pytest  
+        pytest  
