@@ -66,14 +66,14 @@ def test_run_cj_process():
 
     # Copy false_cjtxs.json into each directory
     for coord in coords:
-        target_dir = os.path.join(tmp_dir, "Scanner", coord)
-        shutil.copy(os.path.join("data", "wasabi2", "false_cjtxs.json"), os.path.join(tmp_dir, "Scanner", coord, "false_cjtxs.json"))
+        target_dir = os.path.join(extract_dir, "Scanner", coord)
+        shutil.copy(os.path.join("data", "wasabi2", "false_cjtxs.json"), os.path.join(extract_dir, "Scanner", coord, "false_cjtxs.json"))
 
     # Download fee_rates.json into each directory
     fee_rates_url = "https://mempool.space/api/v1/mining/blocks/fee-rates/all"
 
     for coord in coords:
-        target_file = os.path.join(tmp_dir, "Scanner", coord, "fee_rates.json")
+        target_file = os.path.join(extract_dir, "Scanner", coord, "fee_rates.json")
         response = requests.get(fee_rates_url)
         response.raise_for_status()
         with open(target_file, "wb") as f:
@@ -101,9 +101,9 @@ def test_run_cj_process():
 
     # Copy known coordinators files
     for coord in coords:
-        target_dir = os.path.join(tmp_dir, "Scanner", coord)
-        shutil.copy(os.path.join("data", "wasabi2", "txid_coord.json"), os.path.join(tmp_dir, "Scanner", coord, "txid_coord.json"))
-        shutil.copy(os.path.join("data", "wasabi2", "txid_coord_t.json"), os.path.join(tmp_dir, "Scanner", coord, "txid_coord_t.json"))
+        target_dir = os.path.join(extract_dir, "Scanner", coord)
+        shutil.copy(os.path.join("data", "wasabi2", "txid_coord.json"), os.path.join(extract_dir, "Scanner", coord, "txid_coord.json"))
+        shutil.copy(os.path.join("data", "wasabi2", "txid_coord_t.json"), os.path.join(extract_dir, "Scanner", coord, "txid_coord_t.json"))
 
     run_parse_dumplings("ww2", "detect_coordinators", None, extract_dir)
     # result = subprocess.run(
@@ -152,7 +152,7 @@ def test_run_cj_process():
         assert (extract_dir / f"Scanner/{coord}/").is_dir(), f"Missing {coord} output dir"
 
         # Example: check a known output plots exist
-        plots_pdf = list((TMP_DIR / f"Scanner/{coord}").glob("*.pdf"))
+        plots_pdf = list((f"{extract_dir}/Scanner/{coord}").glob("*.pdf"))
         assert plots_pdf, "No pdf plots were generated"
-        plots_png = list((TMP_DIR / f"Scanner/{coord}").glob("*.png"))
+        plots_png = list((f"{extract_dir}/Scanner/{coord}").glob("*.png"))
         assert plots_png, "No png plots were generated"
