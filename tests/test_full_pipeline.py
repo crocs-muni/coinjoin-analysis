@@ -42,26 +42,10 @@ def test_run_cj_process():
     with zipfile.ZipFile(target_zip, 'r') as zip_ref:
         zip_ref.extractall(extract_dir)
 
-    # # Copy known metadata
-    # source = os.path.abspath(os.path.join("data", "wasabi2", "wasabi2_wallet_predictions.json"))
-    # shutil.copy(source, os.path.join(extract_dir, "Scanner"))
-
     #
     # Run initial processing
     #
     run_parse_dumplings("ww2", "process_dumplings", None, extract_dir)
-    # result = subprocess.run(
-    #     ["python",
-    #      "cj_process/parse_dumplings.py",
-    #      "--cjtype", "ww2",
-    #      "--action", "process_dumplings",
-    #      "--target-path", os.path.abspath(extract_dir)],
-    #     capture_output=True,
-    #     text=True
-    # )
-    # print("STDOUT:", result.stdout, "\nSTDERR:", result.stderr)
-    # assert result.returncode == 0, "cj_process/parse_dumplings.py --action process_dumplings failed"
-
 
     coords = ["wasabi2", "wasabi2_others", "wasabi2_zksnacks"]
 
@@ -71,38 +55,10 @@ def test_run_cj_process():
         shutil.copy(os.path.join("data", "wasabi2", "false_cjtxs.json"), os.path.join(extract_dir, "Scanner", coord, "false_cjtxs.json"))
         shutil.copy(os.path.join("data", "wasabi2", "fee_rates.json"), os.path.join(extract_dir, "Scanner", coord, "fee_rates.json"))
 
-
-    DOWNLOAD_FEES = False
-    if DOWNLOAD_FEES:
-        # Download fee_rates.json into each directory
-        fee_rates_url = "https://mempool.space/api/v1/mining/blocks/fee-rates/all"
-
-        for coord in coords:
-            target_file = os.path.join(extract_dir, "Scanner", coord, "fee_rates.json")
-            response = requests.get(fee_rates_url)
-            response.raise_for_status()
-            with open(target_file, "wb") as f:
-                f.write(response.content)
-
     #
     # Run false positives detection
     #
     run_parse_dumplings("ww2", "detect_false_positives", None, extract_dir)
-    # result = subprocess.run(
-    #     ["python",
-    #      "cj_process/parse_dumplings.py",
-    #      "--cjtype", "ww2",
-    #      "--action", "detect_false_positives",
-    #      "--target-path", os.path.abspath(extract_dir)],
-    #     capture_output=True,
-    #     text=True
-    # )
-    # print("STDOUT:", result.stdout, "\nSTDERR:", result.stderr)
-    # assert result.returncode == 0, "cj_process/parse_dumplings.py --action detect_false_positives failed"
-
-    #
-    # Run coordinators detection
-    #
 
     # Copy known coordinators files
     for coord in coords:
@@ -110,42 +66,27 @@ def test_run_cj_process():
         shutil.copy(os.path.join("data", "wasabi2", "txid_coord.json"), os.path.join(extract_dir, "Scanner", coord, "txid_coord.json"))
         shutil.copy(os.path.join("data", "wasabi2", "txid_coord_t.json"), os.path.join(extract_dir, "Scanner", coord, "txid_coord_t.json"))
 
+    #
+    # Detect and split coordinators
+    #
     run_parse_dumplings("ww2", "detect_coordinators", None, extract_dir)
-    # result = subprocess.run(
-    #     ["python",
-    #      "cj_process/parse_dumplings.py",
-    #      "--cjtype", "ww2",
-    #      "--action", "detect_coordinators",
-    #      "--target-path", os.path.abspath(extract_dir)],
-    #     capture_output=True,
-    #     text=True
-    # )
-    # print("STDOUT:", result.stdout, "\nSTDERR:", result.stderr)
-    # assert result.returncode == 0, "cj_process/parse_dumplings.py --action detect_coordinators failed"
+    run_parse_dumplings("ww2", "split_coordinators", None, extract_dir)
+
+    #
+    coords_all = ["kruw", "gingerwallet", "opencoordinator", "wasabicoordinator", "coinjoin_nl", "wasabist", "dragonordnance", "mega", "btip", "strange_2025"]
+    for coord in coords:
+        target_dir = os.path.join(extract_dir, "Scanner", coord)
+        shutil.copy(os.path.join("data", "wasabi2", "fee_rates.json"), os.path.join(extract_dir, "Scanner", coord, "fee_rates.json"))
+        shutil.copy(os.path.join("data", "wasabi2", "false_cjtxs.json"), os.path.join(extract_dir, "Scanner", coord, "false_cjtxs.json"))
 
     #
     # Plot some graphs
     #
     run_parse_dumplings("ww2", "plot_coinjoins", "PLOT_REMIXES_MULTIGRAPH=False", extract_dir)
-    #
-    # run_parse_dumplings("plot_coinjoins", "PLOT_REMIXES_MULTIGRAPH=False")
-    # result = subprocess.run(
-    #     ["python",
-    #      "cj_process/parse_dumplings.py",
-    #      "--cjtype", "ww2",
-    #      "--action", "plot_coinjoins",
-    #      "-env_vars", "PLOT_REMIXES_MULTIGRAPH=False",
-    #      "--target-path", os.path.abspath(extract_dir)],
-    #     capture_output=True,
-    #     text=True
-    # )
-    # print("STDOUT:", result.stdout, "\nSTDERR:", result.stderr)
-    # assert result.returncode == 0, "cj_process/parse_dumplings.py --action plot_coinjoins failed"
+    run_parse_dumplings("ww2", "plot_coinjoins", "PLOT_REMIXES_SINGLE_INTERVAL=True", extract_dir)
+
 
     run_parse_dumplings("ww2", None, "ANALYSIS_LIQUIDITY=True", extract_dir)
-
-
-
 
     #
     # Verify expected results
