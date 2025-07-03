@@ -1,11 +1,12 @@
 #!/bin/bash
 BASE_PATH=$HOME
+ROOT_BTC_DIR="${BTC_ROOT:-$HOME/btc}"
 
-TMP_DIR="$BASE_PATH/btc/dumplings_temp2"
+TMP_DIR="$ROOT_BTC_DIR/dumplings_temp2"
 
 
 # Start processing in virtual environment
-source $BASE_PATH/btc/coinjoin-analysis/myenv/bin/activate 
+source $ROOT_BTC_DIR/coinjoin-analysis/myenv/bin/activate 
 
 
 # Remove previous temporary directory
@@ -15,13 +16,13 @@ rm -rf $TMP_DIR/
 mkdir $TMP_DIR/
 
 # Unzip processed dumplings files
-unzip $BASE_PATH/btc/dumplings.zip -d $TMP_DIR/
+unzip $ROOT_BTC_DIR/dumplings.zip -d $TMP_DIR/
 
 # Go to analysis folder with scripts
-cd $BASE_PATH/btc/coinjoin-analysis
+cd $ROOT_BTC_DIR/coinjoin-analysis
 
 # Copy processed metadata 
-cp $BASE_PATH/btc/coinjoin-analysis/data/wasabi2/wasabi2_wallet_predictions.json $TMP_DIR/Scanner/
+cp $ROOT_BTC_DIR/coinjoin-analysis/data/wasabi2/wasabi2_wallet_predictions.json $TMP_DIR/Scanner/
 
 
 # Extract and process Dumplings results
@@ -29,7 +30,7 @@ python3 parse_dumplings.py --cjtype ww2 --action process_dumplings --target-path
 
 # Copy already known false positives from false_cjtxs.json
 for dir in wasabi2 wasabi2_others wasabi2_zksnacks; do
-    cp $BASE_PATH/btc/coinjoin-analysis/data/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/$dir/
+    cp $ROOT_BTC_DIR/coinjoin-analysis/data/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/$dir/
 done
 
 # Download historical fee rates
@@ -42,15 +43,15 @@ python3 parse_dumplings.py --cjtype ww2 --action detect_false_positives --target
 
 # Run coordinators detection
 for dir in wasabi2 wasabi2_others wasabi2_zksnacks; do
-    cp $BASE_PATH/btc/coinjoin-analysis/data/wasabi2/txid_coord.json $TMP_DIR/Scanner/$dir/
-    cp $BASE_PATH/btc/coinjoin-analysis/data/wasabi2/txid_coord_t.json $TMP_DIR/Scanner/$dir/
+    cp $ROOT_BTC_DIR/coinjoin-analysis/data/wasabi2/txid_coord.json $TMP_DIR/Scanner/$dir/
+    cp $ROOT_BTC_DIR/coinjoin-analysis/data/wasabi2/txid_coord_t.json $TMP_DIR/Scanner/$dir/
 done
 python3 parse_dumplings.py --cjtype ww2 --action detect_coordinators --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
 # Run split of post-zksnacks coordinators
 python3 parse_dumplings.py --cjtype ww2 --action split_coordinators --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 # Copy fee rates into newly created folders (selected ones)
-for dir in kruw gingerwallet opencoordinator wasabicoordinator coinjoin_nl wasabist dragonordnance mega btip; do
+for dir in kruw gingerwallet opencoordinator wasabicoordinator coinjoin_nl wasabist dragonordnance mega btip strange_2025; do
     cp $TMP_DIR/Scanner/wasabi2/fee_rates.json $TMP_DIR/Scanner/wasabi2_$dir/
     cp $TMP_DIR/Scanner/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/wasabi2_$dir/
 done
