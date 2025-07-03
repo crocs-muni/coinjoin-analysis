@@ -8,8 +8,8 @@ TMP_DIR="$ROOT_BTC_DIR/dumplings_temp2"
 
 
 # Start processing in virtual environment
-source $ROOT_BTC_DIR/coinjoin-analysis/myenv/bin/activate 
-
+#source $ROOT_BTC_DIR/coinjoin-analysis/myenv/bin/activate 
+source myenv/bin/activate
 
 # Remove previous temporary directory
 rm -rf $TMP_DIR/
