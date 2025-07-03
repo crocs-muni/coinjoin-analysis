@@ -41,9 +41,9 @@ def test_run_cj_process():
     with zipfile.ZipFile(target_zip, 'r') as zip_ref:
         zip_ref.extractall(extract_dir)
 
-    # Copy known metadata
-    source = os.path.abspath(os.path.join("data", "wasabi2", "wasabi2_wallet_predictions.json"))
-    shutil.copy(source, os.path.join(extract_dir, "Scanner"))
+    # # Copy known metadata
+    # source = os.path.abspath(os.path.join("data", "wasabi2", "wasabi2_wallet_predictions.json"))
+    # shutil.copy(source, os.path.join(extract_dir, "Scanner"))
 
     #
     # Run initial processing
