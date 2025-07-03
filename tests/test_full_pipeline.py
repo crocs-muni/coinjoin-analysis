@@ -3,7 +3,7 @@ import os
 import tempfile
 import shutil
 from pathlib import Path
-
+import zipfile
 
 def test_run_ct_process():
     source_zip = os.path.join("tests", "fixtures", "dumplings__end_zksnacks_202505.zip")
