@@ -23,7 +23,7 @@ def test_run_ct_process():
 
     # Run the test.py script with the copied zip path
     result = subprocess.run(
-        ["python", "ct_process/parse_dumplings.py", "--target-path", os.path.abspath(extract_dir)],
+        ["python", "cj_process/parse_dumplings.py", "--target-path", os.path.abspath(extract_dir)],
         capture_output=True,
         text=True
     )
