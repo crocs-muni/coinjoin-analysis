@@ -5008,7 +5008,7 @@ if __name__ == "__main__":
     if op.VISUALIZE_ALL_COINJOINS_INTERVALS:
         if op.CJ_TYPE == CoinjoinType.SW:
             interval_start_date = '2019-04-17 01:38:07.000' if op.interval_start_date == "" else op.interval_start_date
-            visualize_intervals('whirlpool', target_path, ,interval_start_date op.interval_stop_date)
+            visualize_intervals('whirlpool', target_path, interval_start_date, op.interval_stop_date)
 
         if op.CJ_TYPE == CoinjoinType.WW1:
             interval_start_date = '2018-07-19 01:38:07.000' if op.interval_start_date == "" else op.interval_start_date
