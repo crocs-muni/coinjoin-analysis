@@ -21,7 +21,7 @@ def test_dumplings_pipeline():
     BASE_PATH = Path.home() / "btc"
     TMP_DIR = BASE_PATH / "dumplings_temp2"
     SCRIPT_PATH = BASE_PATH / "btc" / "cj_process" / "parse_dumplings.py"
-    SHELL_SCRIPT = BASE_PATH / "process_ww2.sh"  # adjust to match real path
+    SHELL_SCRIPT = repo_root / "coinjoin-analysis" / "process_ww2.sh"  # adjust to match real path
 
     # Clean temp directory before test (if needed)
     if TMP_DIR.exists():
