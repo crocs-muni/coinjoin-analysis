@@ -28,6 +28,7 @@ def run_parse_dumplings(cjtype, action, env_vars, target_path):
 
 
 def test_run_cj_process():
+    interval_start_date = "2024-05-01 00:00:00.000000"
     interval_stop_date = "2024-06-21 00:00:00.000000"
     source_zip = os.path.abspath(os.path.join("tests", "fixtures", "dumplings__end_zksnacks_202505.zip"))
     extract_dir = os.path.abspath("../temp_dumplings")
@@ -46,7 +47,7 @@ def test_run_cj_process():
     #
     # Run initial processing
     #
-    run_parse_dumplings("ww2", "process_dumplings", f"interval_stop_date={interval_stop_date}", extract_dir)
+    run_parse_dumplings("ww2", "process_dumplings", f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}", extract_dir)
 
     coords = ["wasabi2", "wasabi2_others", "wasabi2_zksnacks"]
 
@@ -59,7 +60,7 @@ def test_run_cj_process():
     #
     # Run false positives detection
     #
-    run_parse_dumplings("ww2", "detect_false_positives", f"interval_stop_date={interval_stop_date}", extract_dir)
+    run_parse_dumplings("ww2", "detect_false_positives", f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}", extract_dir)
 
     # Copy known coordinators files
     for coord in coords:
@@ -70,8 +71,8 @@ def test_run_cj_process():
     #
     # Detect and split additional coordinators
     #
-    run_parse_dumplings("ww2", "detect_coordinators", f"interval_stop_date={interval_stop_date}", extract_dir)
-    run_parse_dumplings("ww2", "split_coordinators", f"interval_stop_date={interval_stop_date}", extract_dir)
+    run_parse_dumplings("ww2", "detect_coordinators", f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}", extract_dir)
+    run_parse_dumplings("ww2", "split_coordinators", f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}", extract_dir)
 
     # Add metadata for additional coordinators
     coords_all = ["wasabi2_kruw", "wasabi2_gingerwallet", "wasabi2_opencoordinator", "wasabi2_wasabicoordinator",
@@ -84,11 +85,11 @@ def test_run_cj_process():
     #
     # Plot some graphs
     #
-    run_parse_dumplings("ww2", "plot_coinjoins", f"PLOT_REMIXES_MULTIGRAPH=False;interval_stop_date={interval_stop_date}", extract_dir)
+    run_parse_dumplings("ww2", "plot_coinjoins", f"PLOT_REMIXES_MULTIGRAPH=False;interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}", extract_dir)
     #run_parse_dumplings("ww2", "plot_coinjoins", f"PLOT_REMIXES_SINGLE_INTERVAL=True;interval_stop_date={interval_stop_date}", extract_dir)
 
 
-    run_parse_dumplings("ww2", None, f"ANALYSIS_LIQUIDITY=True;interval_stop_date={interval_stop_date}", extract_dir)
+    run_parse_dumplings("ww2", None, f"ANALYSIS_LIQUIDITY=True;interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}", extract_dir)
 
     #
     # Verify expected results
