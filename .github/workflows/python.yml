@@ -11,6 +11,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Show environment paths
+      run: |
+        echo "HOME: $HOME"
+        echo "PWD: $(pwd)"
+        echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+
     - name: Checkout repository
       uses: actions/checkout@v3
 
