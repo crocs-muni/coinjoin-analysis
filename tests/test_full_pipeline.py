@@ -4,6 +4,7 @@ import tempfile
 import shutil
 from pathlib import Path
 import zipfile
+import requests
 
 def run_parse_dumplings(cjtype, action, env_vars, target_path):
     arguments = ["python", "cj_process/parse_dumplings.py"]
@@ -69,15 +70,17 @@ def test_run_cj_process():
         target_dir = os.path.join(extract_dir, "Scanner", coord)
         shutil.copy(os.path.join("data", "wasabi2", "false_cjtxs.json"), os.path.join(extract_dir, "Scanner", coord, "false_cjtxs.json"))
 
-    # Download fee_rates.json into each directory
-    fee_rates_url = "https://mempool.space/api/v1/mining/blocks/fee-rates/all"
+    DOWNLOAD_FEES = False
+    if DOWNLOAD_FEES:
+        # Download fee_rates.json into each directory
+        fee_rates_url = "https://mempool.space/api/v1/mining/blocks/fee-rates/all"
 
-    for coord in coords:
-        target_file = os.path.join(extract_dir, "Scanner", coord, "fee_rates.json")
-        response = requests.get(fee_rates_url)
-        response.raise_for_status()
-        with open(target_file, "wb") as f:
-            f.write(response.content)
+        for coord in coords:
+            target_file = os.path.join(extract_dir, "Scanner", coord, "fee_rates.json")
+            response = requests.get(fee_rates_url)
+            response.raise_for_status()
+            with open(target_file, "wb") as f:
+                f.write(response.content)
 
     #
     # Run false positives detection
