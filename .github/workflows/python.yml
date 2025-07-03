@@ -43,5 +43,6 @@ jobs:
         pytest  
 
     - name: Show directory structure with tree
+      if: always()
       run: |
-        tree -a -L 5  
+        tree -a -L 5 ../temp_dumplings || echo "Directory not found" 
