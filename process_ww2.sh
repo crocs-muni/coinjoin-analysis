@@ -1,6 +1,8 @@
 #!/bin/bash
 BASE_PATH=$HOME
 ROOT_BTC_DIR="${BTC_ROOT:-$HOME/btc}"
+DUMPLINGS_ZIP_PATH="${DUMPLINGS_ZIP:-$ROOT_BTC_DIR/dumplings.zip}"
+
 
 TMP_DIR="$ROOT_BTC_DIR/dumplings_temp2"
 
@@ -16,7 +18,8 @@ rm -rf $TMP_DIR/
 mkdir $TMP_DIR/
 
 # Unzip processed dumplings files
-unzip $ROOT_BTC_DIR/dumplings.zip -d $TMP_DIR/
+echo Unpacking $DUMPLINGS_ZIP_PATH to $TMP_DIR
+unzip $DUMPLINGS_ZIP_PATH -d $TMP_DIR/
 
 # Go to analysis folder with scripts
 cd $ROOT_BTC_DIR/coinjoin-analysis
