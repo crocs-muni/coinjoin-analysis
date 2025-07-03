@@ -69,6 +69,8 @@ def test_run_cj_process():
     for coord in coords:
         target_dir = os.path.join(extract_dir, "Scanner", coord)
         shutil.copy(os.path.join("data", "wasabi2", "false_cjtxs.json"), os.path.join(extract_dir, "Scanner", coord, "false_cjtxs.json"))
+        shutil.copy(os.path.join("data", "wasabi2", "fee_rates.json"), os.path.join(extract_dir, "Scanner", coord, "fee_rates.json"))
+
 
     DOWNLOAD_FEES = False
     if DOWNLOAD_FEES:
