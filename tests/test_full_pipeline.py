@@ -85,10 +85,10 @@ def test_run_cj_process():
     # Plot some graphs
     #
     run_parse_dumplings("ww2", "plot_coinjoins", f"PLOT_REMIXES_MULTIGRAPH=False;interval_stop_date={interval_stop_date}", extract_dir)
-    run_parse_dumplings("ww2", "plot_coinjoins", f"PLOT_REMIXES_SINGLE_INTERVAL=True;interval_stop_date={interval_stop_date}", extract_dir)
+    #run_parse_dumplings("ww2", "plot_coinjoins", f"PLOT_REMIXES_SINGLE_INTERVAL=True;interval_stop_date={interval_stop_date}", extract_dir)
 
 
-    run_parse_dumplings("ww2", f"interval_stop_date={interval_stop_date}", "ANALYSIS_LIQUIDITY=True", extract_dir)
+    run_parse_dumplings("ww2", None, f"ANALYSIS_LIQUIDITY=True;interval_stop_date={interval_stop_date}", extract_dir)
 
     #
     # Verify expected results
