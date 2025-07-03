@@ -67,14 +67,14 @@ def test_run_cj_process():
         shutil.copy(os.path.join("data", "wasabi2", "txid_coord_t.json"), os.path.join(extract_dir, "Scanner", coord, "txid_coord_t.json"))
 
     #
-    # Detect and split coordinators
+    # Detect and split additional coordinators
     #
     run_parse_dumplings("ww2", "detect_coordinators", None, extract_dir)
     run_parse_dumplings("ww2", "split_coordinators", None, extract_dir)
 
-    #
+    # Add metadata for additional coordinators
     coords_all = ["kruw", "gingerwallet", "opencoordinator", "wasabicoordinator", "coinjoin_nl", "wasabist", "dragonordnance", "mega", "btip", "strange_2025"]
-    for coord in coords:
+    for coord in coords_all:
         target_dir = os.path.join(extract_dir, "Scanner", coord)
         shutil.copy(os.path.join("data", "wasabi2", "fee_rates.json"), os.path.join(extract_dir, "Scanner", coord, "fee_rates.json"))
         shutil.copy(os.path.join("data", "wasabi2", "false_cjtxs.json"), os.path.join(extract_dir, "Scanner", coord, "false_cjtxs.json"))
