@@ -3730,6 +3730,7 @@ class DumplingsParseOptions:
     #interval_stop_date = '2024-10-10 00:00:07.000'  # Last date to be analyzed, e.g., 2024-10-10 00:00:07.000
     now = datetime.now()
     interval_stop_date = now.strftime('%Y-%m-%d %H:%M:%S.') + f'{int(now.microsecond / 1000):03d}'
+    interval_start_date = ""
 
     def __init__(self):
         self.default_values()
@@ -3838,7 +3839,7 @@ class DumplingsParseOptions:
         #self.interval_stop_date = '2024-12-26 00:00:07.000'
         # If not set, then use current date => take all coinjoins, no limit
         self.interval_stop_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
-
+        self.interval_start_date = ""
 
     def print_attributes(self):
         print('*******************************************')
@@ -4928,7 +4929,8 @@ if __name__ == "__main__":
     #
     if op.ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS:
         if op.CJ_TYPE == CoinjoinType.SW:
-            all_data = process_and_save_intervals_filter('whirlpool', MIX_PROTOCOL.WHIRLPOOL, target_path, '2019-04-17 01:38:07.000', op.interval_stop_date,
+            interval_start_date = '2019-04-17 01:38:07.000' if op.interval_start_date == "" else op.interval_start_date
+            all_data = process_and_save_intervals_filter('whirlpool', MIX_PROTOCOL.WHIRLPOOL, target_path, interval_start_date, op.interval_stop_date,
                                        'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt',
                                                 op.SAVE_BASE_FILES_JSON, False)
 
@@ -4956,12 +4958,14 @@ if __name__ == "__main__":
                                               None, None, None, op.SAVE_BASE_FILES_JSON, True)
 
         if op.CJ_TYPE == CoinjoinType.WW1:
-            process_and_save_intervals_filter('wasabi1', MIX_PROTOCOL.WASABI1, target_path, '2018-07-19 01:38:07.000', op.interval_stop_date,
+            interval_start_date = '2018-07-19 01:38:07.000' if op.interval_start_date == "" else op.interval_start_date
+            process_and_save_intervals_filter('wasabi1', MIX_PROTOCOL.WASABI1, target_path, interval_start_date, op.interval_stop_date,
                                        'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', None, op.SAVE_BASE_FILES_JSON, False)
 
 
         if op.CJ_TYPE == CoinjoinType.WW2:
-            data = process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', op.interval_stop_date,
+            interval_start_date = '2022-06-01 00:00:07.000' if op.interval_start_date == "" else op.interval_start_date
+            data = process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, interval_start_date, op.interval_stop_date,
                     'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, op.SAVE_BASE_FILES_JSON, False)
 
             # Split zkSNACKs (-> wasabi2_zksnacks) and post-zkSNACKs (-> wasabi2_others) pools
@@ -4996,19 +5000,23 @@ if __name__ == "__main__":
             fix_ww2_for_fdnp_ww1('wasabi2', target_path)
             logging.info(f'done fix_ww2_for_fdnp_ww1(wasabi2) *****************************')
             logging.info(f'Going to process_and_save_intervals_filter(wasabi2) *****************************')
-            process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, '2022-06-01 00:00:07.000', op.interval_stop_date,
+            interval_start_date = '2022-06-01 00:00:07.000' if op.interval_start_date == "" else op.interval_start_date
+            process_and_save_intervals_filter('wasabi2', MIX_PROTOCOL.WASABI2, target_path, interval_start_date, op.interval_stop_date,
                                        'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None, op.SAVE_BASE_FILES_JSON, True)
             logging.info(f'done process_and_save_intervals_filter(wasabi2) *****************************')
 
     if op.VISUALIZE_ALL_COINJOINS_INTERVALS:
         if op.CJ_TYPE == CoinjoinType.SW:
-            visualize_intervals('whirlpool', target_path, '2019-04-17 01:38:07.000', op.interval_stop_date)
+            interval_start_date = '2019-04-17 01:38:07.000' if op.interval_start_date == "" else op.interval_start_date
+            visualize_intervals('whirlpool', target_path, ,interval_start_date op.interval_stop_date)
 
         if op.CJ_TYPE == CoinjoinType.WW1:
-            visualize_intervals('wasabi1', target_path, '2018-07-19 01:38:07.000', op.interval_stop_date)
+            interval_start_date = '2018-07-19 01:38:07.000' if op.interval_start_date == "" else op.interval_start_date
+            visualize_intervals('wasabi1', target_path, interval_start_date, op.interval_stop_date)
 
         if op.CJ_TYPE == CoinjoinType.WW2:
-            visualize_intervals('wasabi2', target_path, '2022-06-01 00:00:07.000', op.interval_stop_date)
+            interval_start_date = '2022-06-01 00:00:07.000' if op.interval_start_date == "" else op.interval_start_date
+            visualize_intervals('wasabi2', target_path, interval_start_date, op.interval_stop_date)
 
     if op.DETECT_FALSE_POSITIVES:
         if op.CJ_TYPE == CoinjoinType.WW1:
@@ -5052,7 +5060,8 @@ if __name__ == "__main__":
             data = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi1'), None, False)
             coord_tx_mapping = None
             selected_coords = ['zksnacks', 'mystery', 'others']
-            split_pool_info = wasabi1_extract_other_pools(selected_coords, data, target_path, '2018-07-19 01:38:07.000', op.interval_stop_date, coord_tx_mapping)
+            interval_start_date = '2018-07-19 01:38:07.000' if op.interval_start_date == "" else op.interval_start_date
+            split_pool_info = wasabi1_extract_other_pools(selected_coords, data, target_path, interval_start_date, op.interval_stop_date, coord_tx_mapping)
             # Perform splitting into month intervals for all processed coordinators
             for pool_name in split_pool_info.keys():
                 logging.info(f'Going to process_and_save_intervals_filter({pool_name}) *****************************')
