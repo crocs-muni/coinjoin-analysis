@@ -1031,10 +1031,10 @@ def process_interval(mix_id: str, data: dict, mix_filename: str, premix_filename
     # extract liquidity for given interval
     if premix_filename:
         # Whirlpool
-        extract_inputs_distribution(mix_id, target_path, premix_filename, interval_data['premix'], True)
+        extract_inputs_distribution(mix_id, interval_path, premix_filename, interval_data['premix'], True)
     else:
         # WW1, WW2
-        extract_inputs_distribution(mix_id, target_path, mix_filename, interval_data["coinjoins"], True)
+        extract_inputs_distribution(mix_id, interval_path, mix_filename, interval_data["coinjoins"], True)
 
     # Moved under separate command
     # # Visualize coinjoins
@@ -1077,10 +1077,10 @@ def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, t
 
     if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
         # Whirlpool
-        extract_inputs_distribution(mix_id, target_path, premix_filename, data['premix'], True)
+        extract_inputs_distribution(mix_id, target_save_path, premix_filename, data['premix'], True)
     else:
         # WW1, WW2
-        extract_inputs_distribution(mix_id, target_path, mix_filename, data["coinjoins"], True)
+        extract_inputs_distribution(mix_id, target_save_path, mix_filename, data["coinjoins"], True)
 
     # Find first day of a month when first coinjoin occured
     start_date_obj = precomp_datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S.%f")
@@ -1437,7 +1437,7 @@ def process_inputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target_
     #     inputs_info, inputs = extract_inputs_distribution(mix_id, target_path, tx_filename, other_cjtxs, save_outputs, '_others')
     #     plot_distribution(inputs)
     # else:
-    inputs_info, inputs = extract_inputs_distribution(mix_id, target_path, tx_filename, data["coinjoins"], save_outputs, '')
+    inputs_info, inputs = extract_inputs_distribution(mix_id, target_load_path, tx_filename, data["coinjoins"], save_outputs, '')
     plot_distribution(inputs)
 
 
@@ -1450,7 +1450,7 @@ def extract_inputs_distribution(mix_id: str, target_path: Path, tx_filename: str
     inputs_info = {'mix_id': mix_id, 'path': tx_filename, 'distrib': inputs_distrib}
     logging.info(f'  Distribution extracted, total {len(inputs_info["distrib"])} different input values found')
     if save_outputs:
-        als.save_json_to_file_pretty(os.path.join(target_path, mix_id, f'{mix_id}_inputs_distribution{file_spec}.json'), inputs_info)
+        als.save_json_to_file_pretty(os.path.join(target_path, f'{mix_id}_inputs_distribution{file_spec}.json'), inputs_info)
 
     return inputs_info, inputs
 
