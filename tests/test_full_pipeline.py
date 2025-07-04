@@ -5,9 +5,11 @@ import shutil
 from pathlib import Path
 import zipfile
 import requests
+from orjson import orjson
+from cj_process.parse_dumplings import main as parse_dumplings_main
 
 def run_parse_dumplings(cjtype, action, env_vars, target_path):
-    arguments = ["python", "cj_process/parse_dumplings.py"]
+    arguments = []
     if cjtype:
         arguments.extend(["--cjtype", f"{cjtype}"])
     if action:
@@ -18,13 +20,18 @@ def run_parse_dumplings(cjtype, action, env_vars, target_path):
         arguments.extend(["--target-path", f"{target_path}"])
 
     print(f"Running arguments: {arguments}")
-    result = subprocess.run(
-        arguments,
-        capture_output=True,
-        text=True
-    )
-    print("STDOUT:", result.stdout, "\nSTDERR:", result.stderr)
-    assert result.returncode == 0, f"cj_process/parse_dumplings.py {arguments} failed"
+    AS_SUBPROCESSS = False
+    if AS_SUBPROCESSS:
+        result = subprocess.run(
+            ["python", "cj_process/parse_dumplings.py"] + arguments,
+            capture_output=True,
+            text=True
+        )
+        print("STDOUT:", result.stdout, "\nSTDERR:", result.stderr)
+        assert result.returncode == 0, f"cj_process/parse_dumplings.py {arguments} failed"
+    else:
+        returncode = parse_dumplings_main(arguments)
+        assert returncode == 0, f"cj_process/parse_dumplings.py {arguments} failed"
 
 
 def test_run_cj_process():
@@ -61,6 +68,12 @@ def test_run_cj_process():
     # Run false positives detection
     #
     run_parse_dumplings("ww2", "detect_false_positives", f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}", extract_dir)
+    # Check expected values
+    for coord in ["wasabi2"]:
+        with open(os.path.join(extract_dir, "Scanner", coord, "no_remix_txs.json"), "rb") as file:
+            results = orjson.loads(file.read())
+            print(results)
+            #assert len(results[])
 
     # Copy known coordinators files
     for coord in coords:
