@@ -693,6 +693,9 @@ def compute_cjtxs_relative_ordering(coinjoins):
 
 
 def print_liquidity_summary(coinjoins: dict, mix_id: str):
+    if len(coinjoins) == 0:
+        return None
+
     total_inputs_len = [len(coinjoins[cjtx]['inputs']) for cjtx in coinjoins.keys()]
     total_inputs = [coinjoins[cjtx]['inputs'][input]['value'] for cjtx in coinjoins.keys() for input in coinjoins[cjtx]['inputs']]
     total_outputs_len = [len(coinjoins[cjtx]['outputs']) for cjtx in coinjoins.keys()]
@@ -751,34 +754,64 @@ def print_liquidity_summary(coinjoins: dict, mix_id: str):
     earliest_time = coinjoins[earliest_cjtx]['broadcast_time']
     latest_time = coinjoins[latest_cjtx]['broadcast_time']
 
-    # Print summary results
-    SM.print(f"  Earliest broadcast: {earliest_time} from {earliest_cjtx}")
-    SM.print(f"  Latest broadcast: {latest_time} from {latest_cjtx}")
-    SM.print(f'  Total coinjoin transactions: {len(coinjoins.keys())}')
-    SM.print(f'  Number of inputs: min={min(total_inputs_len)}, max={max(total_inputs_len)}, avg={np.average(total_inputs_len)}, median={np.median(total_inputs_len)}')
-    SM.print(f'  Number of outputs: min={min(total_outputs_len)}, max={max(total_outputs_len)}, avg={np.average(total_outputs_len)}, median={np.median(total_outputs_len)}')
-
-    SM.print(f'  {get_ratio_string(total_mix_entering_number, total_inputs_number)} Inputs entering mix / total inputs used by mix transactions')
-    SM.print(f'  {get_ratio_string(total_mix_friends_number, total_inputs_number)} Friends inputs re-entering mix / total inputs used by mix transactions')
-    SM.print(f'  {get_ratio_string(total_mix_leaving_number, total_outputs_number)} Outputs leaving mix / total outputs by mix transactions')
-    SM.print(f'  {get_ratio_string(total_mix_staying_number, total_outputs_number)} Outputs staying in mix / total outputs by mix transactions')
-    SM.print(f'  {get_ratio_string(total_mix_staying_number, total_outputs_number - total_mix_remix_out_number)} Outputs staying in mix / non-remix outputs')
-    SM.print(f'  {get_ratio_string(total_mix_remix_number, total_inputs_number)} Inputs remixed / total inputs based on number of inputs')
-    SM.print(f'  {get_ratio_string(total_mix_remix_value, total_inputs_value)} Inputs remixed / total inputs based on value of inputs')
-    SM.print(f'  {total_mix_entering_value / SATS_IN_BTC} btc, total fresh entering mix')
-    SM.print(f'  {total_mix_friends_value / SATS_IN_BTC} btc, total friends entering mix')
-    SM.print(f'  {total_mix_staying_value / SATS_IN_BTC} btc, total value staying unmoved in mix')
-    SM.print(f'  {total_mix_leaving_value / SATS_IN_BTC} btc, total value leaving mix')
-    SM.print(f'  {total_mix_leaving_nonstd_value / SATS_IN_BTC} btc, total non-standard value leaving mix (not mixed)')
-    SM.print(f'  {(total_mix_entering_value - total_mix_leaving_nonstd_value) / SATS_IN_BTC} btc, total fresh entering mix without non-standard leaving')
-
+    # Prepare return structure
+    lr = {}
+    lr['earliest_cjtx'] = earliest_cjtx
+    lr['earliest_time'] = earliest_time
+    lr['latest_cjtx'] = latest_cjtx
+    lr['latest_time'] = latest_time
+    lr['total_coinjoins'] = len(coinjoins.keys())
+    lr['min_inputs'] = min(total_inputs_len)
+    lr['max_inputs'] = max(total_inputs_len)
+    lr['avg_inputs'] = np.average(total_inputs_len)
+    lr['median_inputs'] = np.median(total_inputs_len)
+    lr['min_outputs'] = min(total_outputs_len)
+    lr['max_outputs'] = max(total_outputs_len)
+    lr['avg_outputs'] = np.average(total_outputs_len)
+    lr['median_outputs'] = np.median(total_outputs_len)
+    lr['ratio_fresh_inputs_2_total_inputs'] = get_ratio_string(total_mix_entering_number, total_inputs_number)
+    lr['ratio_friends_inputs_2_total_inputs'] = get_ratio_string(total_mix_friends_number, total_inputs_number)
+    lr['ratio_leaving_outputs_2_total_outputs'] = get_ratio_string(total_mix_leaving_number, total_outputs_number)
+    lr['ratio_staying_outputs_2_total_outputs'] = get_ratio_string(total_mix_staying_number, total_outputs_number)
+    lr['ratio_staying_outputs_2_nonremix_outputs'] = get_ratio_string(total_mix_staying_number, total_outputs_number - total_mix_remix_out_number)
+    lr['ratio_remixed_inputs_2_total_inputs_numbers'] = get_ratio_string(total_mix_remix_number, total_inputs_number)
+    lr['ratio_remixed_inputs_2_total_inputs_values'] = get_ratio_string(total_mix_remix_value, total_inputs_value)
+    lr['total_fresh_inputs_value'] = total_mix_entering_value / SATS_IN_BTC
+    lr['total_friends_inputs_value'] = total_mix_friends_value / SATS_IN_BTC
+    lr['total_unmoved_outputs_value'] = total_mix_staying_value / SATS_IN_BTC
+    lr['total_leaving_outputs_value'] = total_mix_leaving_value / SATS_IN_BTC
+    lr['total_nonstandard_leaving_outputs_value'] = total_mix_leaving_nonstd_value / SATS_IN_BTC
+    lr['total_fresh_inputs_without_nonstandard_outputs_value'] = (total_mix_entering_value - total_mix_leaving_nonstd_value) / SATS_IN_BTC
     mix_id_latex = mix_id.replace('_', '\\_' )
-    SM.print(f'  \\hline   '
-             + f'{mix_id_latex} & {earliest_time}--{latest_time} & '
-             + f'{len(coinjoins.keys())} & {total_mix_entering_number} / {round(total_mix_entering_value / SATS_IN_BTC, 1)}~\\bitcoinSymbol' + '{} & '
-             + f'{get_ratio(total_mix_remix_value, total_inputs_value)}\\% & '
-             + f'{get_ratio(total_mix_staying_number, total_outputs_number - total_mix_remix_out_number)}\\%, {round(total_mix_staying_value / SATS_IN_BTC, 1)}~\\bitcoinSymbol' + '{} & '
-             + f'{min(total_inputs_len)} / {round(np.average(total_inputs_len), 1)} / {max(total_inputs_len)} \\\\')
+    lr['latex_summary'] = f'\\hline   ' \
+             + f'{mix_id_latex} & {earliest_time}--{latest_time} & ' \
+             + f'{len(coinjoins.keys())} & {total_mix_entering_number} / {round(total_mix_entering_value / SATS_IN_BTC, 1)}~\\bitcoinSymbol' + '{} & ' \
+             + f'{get_ratio(total_mix_remix_value, total_inputs_value)}\\% & ' \
+             + f'{get_ratio(total_mix_staying_number, total_outputs_number - total_mix_remix_out_number)}\\%, {round(total_mix_staying_value / SATS_IN_BTC, 1)}~\\bitcoinSymbol' + '{} & ' \
+             + f'{min(total_inputs_len)} / {round(np.average(total_inputs_len), 1)} / {max(total_inputs_len)} \\\\'
+
+    # Print summary results
+    SM.print(f"  Earliest broadcast: {lr['earliest_time']} from {lr['earliest_cjtx']}")
+    SM.print(f"  Latest broadcast: {lr['latest_time']} from {lr['latest_cjtx']}")
+    SM.print(f'  Total coinjoin transactions: {lr['total_coinjoins']}')
+    SM.print(f'  Number of inputs: min={lr['min_inputs']}, max={lr['max_inputs']}, avg={lr['avg_inputs']}, median={lr['median_inputs']}')
+    SM.print(f'  Number of outputs: min={lr['min_outputs']}, max={lr['max_outputs']}, avg={lr['avg_outputs']}, median={lr['median_outputs']}')
+    SM.print(f'  {lr['ratio_fresh_inputs_2_total_inputs']} Inputs entering mix / total inputs used by mix transactions')
+    SM.print(f'  {lr['ratio_friends_inputs_2_total_inputs']} Friends inputs re-entering mix / total inputs used by mix transactions')
+    SM.print(f'  {lr['ratio_leaving_outputs_2_total_outputs']} Outputs leaving mix / total outputs by mix transactions')
+    SM.print(f'  {lr['ratio_staying_outputs_2_total_outputs']} Outputs staying in mix / total outputs by mix transactions')
+    SM.print(f'  {lr['ratio_staying_outputs_2_nonremix_outputs']} Outputs staying in mix / non-remix outputs')
+    SM.print(f'  {lr['ratio_remixed_inputs_2_total_inputs_numbers']} Inputs remixed / total inputs based on number of inputs')
+    SM.print(f'  {lr['ratio_remixed_inputs_2_total_inputs_values']} Inputs remixed / total inputs based on value of inputs')
+    SM.print(f'  {lr['total_fresh_inputs_value']} btc, total fresh entering mix')
+    SM.print(f'  {lr['total_friends_inputs_value']} btc, total friends entering mix')
+    SM.print(f'  {lr['total_unmoved_outputs_value']} btc, total value staying unmoved in mix')
+    SM.print(f'  {lr['total_leaving_outputs_value']} btc, total value leaving mix')
+    SM.print(f'  {lr['total_nonstandard_leaving_outputs_value']} btc, total non-standard value leaving mix (not mixed)')
+    SM.print(f'  {lr['total_fresh_inputs_without_nonstandard_outputs_value']} btc, total fresh entering mix without non-standard leaving')
+
+    SM.print(f'  {lr['latex_summary']}')
+    return lr
 
 
 def print_coordinators_counts(coord_txs: dict, min_print_txs: int):
