@@ -55,7 +55,7 @@ SLOT_WIDTH_SECONDS = 3600   # hour
 #LEGEND_FONT_SIZE = 'small'
 LEGEND_FONT_SIZE = 'medium'
 
-
+op = None  # Global settings for the experiment
 
 class ClusterIndex:
     NEW_CLUSTER_INDEX = 0
@@ -3644,7 +3644,7 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
         print(f'# Total non-small coordinators (min={MIN_COORD_CJTXS}): {len(coord_txs_filtered)}')
 
 
-def parse_arguments():
+def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     # --cjtype ww2 --action process_dumplings --action detect_false_positives --target-path c:\!blockchains\CoinJoin\Dumplings_Stats_20241225\
     parser.add_argument("-t", "--cjtype",
@@ -3675,7 +3675,7 @@ def parse_arguments():
 
     parser.print_help()
 
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 class CoinjoinType(Enum):
@@ -3764,7 +3764,8 @@ class DumplingsParseOptions:
                     key, value = map(str.strip, item.split("=", 1))  # Split and strip spaces
 
                     try:
-                        value = ast.literal_eval(value)  # Safely evaluate literals
+                        if not isinstance(value, str):
+                            value = ast.literal_eval(value)  # Safely evaluate literals
                         if hasattr(self, key):  # Only set existing attributes
                             setattr(self, key, value)
                         else:
@@ -4083,12 +4084,17 @@ def estimate_wallet_prediction_factor(base_path, mix_id):
 #     return data
 
 
-if __name__ == "__main__":
-    multiprocessing.set_start_method("spawn")  # Set safer process spawning variant for multiprocessing
+def main(argv=None):
+    try:
+        multiprocessing.set_start_method("spawn") # Set safer process spawning variant for multiprocessing
+    except RuntimeError as e:
+        if "context has already been set" not in str(e):
+            raise
 
+    global op
     op = DumplingsParseOptions()
     # parse arguments, overwrite default settings if required
-    args = parse_arguments()
+    args = parse_arguments(argv)
 
     op.set_args(args)
 
@@ -5223,6 +5229,8 @@ if __name__ == "__main__":
     SM.print_summary()
     print('### END SUMMARY #########################')
 
+    return 0
+
     # TODO: Set x labels for histogram of frequencies to rounded denominations
     # TODO: Detect likely cases of WW2 round split due to more than 400 inputs registered
     #   (two coinjoins broadcasted close to each other, sum of inputs is close or higher than 400)
@@ -5250,6 +5258,14 @@ if __name__ == "__main__":
     # TODO: Plot graph of remix rates (values, num_inputs) as line plot for all months into single graph
 
     # TODO: Recompute fresh inflows for post-zksnacks coordinators
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+
 
 # b71981909c440bcb29e9a2d1cde9992cc97d3ca338c925c4b0547566bdc62f4d
 # ec9d5c2c678a70e304fa6e06a6430c9aff49e75107ac33f10165b14f0fa9a1f4
