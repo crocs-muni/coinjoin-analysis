@@ -3361,23 +3361,14 @@ def print_remix_stats(target_base_path):
             print(e)
 
 
-def print_liquidity_summary_all(mix_protocol, target_path: str):
+def analyze_liquidity_summary(mix_protocol, target_path: str):
     if mix_protocol == CoinjoinType.SW:
-        data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_100k'), None, True)
-        SM.print(f'whirlpool_100k:')
-        als.print_liquidity_summary(data["coinjoins"], 'whirlpool_100k')
-        data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_1M'), None, True)
-        SM.print(f'whirlpool_1M:')
-        als.print_liquidity_summary(data["coinjoins"], 'whirlpool_1M')
-        data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_5M'), None, True)
-        SM.print(f'whirlpool_5M:')
-        als.print_liquidity_summary(data["coinjoins"], 'whirlpool_5M')
-        data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool_50M'), None, True)
-        SM.print(f'whirlpool_50M:')
-        als.print_liquidity_summary(data["coinjoins"], 'whirlpool_50M')
-        data = als.load_coinjoins_from_file(os.path.join(target_path, 'whirlpool'), None, True)
-        SM.print(f'whirlpool:')
-        als.print_liquidity_summary(data["coinjoins"], 'whirlpool')
+        pools = ['whirlpool_100k', 'whirlpool_1M', 'whirlpool_5M', 'whirlpool_50M', 'whirlpool']
+        for mix_id in pools:
+            data = als.load_coinjoins_from_file(os.path.join(target_path, mix_id), None, True)
+            SM.print(f'{mix_id}')
+            liq_sum = als.print_liquidity_summary(data["coinjoins"], mix_id)
+            als.save_json_to_file_pretty(os.path.join(target_path, f'liquidity_summary_{mix_id}.json'), liq_sum)
     else:
         coords = []
         if op.CJ_TYPE == CoinjoinType.WW2:
@@ -3389,7 +3380,8 @@ def print_liquidity_summary_all(mix_protocol, target_path: str):
         for coord in coords:
             cjtx_coord = als.load_coinjoins_from_file(os.path.join(target_path, f'{coord[0]}_{coord[1]}'), None, True)
             SM.print(f'{coord[0]}_{coord[1]}')
-            als.print_liquidity_summary(cjtx_coord["coinjoins"], f'{coord[0]}_{coord[1]}')
+            liq_sum = als.print_liquidity_summary(cjtx_coord["coinjoins"], f'{coord[0]}_{coord[1]}')
+            als.save_json_to_file_pretty(os.path.join(target_path, f'liquidity_summary_{coord[0]}_{coord[1]}.json'), liq_sum)
 
 
 def discover_coordinators(cjtxs: dict, sorted_cjtxs: list, coord_txs: dict, in_or_out: str,
@@ -4610,7 +4602,7 @@ if __name__ == "__main__":
         target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240802\\'
         target_path = os.path.join(target_base_path, 'Scanner')
         interval_stop_date = '2024-08-03 00:00:07.000'
-        print_liquidity_summary_all(op.CJ_TYPE, target_path)
+        analyze_liquidity_summary(op.CJ_TYPE, target_path)
         exit(42)
 
         target_base_path = 'c:\\!blockchains\\CoinJoin\\Dumplings_Stats_20240802\\'
@@ -4650,7 +4642,7 @@ if __name__ == "__main__":
         target_path = os.path.join(target_base_path, 'Scanner')
         interval_stop_date = '2024-08-03 00:00:07.000'
 
-        print_liquidity_summary_all(op.CJ_TYPE, target_path)
+        analyze_liquidity_summary(op.CJ_TYPE, target_path)
         exit(42)
 
         analyze_zksnacks_output_clusters('wasabi2', target_path)
@@ -5213,7 +5205,7 @@ if __name__ == "__main__":
         print_remix_stats(op.target_base_path)
 
     if op.ANALYSIS_LIQUIDITY:
-        print_liquidity_summary_all(op.CJ_TYPE, target_path)
+        analyze_liquidity_summary(op.CJ_TYPE, target_path)
 
     if op.ANALYSIS_OUTPUT_CLUSTERS:
         analyze_zksnacks_output_clusters('wasabi2', target_path)
