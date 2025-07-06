@@ -5103,7 +5103,7 @@ def main(argv=None):
 
     if op.PLOT_REMIXES:
         def ww_plot_remixes_helper(mix_ids_default: list, mix_protocol):
-            mix_ids = mix_ids_default if op.MIX_IDS == "" else op.MIX_IDS
+            mix_ids = mix_ids_default if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
             logging.info(f'Going to process following mixes: {mix_ids}')
             for mix_id in mix_ids:
                 target_base_path = os.path.join(target_path, mix_id)
