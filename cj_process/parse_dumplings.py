@@ -634,7 +634,7 @@ def visualize_coinjoins_in_time(data, ax_num_coinjoins):
     ax_num_coinjoins.set_title('Number of coinjoin transactions in given time period')
 
 
-def visualize_liquidity_in_time(mix_id, events, ax_number, ax_boxplot, ax_input_values_boxplot, ax_output_values_boxplot,
+def visualize_liquidity_in_time(base_path, mix_id, events, ax_number, ax_boxplot, ax_input_values_boxplot, ax_output_values_boxplot,
                                 ax_input_values_bar, ax_output_values_bar, ax_burn_time, legend_labels: list, events_premix: dict = None):
     #
     # Number of coinjoins per given time interval (e.g., day)
@@ -735,7 +735,7 @@ def visualize_liquidity_in_time(mix_id, events, ax_number, ax_boxplot, ax_input_
             input_data = tx0_inputs_values_in_slot
         else:
             input_data = inputs_values_in_slot
-        als.save_json_to_file_pretty(f'{mix_id}_inputs', input_data)
+        als.save_json_to_file_pretty(os.path.join(base_path, f'{mix_id}_inputs.json'), input_data)
         flat_data = [item for index in input_data.keys() for item in input_data[index]]
         log_data = np.log(flat_data)
         hist, bins = np.histogram(log_data, bins=100)
@@ -804,7 +804,7 @@ def visualize_coinjoins(mix_id, data, events, base_path, experiment_name):
     visualize_coinjoins_in_time(data, ax_num_coinjoins)
 
     # All inputs and outputs
-    visualize_liquidity_in_time(mix_id, data["coinjoins"], ax_inputs_outputs, ax_inputs_outputs_boxplot, ax_inputs_value_boxplot,
+    visualize_liquidity_in_time(base_path, mix_id, data["coinjoins"], ax_inputs_outputs, ax_inputs_outputs_boxplot, ax_inputs_value_boxplot,
                                 ax_outputs_value_boxplot, None, None, ax_input_time_to_burn, ['all inputs', 'all outputs', 'remixed inputs'])
     ax_inputs_outputs.set_ylabel('Number of inputs / outputs')
     ax_inputs_outputs.set_title('Number of all inputs and outputs in cjtx')
@@ -823,7 +823,7 @@ def visualize_coinjoins(mix_id, data, events, base_path, experiment_name):
     ax_input_time_to_burn.set_title('Distribution of coin burn times (log scale)')
 
     # Fresh liquidity in/out of mix
-    visualize_liquidity_in_time(mix_id, events, ax_liquidity, ax_liquidity_boxplot, ax_fresh_inputs_value_boxplot,
+    visualize_liquidity_in_time(base_path, mix_id, events, ax_liquidity, ax_liquidity_boxplot, ax_fresh_inputs_value_boxplot,
                                 ax_fresh_outputs_value_boxplot, ax_inputs_value_bar, ax_outputs_value_bar,
                                 None, ['fresh inputs mixed', 'outputs leaving mix', ''], data.get('premix', None))
     ax_liquidity.set_ylabel('Number of new inputs / outputs')
@@ -3061,6 +3061,7 @@ def wasabi1_extract_other_pools(selected_coords: list, data: dict, target_path: 
     :param selected_coords: list of coordinator names which shall be separated
     :param data: Dictionary will all coinjoins for all coordinators
     :param target_path: directory where to store jsons with separated coordinators
+    :param interval_start_date: the first date to process (all coinjoins before it are ignored)
     :param interval_stop_date: the last date to process (all coinjoins after it are ignored)
     :param txid_coord_discovered: optional list with mapping between coordinators and their cjtxs
     :return: dictionary with basic information regarding separated cooridnators
