@@ -3463,6 +3463,7 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
     ordering = als.compute_cjtxs_relative_ordering(cjtxs)
     sorted_cjtxs = sorted(ordering, key=ordering.get)
 
+    # Load known coordinators (will be used as starting set to expend to additional transactions)
     if os.path.exists(os.path.join(target_path, 'txid_coord_t.json')):
         initial_known_txs = als.load_json_from_file(os.path.join(target_path, 'txid_coord_t.json'))  # Load known coordinators
     else:
@@ -4969,7 +4970,7 @@ def main(argv=None):
             # Split zkSNACKs (-> wasabi2_zksnacks) and post-zkSNACKs (-> wasabi2_others) pools
             # This splitting will allow to analyze separate pools, but also to make data files smaller and easier to process later
             logging.info('Going to wasabi2_extract_pools() *****************************')
-            split_pool_info = wasabi2_extract_pools_destroys_data(data, target_path, op.interval_stop_date)
+            split_pool_info = wasabi2_extract_pools_destroys_data(data, target_path, op.interval_start_date, op.interval_stop_date)
             logging.info('done wasabi2_extract_pools() *****************************')
             free_memory(data)
 
@@ -4980,8 +4981,14 @@ def main(argv=None):
 
             for pool_name in split_pool_info.keys():
                 logging.info(f'Going to process_and_save_intervals_filter({pool_name}) *****************************')
+                pool_interval_start_date = split_pool_info[pool_name]['start_date']
+                if op.interval_start_date != "" and pool_interval_start_date < op.interval_start_date:
+                    pool_interval_start_date = op.interval_start_date
+                pool_interval_stop_date = split_pool_info[pool_name]['stop_date']
+                if op.interval_stop_date != "" and pool_interval_stop_date > op.interval_stop_date:
+                    pool_interval_stop_date = op.interval_stop_date
                 pool_data = process_and_save_intervals_filter(pool_name, MIX_PROTOCOL.WASABI2, target_path,
-                                                         split_pool_info[pool_name]['start_date'], split_pool_info[pool_name]['stop_date'],
+                                                         interval_start_date, pool_interval_stop_date,
                                                          'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', None,
                                                          op.SAVE_BASE_FILES_JSON, True)
                 free_memory(pool_data)
@@ -5015,6 +5022,7 @@ def main(argv=None):
         if op.CJ_TYPE == CoinjoinType.WW2:
             interval_start_date = '2022-06-01 00:00:07.000' if op.interval_start_date == "" else op.interval_start_date
             visualize_intervals('wasabi2', target_path, interval_start_date, op.interval_stop_date)
+            visualize_intervals('wasabi2_zksnacks', target_path, interval_start_date, op.interval_stop_date)
 
     if op.DETECT_FALSE_POSITIVES:
         if op.CJ_TYPE == CoinjoinType.WW1:
