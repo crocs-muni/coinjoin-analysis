@@ -164,7 +164,7 @@ def check_coinjoin_files(base_path):
                 interval_found_num += len(found_files)
                 interval_expected_num += len(expected_files_mix['mix_interval_files'])
 
-        mix_results_check[mix_path.name]['mix_interval_files']['score'] = f'{round(100 * interval_found_num/interval_expected_num, 2)}'
+        mix_results_check[mix_path.name]['mix_interval_files']['score'] = f'{round(100 * interval_found_num/interval_expected_num, 2)}' if interval_expected_num > 0 else '0'
         mix_results_check[mix_path.name]['mix_interval_files']['score_str'] = f'{interval_found_num}/{interval_expected_num}'
         mix_status += mix_results_check[mix_path.name]['mix_interval_files']['score_str']
         mix_status += '' if interval_found_num == interval_expected_num else '[!]'
@@ -183,6 +183,8 @@ def check_coinjoin_files(base_path):
     print(f'{all_status}')
     with open(os.path.join(base_path, "coinjoin_results_check_summary.txt"), "w") as file:
         file.write(all_status)
+
+    return mix_results_all
 
 
 if __name__ == "__main__":
