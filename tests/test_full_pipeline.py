@@ -36,7 +36,7 @@ def run_parse_dumplings(cjtype, action, env_vars, target_path):
 def test_run_cj_process():
     interval_start_date = "2024-05-01 00:00:00.000000"
     interval_stop_date = "2024-06-21 00:00:00.000000"
-    source_zip = os.path.abspath(os.path.join("tests", "fixtures", "dumplings__end_zksnacks_202505.zip"))
+    source_zip = os.path.abspath(os.path.join("tests", "fixtures", "dumplings__end_zksnacks_202405.zip"))
     extract_dir = os.path.abspath("../temp_dumplings")
     target_zip = os.path.abspath(f"{extract_dir}/dumplings.zip")
 
