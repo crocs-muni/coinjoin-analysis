@@ -40,8 +40,6 @@ def test_run_cj_process():
     extract_dir = os.path.abspath("../temp_dumplings")
     target_zip = os.path.abspath(f"{extract_dir}/dumplings.zip")
 
-    file_check = check_coinjoin_files(os.path.join(extract_dir, 'Scanner'))
-
     #
     # Prepare test data from zip file
     #
