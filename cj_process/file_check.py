@@ -140,8 +140,8 @@ def check_coinjoin_files(base_path):
 
         mix_results_check[mix_path.name]['mix_base_files']['missing_files'].extend([Path(f).as_posix() for f in missing_files])
         mix_results_check[mix_path.name]['mix_base_files']['found_files'].update({Path(f).as_posix(): Path(os.path.join(mix_base_path, f)).stat().st_size for f in found_files})
-        mix_results_check[mix_path.name]['mix_base_files']['score'] = f'{round(100 * len(found_files)/len(expected_files_mix['mix_base_files']), 2)}'
-        mix_results_check[mix_path.name]['mix_base_files']['score_str'] = f'{len(found_files)}/{len(expected_files_mix['mix_base_files'])}'
+        mix_results_check[mix_path.name]['mix_base_files']['score'] = f"{round(100 * len(found_files)/len(expected_files_mix['mix_base_files']), 2)}"
+        mix_results_check[mix_path.name]['mix_base_files']['score_str'] = f"{len(found_files)}/{len(expected_files_mix['mix_base_files'])}"
 
         mix_status += mix_results_check[mix_path.name]['mix_base_files']['score_str']
         mix_status += '' if len(found_files) == len(expected_files_mix['mix_base_files']) else '[!]'
