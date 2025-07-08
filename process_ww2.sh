@@ -1,15 +1,12 @@
 #!/bin/bash
 BASE_PATH=$HOME
-ROOT_BTC_DIR="${BTC_ROOT:-$HOME/btc}"
-DUMPLINGS_ZIP_PATH="${DUMPLINGS_ZIP:-$ROOT_BTC_DIR/dumplings.zip}"
 
-
-TMP_DIR="$ROOT_BTC_DIR/dumplings_temp2"
+TMP_DIR="$BASE_PATH/btc/dumplings_temp2"
 
 
 # Start processing in virtual environment
-#source $ROOT_BTC_DIR/coinjoin-analysis/myenv/bin/activate 
-source myenv/bin/activate
+source $BASE_PATH/btc/coinjoin-analysis/venv/bin/activate 
+
 
 # Remove previous temporary directory
 rm -rf $TMP_DIR/
@@ -18,22 +15,21 @@ rm -rf $TMP_DIR/
 mkdir $TMP_DIR/
 
 # Unzip processed dumplings files
-echo Unpacking $DUMPLINGS_ZIP_PATH to $TMP_DIR
-unzip $DUMPLINGS_ZIP_PATH -d $TMP_DIR/
+unzip $BASE_PATH/btc/dumplings.zip -d $TMP_DIR/
 
 # Go to analysis folder with scripts
-cd $ROOT_BTC_DIR/coinjoin-analysis
+cd $BASE_PATH/btc/coinjoin-analysis/
 
 # Copy processed metadata 
-cp $ROOT_BTC_DIR/coinjoin-analysis/data/wasabi2/wasabi2_wallet_predictions.json $TMP_DIR/Scanner/
+#cp $BASE_PATH/btc/coinjoin-analysis/data/wasabi2/wasabi2_wallet_predictions.json $TMP_DIR/Scanner/
 
 
 # Extract and process Dumplings results
-python3 parse_dumplings.py --cjtype ww2 --action process_dumplings --target-path $TMP_DIR/ | tee parse_dumplings.py.log
+python3 -m cj_process.parse_dumplings --cjtype ww2 --action process_dumplings --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
 # Copy already known false positives from false_cjtxs.json
 for dir in wasabi2 wasabi2_others wasabi2_zksnacks; do
-    cp $ROOT_BTC_DIR/coinjoin-analysis/data/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/$dir/
+    cp $BASE_PATH/btc/coinjoin-analysis/data/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/$dir/
 done
 
 # Download historical fee rates
@@ -42,17 +38,17 @@ curl -sSL "https://mempool.space/api/v1/mining/blocks/fee-rates/all" > $TMP_DIR/
 curl -sSL "https://mempool.space/api/v1/mining/blocks/fee-rates/all" > $TMP_DIR/Scanner/wasabi2_zksnacks/fee_rates.json
 
 # Run false positives detection
-python3 parse_dumplings.py --cjtype ww2 --action detect_false_positives --target-path $TMP_DIR/ | tee parse_dumplings.py.log
+python3 -m cj_process.parse_dumplings --cjtype ww2 --action detect_false_positives --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
 # Run coordinators detection
 for dir in wasabi2 wasabi2_others wasabi2_zksnacks; do
-    cp $ROOT_BTC_DIR/coinjoin-analysis/data/wasabi2/txid_coord.json $TMP_DIR/Scanner/$dir/
-    cp $ROOT_BTC_DIR/coinjoin-analysis/data/wasabi2/txid_coord_t.json $TMP_DIR/Scanner/$dir/
+    cp $BASE_PATH/btc/coinjoin-analysis/data/wasabi2/txid_coord.json $TMP_DIR/Scanner/$dir/
+    cp $BASE_PATH/btc/coinjoin-analysis/data/wasabi2/txid_coord_t.json $TMP_DIR/Scanner/$dir/
 done
-python3 parse_dumplings.py --cjtype ww2 --action detect_coordinators --target-path $TMP_DIR/ | tee parse_dumplings.py.log
+python3 -m cj_process.parse_dumplings --cjtype ww2 --action detect_coordinators --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
 # Run split of post-zksnacks coordinators
-python3 parse_dumplings.py --cjtype ww2 --action split_coordinators --target-path $TMP_DIR/ | tee parse_dumplings.py.log
+python3 -m cj_process.parse_dumplings --cjtype ww2 --action split_coordinators --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 # Copy fee rates into newly created folders (selected ones)
 for dir in kruw gingerwallet opencoordinator wasabicoordinator coinjoin_nl wasabist dragonordnance mega btip strange_2025; do
     cp $TMP_DIR/Scanner/wasabi2/fee_rates.json $TMP_DIR/Scanner/wasabi2_$dir/
@@ -60,36 +56,36 @@ for dir in kruw gingerwallet opencoordinator wasabicoordinator coinjoin_nl wasab
 done
 
 # Run detection of Bybit hack
-python3 parse_dumplings.py --cjtype ww2 --env_vars="ANALYSIS_BYBIT_HACK=True" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
+python3 -m cj_process.parse_dumplings --cjtype ww2 --env_vars="ANALYSIS_BYBIT_HACK=True" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
 
 # Run generation of aggregated plots 
-python3 parse_dumplings.py --cjtype ww2 --action plot_coinjoins --env_vars "PLOT_REMIXES_MULTIGRAPH=False" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
+python3 -m cj_process.parse_dumplings --cjtype ww2 --action plot_coinjoins --env_vars "PLOT_REMIXES_MULTIGRAPH=False" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
 # Run generation of plots only for specific intervals
-python3 parse_dumplings.py --cjtype ww2 --action plot_coinjoins --target-path $TMP_DIR/ --env_vars "PLOT_REMIXES_SINGLE_INTERVAL=True" | tee parse_dumplings.py.log
-#python3 parse_dumplings.py --cjtype ww2 --action plot_coinjoins --target-path $TMP_DIR/ --env_vars "PLOT_REMIXES_SINGLE_INTERVAL=True;MIX_IDS=['wasabi2_zksnacks']" | tee parse_dumplings.py.log
+python3 -m cj_process.parse_dumplings --cjtype ww2 --action plot_coinjoins --target-path $TMP_DIR/ --env_vars "PLOT_REMIXES_SINGLE_INTERVAL=True" | tee parse_dumplings.py.log
+#python3 -m cj_process.parse_dumplings --cjtype ww2 --action plot_coinjoins --target-path $TMP_DIR/ --env_vars "PLOT_REMIXES_SINGLE_INTERVAL=True;MIX_IDS=['wasabi2_zksnacks']" | tee parse_dumplings.py.log
 
 # Run generation of multigraph plots
-python3 parse_dumplings.py --cjtype ww2 --action plot_coinjoins --env_vars "PLOT_REMIXES_MULTIGRAPH=True" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
+python3 -m cj_process.parse_dumplings --cjtype ww2 --action plot_coinjoins --env_vars "PLOT_REMIXES_MULTIGRAPH=True" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
 
 # Analyse liquidity 
-python3 parse_dumplings.py --cjtype ww2 --target-path $TMP_DIR/ --env_vars "ANALYSIS_LIQUIDITY=True" | tee parse_dumplings.py.log
+python3 -m cj_process.parse_dumplings --cjtype ww2 --target-path $TMP_DIR/ --env_vars "ANALYSIS_LIQUIDITY=True" | tee parse_dumplings.py.log
 
 # Visualize stats for all multigraphs
-python3 parse_dumplings.py --cjtype ww2 --action plot_coinjoins --target-path $TMP_DIR/ --env_vars "PLOT_REMIXES_MULTIGRAPH=True;MIX_IDS=['wasabi2_zksnacks', 'wasabi2_kruw']" | tee parse_dumplings.py.log
+python3 -m cj_process.parse_dumplings --cjtype ww2 --action plot_coinjoins --target-path $TMP_DIR/ --env_vars "PLOT_REMIXES_MULTIGRAPH=True;MIX_IDS=['wasabi2_zksnacks', 'wasabi2_kruw']" | tee parse_dumplings.py.log
 
 
 # Another visualization graphs (older)
-python3 parse_dumplings.py --cjtype ww2 --target-path $TMP_DIR/ --env_vars "VISUALIZE_ALL_COINJOINS_INTERVALS=True" | tee parse_dumplings.py.log
+python3 -m cj_process.parse_dumplings --cjtype ww2 --target-path $TMP_DIR/ --env_vars "VISUALIZE_ALL_COINJOINS_INTERVALS=True" | tee parse_dumplings.py.log
 
 
 
 #
 # Run check for created files
 #
-python3 file_check.py $TMP_DIR/Scanner/  | tee parse_dumplings.py.log
+python3 -m cj_process.file_check $TMP_DIR/Scanner/  | tee parse_dumplings.py.log
 
 
 
