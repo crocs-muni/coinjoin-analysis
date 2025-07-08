@@ -2901,15 +2901,15 @@ def wasabi2_extract_pools_original(data: dict, target_path: str, interval_stop_d
     return split_pools_info
 
 
-def wasabi2_extract_pools_destroys_data(data: dict, target_path: str, interval_stop_date: str, txid_coord_discovered: dict= None):
+def wasabi2_extract_pools_destroys_data(data: dict, target_path: str, interval_start_date: str,  interval_stop_date: str):
     """
     Takes dictionary with all coinjoins and split it to ones belonging to zksnacks coordinator and other coordinators.
     IMPORTANT: due to peak memory requirements of higher tens of GBs (03/2025), this function filters transactions inplace
     and as a result erases data from 'data' input argument - you need to load it again after calling this function.
     :param data: Dictionary will all coinjoins for all coordinators (IS erased afterwards)
     :param target_path: directory where to store jsons with separated coordinators
+    :param interval_start_date: the first date to process (all coinjoins before it are ignored)
     :param interval_stop_date: the last date to process (all coinjoins after it are ignored)
-    :param txid_coord_discovered: optional list with mapping between coordinators and their cjtxs
     :return: dictionary with basic information regarding separated cooridnators
     """
     logging.debug('wasabi2_extract_pools() started')
