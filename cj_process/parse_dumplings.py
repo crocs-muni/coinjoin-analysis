@@ -2912,15 +2912,15 @@ def wasabi2_extract_pools_destroys_data(data: dict, target_path: str, interval_s
     :param interval_stop_date: the last date to process (all coinjoins after it are ignored)
     :return: dictionary with basic information regarding separated cooridnators
     """
-    logging.debug('wasabi2_extract_pools() started')
+    logging.debug('wasabi2_extract_pools_destroys_data() started')
 
-    def save_split_coordinator(cjtx_coord: dict, target_path: str, coordinator_name: str, interval_start_date, interval_stop_date):
+    def save_split_coordinator(cjtx_coord: dict, target_path: str, coordinator_name: str, save_interval_start_date, save_interval_stop_date):
         target_save_path = os.path.join(target_path, coordinator_name)
         if not os.path.exists(target_save_path):
             os.makedirs(target_save_path.replace('\\', '/'))
         als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_coord})
-        return {'pool_name': coordinator_name, 'start_date': interval_start_date,
-                                              'stop_date': interval_stop_date,
+        return {'pool_name': coordinator_name, 'start_date': save_interval_start_date,
+                                              'stop_date': save_interval_stop_date,
                                               'num_cjtxs': len(cjtx_coord)}
 
     split_pools_info = {}
@@ -2975,6 +2975,8 @@ def wasabi2_extract_pools_destroys_data(data: dict, target_path: str, interval_s
     als.save_json_to_file_pretty(os.path.join(target_path, f'coinjoin_tx_info__missed.json'), missed_cjtxs)
     SM.print(f'Total transactions not separated into pools: {len(missed_cjtxs)}')
     logging.debug(missed_cjtxs)
+
+    als.save_json_to_file_pretty(os.path.join(target_path, f'split_pools_info.json'), split_pools_info)
 
     # Backup corresponding log file
     backup_log_files(target_path)
