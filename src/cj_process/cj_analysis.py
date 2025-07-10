@@ -534,7 +534,7 @@ def plot_mining_fee_rates(mix_id: str, data: dict, mining_fees: dict, ax):
     return fee_rates
 
 
-def  get_wallets_prediction_ratios(mix_id: str):
+def get_wallets_prediction_ratios(mix_id: str):
     # NOTE: Based on real wallet experiments, average number of outputs (AVG_NUM_OUTPUTS) is significantly more
     # independent of number of coins in wallet and stable => take it as fixed point and compute synthetic value for AVG_NUM_INPUTS
 

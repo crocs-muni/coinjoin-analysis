@@ -1,12 +1,10 @@
 import copy
-import json
 import math
 import multiprocessing
 import os
 import pickle
 import random
 import shutil
-import subprocess
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing.pool import ThreadPool
 from datetime import datetime, timedelta
@@ -2761,6 +2759,27 @@ def analyze_mixes_flows(target_path):
 
 
 def analyze_extramix_flows(experiment_id: str, target_path: Path, mix1_precomp_vout_txid_index: dict, mix1_postmix: dict, mix2_premix: dict, mix2_precomp_vin_txid_index: dict):
+    """
+    Analyze extramix coinjoin flows between two mixes (Mix1 and Mix2) in the context of a specific experiment.
+    The function determines the transactions bridging Mix1 postmix outputs to Mix2 premix inputs, computes the
+    flow values, and detects discrepancies in input-output differences that exceed specified thresholds.
+
+    :param experiment_id: Identifier for the experiment being analyzed
+    :type experiment_id: str
+    :param target_path: Path to output the results or processed data
+    :type target_path: Path
+    :param mix1_precomp_vout_txid_index: A mapping of spent transaction IDs and indexes from Mix1
+    :type mix1_precomp_vout_txid_index: dict
+    :param mix1_postmix: Transaction data for postmix outputs of Mix1
+    :type mix1_postmix: dict
+    :param mix2_premix: Transaction data for premix inputs of Mix2
+    :type mix2_premix: dict
+    :param mix2_precomp_vin_txid_index: A mapping of vin transaction IDs and indexes associated with Mix2
+    :type mix2_precomp_vin_txid_index: dict
+    :return: A dictionary containing the bridging transactions and their computed flow sizes,
+             including broadcast time and minimum input/output value
+    :rtype: dict
+    """
     # (non-strict, 1-hop case): Mix1 coinjoin output (mix1_coinjoin_file) -> Mix2 wallet (mix1_postmix_file, mix2_premix_file) -> Mix2 coinjoin input (mix2_coinjoin_file)
     logging.info(f'{experiment_id} (non-strict, 1-hop case): #mix1 postmix txs = {len(mix1_postmix.keys())}, #mix2 premix txs {len(mix2_premix)}')
     mix1_mix2_txs = list(set(list(mix1_postmix.keys())).intersection(list(mix2_premix.keys())))
@@ -4646,34 +4665,12 @@ def main(argv=None):
 
         if op.CJ_TYPE == CoinjoinType.WW1:
             ww_plot_remixes_helper(['wasabi1_mystery', 'wasabi1_zksnacks', 'wasabi1_others', 'wasabi1'], MIX_PROTOCOL.WASABI1)
-            # wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
-            # wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
-            # wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', False, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
-            # wasabi_plot_remixes('wasabi1', MIX_PROTOCOL.WASABI1, os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json', True, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
 
         if op.CJ_TYPE == CoinjoinType.WW2:
             ww_plot_remixes_helper(['wasabi2_kruw', 'wasabi2_gingerwallet', 'wasabi2_opencoordinator',
                                     'wasabi2_coinjoin_nl', 'wasabi2_wasabicoordinator', 'wasabi2_wasabist',
                                     'wasabi2_dragonordnance', 'wasabi2_mega', 'wasabi2_btip', 'wasabi2_strange_2025', 'wasabi2_others',
                                     'wasabi2_zksnacks', 'wasabi2'], MIX_PROTOCOL.WASABI2)
-            #
-            # if op.MIX_IDS == "":
-            #     mix_ids = ['wasabi2_kruw', 'wasabi2_gingerwallet', 'wasabi2_opencoordinator', 'wasabi2_coinjoin_nl',
-            #                'wasabi2_wasabicoordinator', 'wasabi2_wasabist', 'wasabi2_dragonordnance',
-            #                'wasabi2_mega', 'wasabi2_btip',
-            #                'wasabi2_others', 'wasabi2_zksnacks', 'wasabi2']
-            # else:
-            #     mix_ids = op.MIX_IDS
-            # logging.info(f'Going to process following mixes: {mix_ids}')
-            # for mix_id in mix_ids:
-            #     target_base_path = os.path.join(target_path, mix_id)
-            #     if os.path.exists(target_base_path):
-            #         wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
-            #         wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', False, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
-            #         wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
-            #         wasabi_plot_remixes(mix_id, MIX_PROTOCOL.WASABI2, os.path.join(target_path, mix_id), 'coinjoin_tx_info.json', True, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
-            #     else:
-            #         logging.warning(f'Path {target_base_path} does not exists.')
 
         if op.CJ_TYPE == CoinjoinType.SW:
             PLOT_OPTIONS = []  # (analyze_values, normalize_values, plot_multigraph)
@@ -4768,6 +4765,12 @@ def main(argv=None):
 
     return 0
 
+if __name__ == "__main__":
+    main()
+
+
+
+
     # TODO: Set x labels for histogram of frequencies to rounded denominations
     # TODO: Detect likely cases of WW2 round split due to more than 400 inputs registered
     #   (two coinjoins broadcasted close to each other, sum of inputs is close or higher than 400)
@@ -4795,13 +4798,6 @@ def main(argv=None):
     # TODO: Plot graph of remix rates (values, num_inputs) as line plot for all months into single graph
 
     # TODO: Recompute fresh inflows for post-zksnacks coordinators
-
-
-if __name__ == "__main__":
-    main()
-
-
-
 
 
 # b71981909c440bcb29e9a2d1cde9992cc97d3ca338c925c4b0547566bdc62f4d

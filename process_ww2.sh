@@ -18,7 +18,7 @@ mkdir $TMP_DIR/
 unzip $BASE_PATH/btc/dumplings.zip -d $TMP_DIR/
 
 # Go to analysis folder with scripts
-cd $BASE_PATH/btc/coinjoin-analysis/
+cd $BASE_PATH/btc/coinjoin-analysis/src
 
 # Copy processed metadata 
 #cp $BASE_PATH/btc/coinjoin-analysis/data/wasabi2/wasabi2_wallet_predictions.json $TMP_DIR/Scanner/

@@ -1,9 +1,7 @@
 __pycache__/
 Scripts/__pycache__/
 .idea/
-Scripts/boltzmann/
-Scripts/boltzmann/.gitattributes
-Scripts/boltzmann/.gitignore
-Scripts_untracked/
+
+src/Scripts_untracked/
 
 build/
