@@ -110,6 +110,8 @@ WHIRLPOOL_FUNDING_TXS[100000] = {'start_date': '2021-03-05 23:50:59.000', 'fundi
 WHIRLPOOL_FUNDING_TXS[1000000] = {'start_date': '2019-05-23 20:54:27.000', 'funding_txs': ['c6c27bef217583cca5f89de86e0cd7d8b546844f800da91d91a74039c3b40fba', 'a42596825352055841949a8270eda6fb37566a8780b2aec6b49d8035955d060e', '4c906f897467c7ed8690576edfcaf8b1fb516d154ef6506a2c4cab2c48821728']}
 WHIRLPOOL_FUNDING_TXS[5000000] = {'start_date': '2019-04-17 16:20:09.000', 'funding_txs': ['a554db794560458c102bab0af99773883df13bc66ad287c29610ad9bac138926', '792c0bfde7f6bf023ff239660fb876315826a0a52fd32e78ea732057789b2be0', '94b0da89431d8bd74f1134d8152ed1c7c4f83375e63bc79f19cf293800a83f52', 'e04e5a5932e8d42e4ef641c836c6d08d9f0fff58ab4527ca788485a3fceb2416']}
 WHIRLPOOL_FUNDING_TXS[50000000] = {'start_date': '2019-08-02 17:45:23.000', 'funding_txs': ['b42df707a3d876b24a22b0199e18dc39aba2eafa6dbeaaf9dd23d925bb379c59']}
+WHIRLPOOL_FUNDING_TXS[2500000] = {'start_date': '2025-05-31 11:16:05.000', 'funding_txs': ['737a867727db9a2c981ad622f2fa14b021ce8b1066a001e34fb793f8da833155']}
+WHIRLPOOL_FUNDING_TXS[25000000] = {'start_date': '2025-06-06 01:32:04.000', 'funding_txs': ['7784df1182ab86ee33577b75109bb0f7c5622b9fb91df24b65ab2ab01b27dffa']}
 
 WASABI2_FUNDING_TXS = {}
 WASABI2_FUNDING_TXS['zksnacks'] = {'start_date': '2022-06-18 01:38:00.000', 'funding_txs': ['d31c2b4d71eb143b23bb87919dda7fdfecee337ffa1468d1c431ece37698f918']}
@@ -512,8 +514,9 @@ def is_coinjoin_tx(test_tx, mix_protocol: MIX_PROTOCOL):
                 # ... all outputs are the same value
                 if all(test_tx['outputs'][vout]['value'] == test_tx['outputs']['0']['value']
                        for vout in test_tx['outputs'].keys()):
-                    # ... and output sizes are one of the pool sizes [100k, 1M, 5M, 50M]
-                    if all(test_tx['outputs'][vout]['value'] in [100000, 1000000, 5000000, 50000000]
+                    # ... and output sizes are one of the pool sizes [100k, 1M, 5M, 50M, 25M, 2.5M]
+                    #[100000, 1000000, 5000000, 50000000, 25000000, 2500000]
+                    if all(test_tx['outputs'][vout]['value'] in WHIRLPOOL_FUNDING_TXS.keys()
                            for vout in test_tx['outputs'].keys()):
                         return True
 
@@ -4486,7 +4489,17 @@ def main(argv=None):
             whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_1M', 1000000)
             whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_5M', 5000000)
             whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_50M', 50000000)
+            whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_ashigaru_25M', 25000000)
+            whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_ashigaru_2_5M', 2500000)
 
+            # 2.5M Ashigaru pool
+            process_and_save_intervals_filter('whirlpool_ashigaru_2_5M', MIX_PROTOCOL.WHIRLPOOL, target_path,
+                                              WHIRLPOOL_FUNDING_TXS[2500000]["start_date"], op.interval_stop_date,
+                                              None, None, None, op.SAVE_BASE_FILES_JSON, True)
+            # 25M Ashigaru pool
+            process_and_save_intervals_filter('whirlpool_ashigaru_25M', MIX_PROTOCOL.WHIRLPOOL, target_path,
+                                              WHIRLPOOL_FUNDING_TXS[25000000]["start_date"], op.interval_stop_date,
+                                              None, None, None, op.SAVE_BASE_FILES_JSON, True)
             # 100k pool
             process_and_save_intervals_filter('whirlpool_100k', MIX_PROTOCOL.WHIRLPOOL, target_path,
                                               WHIRLPOOL_FUNDING_TXS[100000]["start_date"], op.interval_stop_date,
@@ -4583,6 +4596,8 @@ def main(argv=None):
             wasabi_detect_false(os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json')
             wasabi_detect_false(os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json')
             wasabi_detect_false(os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json')
+            wasabi_detect_false(os.path.join(target_path, 'whirlpool_ashigaru_25M'), 'coinjoin_tx_info.json')
+            wasabi_detect_false(os.path.join(target_path, 'whirlpool_ashigaru_2_5M'), 'coinjoin_tx_info.json')
 
     if op.DETECT_COORDINATORS:
         if op.CJ_TYPE == CoinjoinType.WW2:
@@ -4637,10 +4652,13 @@ def main(argv=None):
             pool_1M = whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_1M', 1000000)
             pool_5M = whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_5M', 5000000)
             pool_50M = whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_50M', 50000000)
+            pool_25M = whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_ashigaru_25M', 25000000)
+            pool_2_5M = whirlpool_extract_pool(data, 'whirlpool', target_path, 'whirlpool_ashigaru_2_5M', 2500000)
 
             # Detect transactions which were not assigned to any pool
             missed_cjtxs = list(set(data["coinjoins"].keys()) - set(pool_100k["coinjoins"].keys()) - set(pool_1M["coinjoins"].keys())
-                                - set(pool_5M["coinjoins"].keys()) - set(pool_50M["coinjoins"].keys()))
+                                - set(pool_5M["coinjoins"].keys()) - set(pool_50M["coinjoins"].keys())
+                                - set(pool_25M["coinjoins"].keys()) - set(pool_2_5M["coinjoins"].keys()))
             als.save_json_to_file_pretty(os.path.join(target_load_path, f'coinjoin_tx_info__missed.json'), missed_cjtxs)
             print(f'Total transactions not separated into pools: {len(missed_cjtxs)}')
             print(missed_cjtxs)
@@ -4688,6 +4706,10 @@ def main(argv=None):
                                     option[0], option[1], None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
                 wasabi_plot_remixes('whirlpool_50M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json',
                                     option[0], option[1], None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
+                wasabi_plot_remixes('whirlpool_ashigaru_25M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_ashigaru_25M'), 'coinjoin_tx_info.json',
+                                    option[0], option[1], None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
+                wasabi_plot_remixes('whirlpool_ashigaru_2_5M', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool_ashigaru_2_5M'), 'coinjoin_tx_info.json',
+                                    option[0], option[1], None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
 
             wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', True, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
             wasabi_plot_remixes('whirlpool', MIX_PROTOCOL.WHIRLPOOL, os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json', False, True, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
@@ -4728,6 +4750,9 @@ def main(argv=None):
         if op.CJ_TYPE == CoinjoinType.SW:
             process_inputs_distribution_whirlpool('whirlpool', MIX_PROTOCOL.WHIRLPOOL,  target_path, 'SamouraiTx0s.txt', True)
             process_outputs_distribution('whirlpool', MIX_PROTOCOL.WHIRLPOOL, target_path, 'SamouraiTx0s.txt', True)
+            process_inputs_distribution_whirlpool('whirlpool_ashigaru_2_5M', MIX_PROTOCOL.WHIRLPOOL,  target_path, 'SamouraiTx0s.txt', True)
+            process_outputs_distribution('whirlpool_ashigaru_2_5M', MIX_PROTOCOL.WHIRLPOOL, target_path, 'SamouraiTx0s.txt', True)
+
         if op.CJ_TYPE == CoinjoinType.WW2:
             for pool in ['wasabi2_zksnacks', 'wasabi2_others']:
                 process_inputs_distribution(pool, MIX_PROTOCOL.WASABI2,  target_path, 'Wasabi2CoinJoins.txt', True)
