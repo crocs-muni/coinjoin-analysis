@@ -3,10 +3,16 @@ import subprocess
 import os
 import shutil
 import zipfile
+from pathlib import Path
+
 from orjson import orjson
 from cj_process.parse_dumplings import main as parse_dumplings_main
 from cj_process.file_check import check_coinjoin_files
 
+TESTS = Path(__file__).resolve().parent.parent # …/repo/tests
+REPO_ROOT = TESTS.parent                       # …/repo
+DATA = REPO_ROOT / "data"                     # …/repo/data
+TEMP_DUMPLINGS = REPO_ROOT.parent / "temp_dumplings"                   # temp_dumplings
 
 def run_parse_dumplings(cjtype, action, env_vars, target_path, must_succeed=True):
     arguments = []
@@ -89,8 +95,8 @@ def assert_process_dumplings(extract_dir, coord, num_cjtxs, num_addresses, num_c
 def test_run_cj_process_ww2():
     interval_start_date = "2024-05-01 00:00:00.000000"
     interval_stop_date = "2024-06-21 00:00:00.000000"
-    source_zip = os.path.abspath(os.path.join("fixtures", "dumplings__end_zksnacks_202405.zip"))
-    extract_dir = os.path.abspath("../../temp_dumplings")
+    source_zip = os.path.abspath(os.path.join(TESTS, "fixtures", "dumplings__end_zksnacks_202405.zip"))
+    extract_dir = TEMP_DUMPLINGS
     target_zip = os.path.abspath(f"{extract_dir}/dumplings.zip")
 
     #
@@ -120,8 +126,8 @@ def test_run_cj_process_ww2():
 
     for coord in ["wasabi2", "wasabi2_others", "wasabi2_zksnacks"]:
         target_dir = os.path.join(extract_dir, "Scanner", coord)
-        shutil.copy(os.path.join("..", "data", "wasabi2", "false_cjtxs.json"), os.path.join(target_dir, "false_cjtxs.json"))
-        shutil.copy(os.path.join("..", "data", "wasabi2", "fee_rates.json"), os.path.join(target_dir, "fee_rates.json"))
+        shutil.copy(os.path.join(DATA, "wasabi2", "false_cjtxs.json"), os.path.join(target_dir, "false_cjtxs.json"))
+        shutil.copy(os.path.join(DATA, "wasabi2", "fee_rates.json"), os.path.join(target_dir, "fee_rates.json"))
 
     #
     # Run false positives detection
@@ -155,8 +161,8 @@ def test_run_cj_process_ww2():
     #
     for coord in ["wasabi2", "wasabi2_others", "wasabi2_zksnacks"]:
         target_dir = os.path.join(extract_dir, "Scanner", coord)
-        shutil.copy(os.path.join("..", "data", "wasabi2", "txid_coord.json"), os.path.join(target_dir, "txid_coord.json"))
-        shutil.copy(os.path.join("..", "data", "wasabi2", "txid_coord_t.json"), os.path.join(target_dir, "txid_coord_t.json"))
+        shutil.copy(os.path.join(DATA, "wasabi2", "txid_coord.json"), os.path.join(target_dir, "txid_coord.json"))
+        shutil.copy(os.path.join(DATA, "wasabi2", "txid_coord_t.json"), os.path.join(target_dir, "txid_coord_t.json"))
 
     run_parse_dumplings("ww2", "detect_coordinators",
                         f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
@@ -172,8 +178,8 @@ def test_run_cj_process_ww2():
                   "wasabi2_strange_2025"]
     for coord in coords_all:
         target_dir = os.path.join(extract_dir, "Scanner", coord)
-        shutil.copy(os.path.join("..", "data", "wasabi2", "fee_rates.json"), os.path.join(target_dir, "fee_rates.json"))
-        shutil.copy(os.path.join("..", "data", "wasabi2", "false_cjtxs.json"), os.path.join(target_dir, "false_cjtxs.json"))
+        shutil.copy(os.path.join(DATA, "wasabi2", "fee_rates.json"), os.path.join(target_dir, "fee_rates.json"))
+        shutil.copy(os.path.join(DATA, "wasabi2", "false_cjtxs.json"), os.path.join(target_dir, "false_cjtxs.json"))
 
     #
     # Analyze liquidity
@@ -226,8 +232,8 @@ def test_run_cj_process_ww1():
     interval_start_date = "2021-08-01 00:00:00.000000"
     interval_stop_date = "2021-08-30 00:00:00.000000"
 
-    source_zip = os.path.abspath(os.path.join("fixtures", "dumplings__ww1_202405.zip"))
-    extract_dir = os.path.abspath("../../temp_dumplings")
+    source_zip = os.path.abspath(os.path.join(TESTS, "fixtures", "dumplings__ww1_202405.zip"))
+    extract_dir = TEMP_DUMPLINGS
     target_zip = os.path.abspath(f"{extract_dir}/dumplings.zip")
 
     #
@@ -254,8 +260,8 @@ def test_run_cj_process_ww1():
 
     for coord in ["wasabi1"]:
         target_dir = os.path.join(extract_dir, "Scanner", coord)
-        shutil.copy(os.path.join("..", "data", "wasabi1", "false_cjtxs.json"), os.path.join(target_dir, "false_cjtxs.json"))
-        shutil.copy(os.path.join("..", "data", "wasabi1", "fee_rates.json"), os.path.join(target_dir, "fee_rates.json"))
+        shutil.copy(os.path.join(DATA, "wasabi1", "false_cjtxs.json"), os.path.join(target_dir, "false_cjtxs.json"))
+        shutil.copy(os.path.join(DATA, "wasabi1", "fee_rates.json"), os.path.join(target_dir, "fee_rates.json"))
 
     #
     # Run false positives detection
@@ -304,10 +310,10 @@ def test_run_cj_process_ww1():
 
     for coord in ["wasabi1", "wasabi1_others", "wasabi1_zksnacks", "wasabi1_mystery"]:
         target_dir = os.path.join(extract_dir, "Scanner", coord)
-        shutil.copy(os.path.join("..", "data", "wasabi1", "false_cjtxs.json"), os.path.join(target_dir, "false_cjtxs.json"))
-        shutil.copy(os.path.join("..", "data", "wasabi1", "fee_rates.json"), os.path.join(target_dir, "fee_rates.json"))
-        shutil.copy(os.path.join("..", "data", "wasabi1", "txid_coord.json"), os.path.join(target_dir, "txid_coord.json"))
-        shutil.copy(os.path.join("..", "data", "wasabi1", "txid_coord_t.json"), os.path.join(target_dir, "txid_coord_t.json"))
+        shutil.copy(os.path.join(DATA, "wasabi1", "false_cjtxs.json"), os.path.join(target_dir, "false_cjtxs.json"))
+        shutil.copy(os.path.join(DATA, "wasabi1", "fee_rates.json"), os.path.join(target_dir, "fee_rates.json"))
+        shutil.copy(os.path.join(DATA, "wasabi1", "txid_coord.json"), os.path.join(target_dir, "txid_coord.json"))
+        shutil.copy(os.path.join(DATA, "wasabi1", "txid_coord_t.json"), os.path.join(target_dir, "txid_coord_t.json"))
 
     #
     # Analyze liquidity
@@ -352,6 +358,7 @@ def test_run_cj_process_ww1():
     assert len(file_check['results']['wasabi1']['mix_base_files'][
                    'missing_files']) == 0, f"Missing files: {file_check['results']['wasabi1']['mix_base_files']['missing_files']}"
     assert len(file_check['results']['wasabi1_zksnacks']['mix_base_files'][
-                   'missing_files']) == 5, f"Missing files: {file_check['results']['wasabi1_zksnacks']['mix_base_files']['missing_files']}"
+                   'missing_files']) == 3, f"Missing files: {file_check['results']['wasabi1_zksnacks']['mix_base_files']['missing_files']}"
+
 
 
