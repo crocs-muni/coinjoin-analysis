@@ -3409,6 +3409,8 @@ def analyze_liquidity_summary(mix_protocol, target_path: str):
                       ('wasabi2', 'mega'), ('wasabi2', 'btip')]
         if op.CJ_TYPE == CoinjoinType.WW1:
             coords = [('wasabi1', 'zksnacks'), ('wasabi1', 'others')]
+        if op.CJ_TYPE == CoinjoinType.JM:
+            coords = [('joinmarket', 'all')]
         for coord in coords:
             cjtx_coord = als.load_coinjoins_from_file(os.path.join(target_path, f'{coord[0]}_{coord[1]}'), None, True)
             SM.print(f'{coord[0]}_{coord[1]}')
@@ -3681,8 +3683,8 @@ def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     # --cjtype ww2 --action process_dumplings --action detect_false_positives --target-path c:\!blockchains\CoinJoin\Dumplings_Stats_20241225\
     parser.add_argument("-t", "--cjtype",
-                        help="Type of coinjoin. 'ww1'...Wasabi 1.x; 'ww2'...Wasabi 2.x; 'sw'...Samourai Whirlpool",
-                        choices=["ww1", "ww2", "sw"],
+                        help="Type of coinjoin. 'ww1'...Wasabi 1.x; 'ww2'...Wasabi 2.x; 'sw'...Samourai Whirlpool; 'jm'...JoinMarket ",
+                        choices=["ww1", "ww2", "sw", "jm"],
                         action="store", metavar="TYPE",
                         required=False)
     parser.add_argument("-a", "--action",
@@ -3715,6 +3717,7 @@ class CoinjoinType(Enum):
     WW1 = 1         # Wasabi 1.x
     WW2 = 2         # Wasabi 2.x
     SW = 3          # Samourai Whirlpool
+    JM = 4          # Samourai Whirlpool
 
 
 class DumplingsParseOptions:
@@ -3768,6 +3771,8 @@ class DumplingsParseOptions:
                 self.CJ_TYPE = CoinjoinType.WW2
             if a.cjtype == 'sw':
                 self.CJ_TYPE = CoinjoinType.SW
+            if a.cjtype == 'jm':
+                self.CJ_TYPE = CoinjoinType.JM
 
             if self.CJ_TYPE == CoinjoinType.WW2:
                 self.SORT_COINJOINS_BY_RELATIVE_ORDER = True
@@ -4484,10 +4489,18 @@ def main(argv=None):
         if op.CJ_TYPE == CoinjoinType.SW:
             logging.warning('No notable intervals for Whirlpool')
 
+        if op.CJ_TYPE == CoinjoinType.JM:
+            logging.warning('No notable intervals for JoinMarket')
     #
     #
     #
     if op.ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS:
+        if op.CJ_TYPE == CoinjoinType.JM:
+            interval_start_date = '2018-07-05 04:00:00.000' if op.interval_start_date == "" else op.interval_start_date
+            all_data = process_and_save_intervals_filter('joinmarket_all', MIX_PROTOCOL.JOINMARKET, target_path, interval_start_date, op.interval_stop_date,
+                                       'OtherCoinJoins.txt', 'OtherCoinJoinPostMixTxs.txt', None,
+                                                op.SAVE_BASE_FILES_JSON, False)
+
         if op.CJ_TYPE == CoinjoinType.SW:
             interval_start_date = '2019-04-17 01:38:07.000' if op.interval_start_date == "" else op.interval_start_date
             all_data = process_and_save_intervals_filter('whirlpool', MIX_PROTOCOL.WHIRLPOOL, target_path, interval_start_date, op.interval_stop_date,
@@ -4580,12 +4593,19 @@ def main(argv=None):
             for mix_id in mix_ids:
                 visualize_intervals(mix_id, target_path, interval_start_date, op.interval_stop_date)
 
+        if op.CJ_TYPE == CoinjoinType.JM:
+            interval_start_date = '2025-05-31 00:00:07.000' if op.interval_start_date == "" else op.interval_start_date
+            mix_ids = ['joinmarket_all'] if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            for mix_id in mix_ids:
+                visualize_intervals(mix_id, target_path, interval_start_date, op.interval_stop_date)
 
     if op.DETECT_FALSE_POSITIVES:
         if op.CJ_TYPE == CoinjoinType.WW1:
             wasabi_detect_false(os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json')
         if op.CJ_TYPE == CoinjoinType.WW2:
             wasabi_detect_false(os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json')
+        if op.CJ_TYPE == CoinjoinType.JM:
+            wasabi_detect_false(os.path.join(target_path, 'joinmarket_all'), 'coinjoin_tx_info.json')
         if op.CJ_TYPE == CoinjoinType.SW:
             mix_ids_default = WHIRLPOOL_POOL_NAMES_ALL
             # Force MIX_IDS subset if required
@@ -4663,6 +4683,9 @@ def main(argv=None):
             print(f'Total transactions not separated into pools: {len(missed_cjtxs)}')
             print(missed_cjtxs)
 
+        if op.CJ_TYPE == CoinjoinType.JM:
+            logging.error('Unsupported CJ_TYPE for DETECT_COORDINATORS')
+            exit(-1)
 
     if op.PLOT_INTERMIX_FLOWS:
         analyze_mixes_flows(target_path)
@@ -4733,6 +4756,8 @@ def main(argv=None):
             target_load_path = os.path.join(target_path, 'wasabi2')
         if op.CJ_TYPE == CoinjoinType.SW:
             target_load_path = os.path.join(target_path, 'whirlpool')
+        if op.CJ_TYPE == CoinjoinType.JM:
+            target_load_path = os.path.join(target_path, 'joinmarket_all')
 
         all_data = als.load_coinjoins_from_file(target_load_path, None, True)
         all_data = analyze_postmix_spends(all_data)
@@ -4745,6 +4770,9 @@ def main(argv=None):
             wasabi2_analyse_remixes('Wasabi2', target_path)
         if op.CJ_TYPE == CoinjoinType.SW:
             whirlpool_analyse_remixes('Whirlpool', target_path)
+        if op.CJ_TYPE == CoinjoinType.JM:
+            logging.error('Unsupported CJ_TYPE for ANALYSIS_BURN_TIME')
+            exit(-1)
 
     # Extract distribution of mix fresh input sizes
     if op.ANALYSIS_INPUTS_DISTRIBUTION:
@@ -4763,6 +4791,10 @@ def main(argv=None):
             for pool in ['wasabi2_zksnacks', 'wasabi2_others']:
                 process_inputs_distribution(pool, MIX_PROTOCOL.WASABI2,  target_path, 'Wasabi2CoinJoins.txt', True)
                 process_outputs_distribution(pool, MIX_PROTOCOL.WASABI2,  target_path, 'Wasabi2CoinJoins.txt', True)
+
+        if op.CJ_TYPE == CoinjoinType.JM:
+            process_inputs_distribution('joinmarket_all', MIX_PROTOCOL.JOINMARKET,  target_path, 'OtherCoinJoins.txt', True)
+            process_outputs_distribution('joinmarket_all', MIX_PROTOCOL.JOINMARKET,  target_path, 'OtherCoinJoins.txt', True)
 
 
 

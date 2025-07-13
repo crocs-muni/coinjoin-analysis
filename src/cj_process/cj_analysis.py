@@ -186,6 +186,7 @@ class MIX_PROTOCOL(Enum):
     WASABI1 = 'WASABI1'  # Wasabi 1.0
     WASABI2 = 'WASABI2'  # Wasabi 2.0
     WHIRLPOOL = 'WHIRLPOOL'  # Whirlpool
+    JOINMARKET = 'JOINMARKET'  # JoinMarket
 
 
 class SummaryMessages:
@@ -945,7 +946,8 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
                     coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs_as_mined'] = coinjoins_index[cjtx] - coinjoins_index[spending_tx]
                     coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs_relative'] = coinjoins_relative_order[cjtx] - coinjoins_relative_order[spending_tx]
                     coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] = coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs_relative']
-                    assert coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] >= 0, f'Invalid burn time computed for {cjtx}:{input}'
+                    if mix_protocol != MIX_PROTOCOL.JOINMARKET: # JoinMarket may end-up with schuffled transactions??
+                        assert coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] >= 0, f'Invalid burn time computed for {cjtx}:{input}; got {coinjoins[cjtx]['inputs'][output]['burn_time_cjtxs']}; {cjtx} - {spending_tx}'
             else:
                 total_mix_entering += 1
                 coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_ENTER.name
@@ -976,7 +978,9 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
                     coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs_as_mined'] = coinjoins_index[spend_by_tx] - coinjoins_index[cjtx]
                     coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs_relative'] = coinjoins_relative_order[spend_by_tx] - coinjoins_relative_order[cjtx]
                     coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] = coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs_relative']
-                    assert coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] >= 0, f'Invalid burn time computed for {cjtx}:{output}'
+                    if mix_protocol != MIX_PROTOCOL.JOINMARKET: # JoinMarket may end-up with schuffled transactions??
+                        assert coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] >= 0, \
+                            f"Invalid burn time computed for {cjtx}:{output}; got {coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs']}; {spend_by_tx} - {cjtx}"
 
     # Establish standard denominations for this coinjoin (depends on coinjoin design)
     # Heuristics: standard denomination is denomination which is repeated at least two times in outputs (anonset>=2)
