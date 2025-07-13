@@ -753,12 +753,13 @@ def visualize_liquidity_in_time(base_path, mix_id, events, ax_number, ax_boxplot
     # Plot distribution of output values (bar height corresponding to number of occurences)
     if ax_output_values_bar:
         flat_data = [item for index in outputs_values_in_slot.keys() for item in outputs_values_in_slot[index]]
-        log_data = np.log(flat_data)
-        hist, bins = np.histogram(log_data, bins=100)
-        ax_output_values_bar.bar(bins[:-1], hist, width=np.diff(bins))
-        xticks = np.linspace(min(log_data), max(log_data), num=10)
-        ax_output_values_bar.set_xticks(xticks, np.round(np.exp(xticks), decimals=0), rotation=45, fontsize=6)
-        ax_output_values_bar.set_xlim(0, max(log_data))
+        if len(flat_data) > 0:
+            log_data = np.log(flat_data)
+            hist, bins = np.histogram(log_data, bins=100)
+            ax_output_values_bar.bar(bins[:-1], hist, width=np.diff(bins))
+            xticks = np.linspace(min(log_data), max(log_data), num=10)
+            ax_output_values_bar.set_xticks(xticks, np.round(np.exp(xticks), decimals=0), rotation=45, fontsize=6)
+            ax_output_values_bar.set_xlim(0, max(log_data))
 
     # if ax_burn_time:
     #     flat_data = [item for index in inputs_burned_time_in_slot.keys() for item in inputs_burned_time_in_slot[index]]
@@ -938,7 +939,7 @@ def filter_liquidity_events(data):
         for output in list(events[txid]['outputs'].keys()):
             if ('mix_event_type' not in events[txid]['outputs'][output]
                     or events[txid]['outputs'][output]['mix_event_type'] not in [MIX_EVENT_TYPE.MIX_ENTER.name, MIX_EVENT_TYPE.MIX_LEAVE.name]):
-                # Remove whole given output
+                # Remove whole given output (not mix enter/leave event)
                 events[txid]['outputs'].pop(output)
             else:
                 # Remove all unnecessary data

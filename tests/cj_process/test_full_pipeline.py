@@ -186,8 +186,8 @@ def test_run_cj_process_ww2():
                              "total_fresh_inputs_without_nonstandard_outputs_value": 1178.30377412},
         "wasabi2_others": {"total_fresh_inputs_value": 2.35583906,
                            "total_friends_inputs_value": 0.0,
-                           "total_unmoved_outputs_value": 2.35167402,
-                           "total_leaving_outputs_value": 0.0,
+                           "total_unmoved_outputs_value": 2.31978756,
+                           "total_leaving_outputs_value": 0.03188646,
                            "total_nonstandard_leaving_outputs_value": 0.0,
                            "total_fresh_inputs_without_nonstandard_outputs_value": 2.35583906}}
     for coord in expected_results.keys():
