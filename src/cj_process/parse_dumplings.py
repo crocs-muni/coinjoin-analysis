@@ -7,7 +7,7 @@ import random
 import shutil
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing.pool import ThreadPool
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from collections import defaultdict, Counter
 from enum import Enum
 from pathlib import Path
@@ -168,7 +168,7 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                 record = {}
 
                 # Be careful, broadcast time and blocktime can be significantly different
-                block_time = None if parts[3] is None else datetime.fromtimestamp(int(parts[3]))
+                block_time = None if parts[3] is None else datetime.fromtimestamp(int(parts[3]), tz=UTC)
                 record['broadcast_time'] = block_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
                 if start_date and stop_date:
                     if record['broadcast_time'] < start_date or record['broadcast_time'] > stop_date:

@@ -2430,7 +2430,7 @@ def load_prison_data(cjtx_stats, base_path):
             for row in reader:
                 prison_log = {}
                 prison_log['type'] = CJ_LOG_TYPES.UTXO_IN_PRISON.name
-                prison_log['timestamp'] = datetime.fromtimestamp(int(row[0])).strftime("%Y-%m-%d %H:%M:%S.%f")
+                prison_log['timestamp'] = datetime.fromtimestamp(int(row[0]), tz=UTC).strftime("%Y-%m-%d %H:%M:%S.%f")
                 prison_log['utxo'] = row[1]
                 prison_log['reason'] = row[2]
                 prison_log['round_id'] = ''
@@ -2525,7 +2525,7 @@ def load_tx_database_from_btccore(base_tx_path):
         with (open(tx_file, "r") as file):
             block_txs = json.load(file)
             for tx_info in block_txs['tx']:
-                datetime_obj = datetime.utcfromtimestamp(block_txs['time'])
+                datetime_obj = datetime.fromtimestamp(block_txs['time'], tz=UTC)
                 tx_info['mine_time'] = datetime_obj.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
                 tx_db[tx_info['txid']] = tx_info
 
