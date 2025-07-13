@@ -947,7 +947,7 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
                     coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs_relative'] = coinjoins_relative_order[cjtx] - coinjoins_relative_order[spending_tx]
                     coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] = coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs_relative']
                     if mix_protocol != MIX_PROTOCOL.JOINMARKET: # JoinMarket may end-up with schuffled transactions??
-                        assert coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] >= 0, f'Invalid burn time computed for {cjtx}:{input}; got {coinjoins[cjtx]['inputs'][output]['burn_time_cjtxs']}; {cjtx} - {spending_tx}'
+                        assert coinjoins[cjtx]['inputs'][input]['burn_time_cjtxs'] >= 0, f"Invalid burn time computed for {cjtx}:{input}; got {coinjoins[cjtx]['inputs'][output]['burn_time_cjtxs']}; {cjtx} - {spending_tx}"
             else:
                 total_mix_entering += 1
                 coinjoins[cjtx]['inputs'][input]['mix_event_type'] = MIX_EVENT_TYPE.MIX_ENTER.name
