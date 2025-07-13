@@ -8,7 +8,7 @@ from cj_process.parse_dumplings import main as parse_dumplings_main
 from cj_process.file_check import check_coinjoin_files
 
 
-def run_parse_dumplings(cjtype, action, env_vars, target_path):
+def run_parse_dumplings(cjtype, action, env_vars, target_path, must_succeed=True):
     arguments = []
     if cjtype:
         arguments.extend(["--cjtype", f"{cjtype}"])
@@ -28,11 +28,15 @@ def run_parse_dumplings(cjtype, action, env_vars, target_path):
             text=True
         )
         print("STDOUT:", result.stdout, "\nSTDERR:", result.stderr)
-        assert result.returncode == 0, f"cj_process/parse_dumplings.py {arguments} failed"
+        if must_succeed:
+            assert result.returncode == 0, f"cj_process/parse_dumplings.py {arguments} failed"
+        return result.returncode
     else:
         # Call directly within this context
         returncode = parse_dumplings_main(arguments)
-        assert returncode == 0, f"cj_process/parse_dumplings.py {arguments} failed"
+        if must_succeed:
+            assert returncode == 0, f"cj_process/parse_dumplings.py {arguments} failed"
+        return returncode
 
 
 def assert_process_dumplings(extract_dir, coord, num_cjtxs, num_addresses, num_coins, num_distrib_values,
