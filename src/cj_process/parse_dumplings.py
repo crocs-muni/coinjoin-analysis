@@ -105,6 +105,10 @@ class CoinJoinStats:
 
         self.cj_type = MIX_PROTOCOL.UNSET
 
+WHIRLPOOL_POOL_NAMES_ALL = ['whirlpool_100k', 'whirlpool_1M', 'whirlpool_5M', 'whirlpool_50M', 'whirlpool_ashigaru_25M',
+         'whirlpool_ashigaru_2_5M', 'whirlpool']
+WHIRLPOOL_POOL_SIZES = {'whirlpool_100k': 100000, 'whirlpool_1M': 1000000, 'whirlpool_5M': 5000000, 'whirlpool_50M': 50000000,
+                        'whirlpool_ashigaru_25M': 25000000, 'whirlpool_ashigaru_2_5M': 2500000}
 WHIRLPOOL_FUNDING_TXS = {}
 WHIRLPOOL_FUNDING_TXS[100000] = {'start_date': '2021-03-05 23:50:59.000', 'funding_txs': ['ac9566a240a5e037471b1a58ea50206062c13e1a75c0c2de3f21c7053573330a']}
 WHIRLPOOL_FUNDING_TXS[1000000] = {'start_date': '2019-05-23 20:54:27.000', 'funding_txs': ['c6c27bef217583cca5f89de86e0cd7d8b546844f800da91d91a74039c3b40fba', 'a42596825352055841949a8270eda6fb37566a8780b2aec6b49d8035955d060e', '4c906f897467c7ed8690576edfcaf8b1fb516d154ef6506a2c4cab2c48821728']}
@@ -112,6 +116,7 @@ WHIRLPOOL_FUNDING_TXS[5000000] = {'start_date': '2019-04-17 16:20:09.000', 'fund
 WHIRLPOOL_FUNDING_TXS[50000000] = {'start_date': '2019-08-02 17:45:23.000', 'funding_txs': ['b42df707a3d876b24a22b0199e18dc39aba2eafa6dbeaaf9dd23d925bb379c59']}
 WHIRLPOOL_FUNDING_TXS[2500000] = {'start_date': '2025-05-31 11:16:05.000', 'funding_txs': ['737a867727db9a2c981ad622f2fa14b021ce8b1066a001e34fb793f8da833155']}
 WHIRLPOOL_FUNDING_TXS[25000000] = {'start_date': '2025-06-06 01:32:04.000', 'funding_txs': ['7784df1182ab86ee33577b75109bb0f7c5622b9fb91df24b65ab2ab01b27dffa']}
+
 
 WASABI2_FUNDING_TXS = {}
 WASABI2_FUNDING_TXS['zksnacks'] = {'start_date': '2022-06-18 01:38:00.000', 'funding_txs': ['d31c2b4d71eb143b23bb87919dda7fdfecee337ffa1468d1c431ece37698f918']}
@@ -3388,7 +3393,9 @@ def print_remix_stats(target_base_path):
 
 def analyze_liquidity_summary(mix_protocol, target_path: str):
     if mix_protocol == CoinjoinType.SW:
-        pools = ['whirlpool_100k', 'whirlpool_1M', 'whirlpool_5M', 'whirlpool_50M', 'whirlpool']
+        pools_default = WHIRLPOOL_POOL_NAMES_ALL
+        # Force MIX_IDS subset if required
+        pools = pools_default if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
         for mix_id in pools:
             data = als.load_coinjoins_from_file(os.path.join(target_path, mix_id), None, True)
             SM.print(f'{mix_id}')
@@ -4474,6 +4481,9 @@ def main(argv=None):
             # Large inflow, in 2023-12, slightly mixed, send out, received as friend, then remixed
             process_joint_interval('wasabi2', 'wasabi2__2023_12-01', all_data, MIX_PROTOCOL.WASABI2, target_path, '2023-12-20 00:00:07.000', '2024-01-30 23:59:59.000')
 
+        if op.CJ_TYPE == CoinjoinType.SW:
+            logging.warning('No notable intervals for Whirlpool')
+
     #
     #
     #
@@ -4484,38 +4494,15 @@ def main(argv=None):
                                        'SamouraiCoinJoins.txt', 'SamouraiPostMixTxs.txt', 'SamouraiTx0s.txt',
                                                 op.SAVE_BASE_FILES_JSON, False)
 
-            # Split Whirlpool based on pools
-            whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_100k', 100000)
-            whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_1M', 1000000)
-            whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_5M', 5000000)
-            whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_50M', 50000000)
-            whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_ashigaru_25M', 25000000)
-            whirlpool_extract_pool(all_data, 'whirlpool', target_path, 'whirlpool_ashigaru_2_5M', 2500000)
-
-            # 2.5M Ashigaru pool
-            process_and_save_intervals_filter('whirlpool_ashigaru_2_5M', MIX_PROTOCOL.WHIRLPOOL, target_path,
-                                              WHIRLPOOL_FUNDING_TXS[2500000]["start_date"], op.interval_stop_date,
-                                              None, None, None, op.SAVE_BASE_FILES_JSON, True)
-            # 25M Ashigaru pool
-            process_and_save_intervals_filter('whirlpool_ashigaru_25M', MIX_PROTOCOL.WHIRLPOOL, target_path,
-                                              WHIRLPOOL_FUNDING_TXS[25000000]["start_date"], op.interval_stop_date,
-                                              None, None, None, op.SAVE_BASE_FILES_JSON, True)
-            # 100k pool
-            process_and_save_intervals_filter('whirlpool_100k', MIX_PROTOCOL.WHIRLPOOL, target_path,
-                                              WHIRLPOOL_FUNDING_TXS[100000]["start_date"], op.interval_stop_date,
-                                              None, None, None, op.SAVE_BASE_FILES_JSON, True)
-            # 1M pool
-            process_and_save_intervals_filter('whirlpool_1M', MIX_PROTOCOL.WHIRLPOOL, target_path,
-                                              WHIRLPOOL_FUNDING_TXS[1000000]["start_date"], op.interval_stop_date,
-                                              None, None, None, op.SAVE_BASE_FILES_JSON, True)
-            # 5M pool
-            process_and_save_intervals_filter('whirlpool_5M', MIX_PROTOCOL.WHIRLPOOL, target_path,
-                                              WHIRLPOOL_FUNDING_TXS[5000000]["start_date"], op.interval_stop_date,
-                                              None, None, None, op.SAVE_BASE_FILES_JSON, True)
-            # 50M pool
-            process_and_save_intervals_filter('whirlpool_50M', MIX_PROTOCOL.WHIRLPOOL, target_path,
-                                              WHIRLPOOL_FUNDING_TXS[50000000]["start_date"], op.interval_stop_date,
-                                              None, None, None, op.SAVE_BASE_FILES_JSON, True)
+            mix_ids_default = WHIRLPOOL_POOL_NAMES_ALL
+            # Force MIX_IDS subset if required
+            mix_ids = mix_ids_default if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            # Split and process Whirlpool-based on pools
+            for mix_id in mix_ids:
+                whirlpool_extract_pool(all_data, 'whirlpool', target_path, mix_id, WHIRLPOOL_POOL_SIZES[mix_id])
+                process_and_save_intervals_filter(mix_id, MIX_PROTOCOL.WHIRLPOOL, target_path,
+                                                  WHIRLPOOL_FUNDING_TXS[WHIRLPOOL_POOL_SIZES[mix_id]]["start_date"], op.interval_stop_date,
+                                                  None, None, None, op.SAVE_BASE_FILES_JSON, True)
 
         if op.CJ_TYPE == CoinjoinType.WW1:
             interval_start_date = '2018-07-19 01:38:07.000' if op.interval_start_date == "" else op.interval_start_date
@@ -4535,12 +4522,15 @@ def main(argv=None):
             logging.info('done wasabi2_extract_pools() *****************************')
             free_memory(data)
 
+            # Force MIX_IDS subset if required
+            mix_ids = split_pool_info.keys() if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+
             # WW2 needs additional treatment - detect and fix origin of WW1 inflows as friends
             # Do first separated pools, then the original (large) unseparated one
-            for pool_name in split_pool_info.keys():
+            for pool_name in mix_ids:
                 fix_ww2_for_fdnp_ww1(pool_name, target_path)
 
-            for pool_name in split_pool_info.keys():
+            for pool_name in mix_ids:
                 logging.info(f'Going to process_and_save_intervals_filter({pool_name}) *****************************')
                 pool_interval_start_date = split_pool_info[pool_name]['start_date']
                 if op.interval_start_date != "" and pool_interval_start_date < op.interval_start_date:
@@ -4574,16 +4564,22 @@ def main(argv=None):
     if op.VISUALIZE_ALL_COINJOINS_INTERVALS:
         if op.CJ_TYPE == CoinjoinType.SW:
             interval_start_date = '2019-04-17 01:38:07.000' if op.interval_start_date == "" else op.interval_start_date
-            visualize_intervals('whirlpool', target_path, interval_start_date, op.interval_stop_date)
+            mix_ids = ['whirlpool'] if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            for mix_id in mix_ids:
+                visualize_intervals(mix_id, target_path, interval_start_date, op.interval_stop_date)
 
         if op.CJ_TYPE == CoinjoinType.WW1:
             interval_start_date = '2018-07-19 01:38:07.000' if op.interval_start_date == "" else op.interval_start_date
-            visualize_intervals('wasabi1', target_path, interval_start_date, op.interval_stop_date)
+            mix_ids = ['wasabi1'] if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            for mix_id in mix_ids:
+                visualize_intervals(mix_id, target_path, interval_start_date, op.interval_stop_date)
 
         if op.CJ_TYPE == CoinjoinType.WW2:
             interval_start_date = '2022-06-01 00:00:07.000' if op.interval_start_date == "" else op.interval_start_date
-            visualize_intervals('wasabi2', target_path, interval_start_date, op.interval_stop_date)
-            visualize_intervals('wasabi2_zksnacks', target_path, interval_start_date, op.interval_stop_date)
+            mix_ids = ['wasabi2', 'wasabi2_zksnacks'] if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            for mix_id in mix_ids:
+                visualize_intervals(mix_id, target_path, interval_start_date, op.interval_stop_date)
+
 
     if op.DETECT_FALSE_POSITIVES:
         if op.CJ_TYPE == CoinjoinType.WW1:
@@ -4591,13 +4587,11 @@ def main(argv=None):
         if op.CJ_TYPE == CoinjoinType.WW2:
             wasabi_detect_false(os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json')
         if op.CJ_TYPE == CoinjoinType.SW:
-            wasabi_detect_false(os.path.join(target_path, 'whirlpool'), 'coinjoin_tx_info.json')
-            wasabi_detect_false(os.path.join(target_path, 'whirlpool_100k'), 'coinjoin_tx_info.json')
-            wasabi_detect_false(os.path.join(target_path, 'whirlpool_1M'), 'coinjoin_tx_info.json')
-            wasabi_detect_false(os.path.join(target_path, 'whirlpool_5M'), 'coinjoin_tx_info.json')
-            wasabi_detect_false(os.path.join(target_path, 'whirlpool_50M'), 'coinjoin_tx_info.json')
-            wasabi_detect_false(os.path.join(target_path, 'whirlpool_ashigaru_25M'), 'coinjoin_tx_info.json')
-            wasabi_detect_false(os.path.join(target_path, 'whirlpool_ashigaru_2_5M'), 'coinjoin_tx_info.json')
+            mix_ids_default = WHIRLPOOL_POOL_NAMES_ALL
+            # Force MIX_IDS subset if required
+            mix_ids = mix_ids_default if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            for mix_id in mix_ids:
+                wasabi_detect_false(os.path.join(target_path, mix_id), 'coinjoin_tx_info.json')
 
     if op.DETECT_COORDINATORS:
         if op.CJ_TYPE == CoinjoinType.WW2:
@@ -4612,8 +4606,11 @@ def main(argv=None):
             data = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi2'), None, False)
 
             coord_tx_mapping = als.load_json_from_file(os.path.join(target_path, 'wasabi2_others', 'txid_coord_discovered_renamed.json'))
-            selected_coords = ["kruw", "mega", "btip", "gingerwallet", "wasabicoordinator", "coinjoin_nl",
+            selected_coords_default = ["kruw", "mega", "btip", "gingerwallet", "wasabicoordinator", "coinjoin_nl",
                                "opencoordinator", "dragonordnance", "wasabist", "strange_2025"]
+            # Force MIX_IDS subset if required
+            selected_coords = selected_coords_default if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+
             split_pool_info = wasabi2_extract_other_pools(selected_coords, data, target_path, op.interval_stop_date, coord_tx_mapping)
             # Perform splitting into month intervals for all processed coordinators
             for pool_name in split_pool_info.keys():
@@ -4628,7 +4625,10 @@ def main(argv=None):
         if op.CJ_TYPE == CoinjoinType.WW1:
             data = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi1'), None, False)
             coord_tx_mapping = None
-            selected_coords = ['zksnacks', 'mystery', 'others']
+            selected_coords_default = ['zksnacks', 'mystery', 'others']
+            # Force MIX_IDS subset if required
+            selected_coords = selected_coords_default if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+
             interval_start_date = '2018-07-19 01:38:07.000' if op.interval_start_date == "" else op.interval_start_date
             split_pool_info = wasabi1_extract_other_pools(selected_coords, data, target_path, interval_start_date, op.interval_stop_date, coord_tx_mapping)
             # Perform splitting into month intervals for all processed coordinators
@@ -4669,6 +4669,7 @@ def main(argv=None):
 
     if op.PLOT_REMIXES:
         def ww_plot_remixes_helper(mix_ids_default: list, mix_protocol):
+            # Force MIX_IDS subset if required
             mix_ids = mix_ids_default if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
             logging.info(f'Going to process following mixes: {mix_ids}')
             for mix_id in mix_ids:
@@ -4691,8 +4692,7 @@ def main(argv=None):
                                     'wasabi2_zksnacks', 'wasabi2'], MIX_PROTOCOL.WASABI2)
 
         if op.CJ_TYPE == CoinjoinType.SW:
-            ww_plot_remixes_helper(['whirlpool_100k', 'whirlpool_1M', 'whirlpool_5M', 'whirlpool_50M',
-                                    'whirlpool_ashigaru_25M', 'whirlpool_ashigaru_2_5M', 'whirlpool'], MIX_PROTOCOL.WHIRLPOOL)
+            ww_plot_remixes_helper(WHIRLPOOL_POOL_NAMES_ALL, MIX_PROTOCOL.WHIRLPOOL)
             #
             # PLOT_OPTIONS = []  # (analyze_values, normalize_values, plot_multigraph)
             # PLOT_OPTIONS.append((True, False))  # values, not normalized
