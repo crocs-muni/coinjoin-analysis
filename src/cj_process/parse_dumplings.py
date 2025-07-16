@@ -6,10 +6,11 @@ import pickle
 import random
 import shutil
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from copy import deepcopy
 from multiprocessing.pool import ThreadPool
 from datetime import datetime, timedelta, UTC
 from collections import defaultdict, Counter
-from enum import Enum
+from enum import Enum, IntFlag, auto
 from pathlib import Path
 from typing import List
 from scipy.optimize import minimize
@@ -70,6 +71,37 @@ class ClusterIndex:
 
 
 CLUSTER_INDEX = ClusterIndex(0)
+
+class CJ_TX_CHECK(IntFlag):
+    NONE       = 0
+    INOUTS_RATIO_THRESHOLD      = auto()
+    NUM_INOUT_THRESHOLD         = auto()
+    ADDRESS_REUSE_THRESHOLD     = auto()
+    MIN_SAME_VALUES_THRESHOLD   = auto()
+    OP_RETURN                   = auto()
+    ALL = INOUTS_RATIO_THRESHOLD | NUM_INOUT_THRESHOLD | ADDRESS_REUSE_THRESHOLD | MIN_SAME_VALUES_THRESHOLD | OP_RETURN
+
+CJ_TX_CHECK_JOINMARKET_DEFAULTS = {
+    CJ_TX_CHECK.INOUTS_RATIO_THRESHOLD: 4,      # 4 times more of inputs or outputs
+    CJ_TX_CHECK.NUM_INOUT_THRESHOLD: 100,       # More than 100 inputs or outputs
+    CJ_TX_CHECK.ADDRESS_REUSE_THRESHOLD: 0.34,  # More than 34% of address reuse
+    CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD: 2,   # At least two same outputs
+    CJ_TX_CHECK.OP_RETURN: {''}                 # Any OP_RETURN without any additional check
+}
+
+CJ_TX_CHECK_WHIRLPOOL_DEFAULTS = {}
+CJ_TX_CHECK_WASABI1_DEFAULTS = {}
+CJ_TX_CHECK_WASABI2_DEFAULTS = {}
+
+class FILTER_REASON(Enum):
+    VALID = 'VALID'
+    UNSPECIFIED = 'UNSPECIFIED'
+    INVALID_STRUCTURE = 'INVALID_STRUCTURE'
+    INOUTS_RATIO_THRESHOLD = 'INOUTS_RATIO_THRESHOLD'
+    NUM_INOUT_THRESHOLD = 'NUM_INOUT_THRESHOLD'
+    ADDRESS_REUSE_THRESHOLD = 'ADDRESS_REUSE_THRESHOLD'
+    MIN_SAME_VALUES_THRESHOLD = 'MIN_SAME_VALUES_THRESHOLD'
+    OP_RETURN = 'OP_RETURN'
 
 
 SM = als.SummaryMessages()
@@ -280,25 +312,26 @@ def compute_mix_postmix_link(data: dict):
 
     return data
 
+def detect_false_coinjoins(data, mix_protocol, checks: CJ_TX_CHECK=CJ_TX_CHECK.ALL, checks_params=None):
+    checks_params = {} if checks_params is None else checks_params
 
-def filter_false_coinjoins(data, mix_protocol):
     false_cjtxs = {}
     cjtxids = list(data["coinjoins"].keys())
     for cjtx in cjtxids:
-        if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
-            if not is_whirlpool_coinjoin_tx(data["coinjoins"][cjtx]):
-                logging.info(f'{cjtx} is not whirlpool coinjoin, removing from coinjoin list')
-                false_cjtxs[cjtx] = data["coinjoins"][cjtx]
-                data["coinjoins"].pop(cjtx)
+        valid, reason = is_coinjoin_tx(data["coinjoins"][cjtx], mix_protocol, checks, checks_params)
+        if not valid:
+            false_cjtxs[cjtx] = deepcopy(data["coinjoins"][cjtx])
+            false_cjtxs[cjtx]['is_cjtx'] = False
+            false_cjtxs[cjtx]['fp_reason'] = reason.name
 
-        #if cj_type == MIX_PROTOCOL.WASABI2:
-            # Not WW2 coinjoin if:
-            # P2SH, P2PKH addresses,
-            # large number of repeated same addresses
-            # large number of non-standard denominations for outputs
-            # if len(data["coinjoins"][cjtx]['inputs']) < 100:
-            #     print(f'{cjtx} is false coinjoin, removing....')
-            #     data["coinjoins"].pop(cjtx)
+    return false_cjtxs
+
+
+def filter_false_coinjoins(data, mix_protocol, checks: CJ_TX_CHECK=CJ_TX_CHECK.ALL, checks_params=None):
+    false_cjtxs = detect_false_coinjoins(data, mix_protocol, checks, checks_params)
+    for cjtx in false_cjtxs:
+        logging.info(f'{cjtx} is not coinjoin, removing from coinjoin list')
+        data["coinjoins"].pop(cjtx)
 
     return data, false_cjtxs
 
@@ -318,6 +351,40 @@ def update_spend_by_reference(updating: dict, updated: dict):
                     total_updated += 1
 
     return total_updated
+
+
+def filter_postmix_transactions(data):
+    for txid in list(data['postmix'].keys()):
+        is_postmix = False
+        for index in data['postmix'][txid]['inputs'].keys():
+            if 'spending_tx' in data['postmix'][txid]['inputs'][index]:
+                tx, vout = als.extract_txid_from_inout_string(data['postmix'][txid]['inputs'][index]['spending_tx'])
+                if tx in data['coinjoins'].keys():
+                    is_postmix = True  # At least one direct postmix spend input found
+                    break
+            else:
+                logging.warning(f'spending_tx not found in {txid} {index}')
+        if not is_postmix:
+            data['postmix'].pop(txid)
+    return data
+
+
+def detect_referenced_trasactions(txs_from, txs_to):
+    """
+    Detects list of transcations from txs_to which are referenced (spending_tx)
+    by at least one transaction from txs_from.
+    :param txs_from:
+    :param txs_to:
+    :return: referenced
+    """
+    referenced = {}
+    for txid in txs_from.keys():
+        for index in txs_from[txid]['inputs'].keys():
+            if 'spending_tx' in txs_from[txid]['inputs'][index]:
+                tx, vout = als.extract_txid_from_inout_string(txs_from[txid]['inputs'][index]['spending_tx'])
+                if tx in txs_to.keys():
+                    referenced[tx] = txs_to[tx]
+    return referenced
 
 
 def update_all_spend_by_reference(data: dict):
@@ -349,7 +416,8 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
     if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
         data['premix'] = load_coinjoin_stats_from_file(os.path.join(target_path, premix_filename), start_date, stop_date)
         for txid in list(data['premix'].keys()):
-            if is_whirlpool_coinjoin_tx(data['premix'][txid]):
+            valid, reason = is_coinjoin_tx(data['premix'][txid], mix_protocol)
+            if valid:
                 # Misclassified mix transaction, move between groups
                 data["coinjoins"][txid] = data['premix'][txid]
                 data['premix'].pop(txid)
@@ -363,7 +431,8 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
     cjtxs_fixed = 0
     if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
         for txid in list(data['postmix'].keys()):
-            if is_whirlpool_coinjoin_tx(data['postmix'][txid]):
+            valid, reason = is_coinjoin_tx(data['postmix'][txid], mix_protocol)
+            if valid:
                 # Misclassified mix transaction, move between groups
                 data["coinjoins"][txid] = data['postmix'][txid]
                 data['postmix'].pop(txid)
@@ -371,9 +440,41 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
                 cjtxs_fixed += 1
     logging.info(f'{cjtxs_fixed} total postmix txs moved into coinjoins')
 
-    # Filter mistakes in Dumplings analysis of coinjoins
-    data, false_cjtxs = filter_false_coinjoins(data, mix_protocol)
+    # Filter mistakes (false positives) in Dumplings analysis of coinjoins
+    data, false_cjtxs = filter_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.ALL & ~CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD)
 
+    # Detect transactions from false positives list which are referenced by real coinjoins and print it
+    referenced = detect_referenced_trasactions(data['coinjoins'], false_cjtxs)
+    if len(false_cjtxs) > 0:
+        print(f'Number of false positives coinjoins referenced by real coinjoins: {len(referenced)} of {len(false_cjtxs.keys())} false positives ({round(len(referenced) / len(false_cjtxs.keys()), 2)})')
+    else:
+        print(f'Number of false positives coinjoins referenced by real coinjoins: {len(referenced)} of {len(false_cjtxs.keys())} false positives ({0})')
+
+    for txid in referenced.keys():
+        print(f'  {txid}')
+
+    # Detect and filter only transactions which has too small number of same value outputs
+    for min_same_values_threshold in range(2, 10):
+        # Use detection rule on for the MIN_SAME_VALUES_THRESHOLD
+        detected = detect_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD, {CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD: min_same_values_threshold})
+        print(f'Number of detected coinjoins with only {min_same_values_threshold - 1} : {len(detected)}')
+
+    # Now remove transactions with too few same output values (based on default MIN_SAME_VALUES_THRESHOLD)
+    data, false_cjtxs_min2 = filter_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD, {CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD: 3})
+    false_cjtxs.update(false_cjtxs_min2)
+
+    referenced = detect_referenced_trasactions(data['coinjoins'], false_cjtxs_min2)
+    print(f'Number of coinjoins referenced by real coinjoins with too small number of same value outputs: {len(referenced)}')
+    for txid in referenced.keys():
+        print(f'  {txid}')
+
+    # Move false positives coinjoins into potential postmix
+    data['postmix'].update(false_cjtxs)
+    # Filter postmix spendings only to ones really spending from coinjoins (as we removed false positives)
+    prev_postmix_len = len(data['postmix'])
+    filter_postmix_transactions(data)
+    print(f'Reducing postmix transactions from {prev_postmix_len} to {len(data['postmix'])} total postmix txs based on real coinjoins')
+    # Update 'spend_by_tx' record
     data = update_all_spend_by_reference(data)
 
     # Set spending transactions also between mix and postmix
@@ -506,12 +607,9 @@ def assign_merge_cluster(tx_dict: dict) -> dict:
     return tx_dict
 
 
-def is_whirlpool_coinjoin_tx(test_tx):
-    return is_coinjoin_tx(test_tx, MIX_PROTOCOL.WHIRLPOOL)
-
-
-def is_coinjoin_tx(test_tx, mix_protocol: MIX_PROTOCOL):
+def is_coinjoin_tx(test_tx: dict, mix_protocol: MIX_PROTOCOL, checks: CJ_TX_CHECK=CJ_TX_CHECK.ALL, checks_config: dict=None):
     if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
+        checks_config = {**CJ_TX_CHECK_WHIRLPOOL_DEFAULTS, **(checks_config or {})}
         # The transaction is whirlpool coinjoin transaction if number of inputs is bigger than 4
         if len(test_tx['inputs']) >= 5:
             # ... number of inputs and outputs is the same
@@ -523,9 +621,11 @@ def is_coinjoin_tx(test_tx, mix_protocol: MIX_PROTOCOL):
                     #[100000, 1000000, 5000000, 50000000, 25000000, 2500000]
                     if all(test_tx['outputs'][vout]['value'] in WHIRLPOOL_FUNDING_TXS.keys()
                            for vout in test_tx['outputs'].keys()):
-                        return True
+                        return True, FILTER_REASON.VALID
+        return False, FILTER_REASON.INVALID_STRUCTURE
 
     if mix_protocol == MIX_PROTOCOL.WASABI1:
+        checks_config = {**CJ_TX_CHECK_WASABI1_DEFAULTS, **(checks_config or {})}
         # The transaction is wasabi1 coinjoin transaction if number of inputs is at least MIN_WASABI1_INPUTS
         WASABI1_MIN_INPUTS = 5
         WASABI1_MAX_INPUTS = 5
@@ -537,12 +637,88 @@ def is_coinjoin_tx(test_tx, mix_protocol: MIX_PROTOCOL):
             # ... and the most common outputs size is around 0.1btc and
             # is at least WASABI1_MIN_MIXED_OUTPUTS
             if count >= WASABI1_MIN_MIXED_OUTPUT and 0.08 < most_common_output_value < 0.12:
-                return True
+                return True, FILTER_REASON.VALID
+        return False, FILTER_REASON.INVALID_STRUCTURE
 
     if mix_protocol == MIX_PROTOCOL.WASABI2:
-        assert False, 'is_coinjoin_tx() not supported for WASABI2'
+        checks_config = {**CJ_TX_CHECK_WASABI2_DEFAULTS, **(checks_config or {})}
+        # Not implemented, return True always
+        return True, FILTER_REASON.VALID
+        #assert False, 'is_coinjoin_tx() not supported for WASABI2'
 
-    return False
+    if mix_protocol == MIX_PROTOCOL.JOINMARKET:
+        checks_config = {**CJ_TX_CHECK_JOINMARKET_DEFAULTS, **(checks_config or {})}
+
+        # Positive example: 7732a03c8cf133e0475ae37e4f2f49ba77beb631378216889e33e9847aa0049b
+
+        # OP_RETURN Runestone / Atom / Omni...
+        if checks & CJ_TX_CHECK.OP_RETURN:
+            # TxNullData + data in OP_RETURN script
+            for output in test_tx['outputs']:
+                # Simplified rule = any OP_RETURN in output is not coinjoin
+                if test_tx['outputs'][output]['script_type'] == 'TxNullData':
+                    return False, FILTER_REASON.OP_RETURN
+                # Complicated rule - search for specific op_return bytes
+                # if test_tx['outputs'][output]['script_type'] == 'TxNullData' and (
+                #         test_tx['outputs'][output]['script'].find('00c0a233') != -1 or
+                #         test_tx['outputs'][output]['script'].find('0090e533') != -1 or
+                #         test_tx['outputs'][output]['script'].find('00c4cf33') != -1 or
+                #         test_tx['outputs'][output]['script'].find('0088a633') != -1 or
+                #         test_tx['outputs'][output]['script'].find('00f7f334') != -1 or
+                #         test_tx['outputs'][output]['script'].find('ff7f8192') != -1 or
+                #         test_tx['outputs'][output]['script'].find('00c2f634') != -1 or
+                #         test_tx['outputs'][output]['script'].find('00d6a233') != -1 or
+                #         test_tx['outputs'][output]['script'].find('00b0d836') != -1 or
+                #         test_tx['outputs'][output]['script'].find('00b5b633') != -1 or
+                #         test_tx['outputs'][output]['script'].find('00a9e734') != -1 or
+                #         test_tx['outputs'][output]['script'].find('00ecca33') != -1 or
+                #         test_tx['outputs'][output]['script'].find('00fea333') != -1 or
+                #         test_tx['outputs'][output]['script'].find('14011400') != -1 or
+                #         test_tx['outputs'][output]['script'].find('00a4ed34') != -1 or
+                #         test_tx['outputs'][output]['script'].find('00d5e636') != -1 or
+                #         test_tx['outputs'][output]['script'].find('61746f6d') != -1 or  # Atom OP_RETURN : 4b6c2130baae7d38e5bfaebe39822bfb817717752c1a393285ad5ba9079286f5
+                #         test_tx['outputs'][output]['script'].find('6f6d6e69') != -1     # Omni OP_RETURN : 3dc876a23165c8e6b9f81b4aeb9e0f1caaab77466ed20231901b2fe72f1c71d8
+                #    return False
+
+        # Only two same outputs
+        if checks & CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD:
+            #MIN_SAME_VALUES_THRESHOLD = 3
+            values = [test_tx['outputs'][index]['value'] for index in test_tx['outputs'].keys()]
+            if Counter(values).most_common(1)[0][1] < checks_config[CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD]:
+                return False, FILTER_REASON.MIN_SAME_VALUES_THRESHOLD
+
+        # Significant address reuse a2bd490cc63c1b70bf7b328c20f69115a1b20cdd06cd035d6b200e17ee8d934e
+        if checks & CJ_TX_CHECK.ADDRESS_REUSE_THRESHOLD:
+            #ADDRESS_REUSE_THRESHOLD = 0.34
+            scripts = [test_tx['inputs'][index]['script'] for index in test_tx['inputs'].keys()]
+            scripts.extend([test_tx['outputs'][index]['script'] for index in test_tx['outputs'].keys()])
+            if Counter(scripts).most_common(1)[0][1] / len(scripts) > checks_config[CJ_TX_CHECK.ADDRESS_REUSE_THRESHOLD]:
+                return False, FILTER_REASON.ADDRESS_REUSE_THRESHOLD
+
+        # Too many inputs or outputs
+        if checks & CJ_TX_CHECK.NUM_INOUT_THRESHOLD:
+            num_inputs = len(test_tx['inputs'])
+            num_outputs = len(test_tx['outputs'])
+            #NUM_INOUT_THRESHOLD = 100
+            if num_inputs > checks_config[CJ_TX_CHECK.NUM_INOUT_THRESHOLD] or num_outputs > checks_config[CJ_TX_CHECK.NUM_INOUT_THRESHOLD]:
+                return False, FILTER_REASON.NUM_INOUT_THRESHOLD
+
+        # Heavy disbalance between number of inputs and outputs 8f7933a5d127b3bd8723ae9ea9eb7da96df1e33a7a9c1bcf9e68a2e6263d0640
+        if checks & CJ_TX_CHECK.INOUTS_RATIO_THRESHOLD:
+            if num_inputs == 0 or num_outputs == 0:
+                ratio = 100000
+            else:
+                ratio = max(num_inputs, num_outputs) / min(num_inputs, num_outputs)
+            #INOUTS_RATIO_THRESHOLD = 4
+            if ratio > checks_config[CJ_TX_CHECK.INOUTS_RATIO_THRESHOLD]:
+                return False, FILTER_REASON.INOUTS_RATIO_THRESHOLD
+
+        # If none of the check above fails, the transaction is assumed to be coinjoin
+        return True, FILTER_REASON.VALID
+
+        # TODO: NO Multisig inputs : f73564ae9e7913303e9fc2a46c4e0f0d942378ce50fb65e40ebe0227adecc47d
+
+    return False, FILTER_REASON.UNSPECIFIED
 
 
 def analyze_premix_spends(tx_dict: dict) -> dict:
@@ -1336,7 +1512,8 @@ def process_inputs_distribution_whirlpool(mix_id: str, mix_protocol: MIX_PROTOCO
     # Process TX0 transactions, try to find ones with many pool outputs and long time to mix them (possible chain analysis input)
     tx0_by_outputs_dict = {}
     for txid in txs.keys():
-        if not is_whirlpool_coinjoin_tx(txs[txid]):
+        valid, reason = is_coinjoin_tx(txs[txid], mix_protocol)
+        if not valid:
             num_outputs = len(txs[txid]['outputs'])
             tx0_by_outputs_dict.setdefault(num_outputs, []).append(txid)
 
@@ -1362,7 +1539,7 @@ def process_inputs_distribution_whirlpool(mix_id: str, mix_protocol: MIX_PROTOCO
     if save_outputs:
         als.save_json_to_file_pretty(os.path.join(target_path, mix_id, f'{mix_id}_tx0_analysis.json'), tx0_results)
 
-    inputs = [txs[txid]['inputs'][index]['value'] for txid in txs.keys() for index in txs[txid]['inputs'].keys() if not is_whirlpool_coinjoin_tx(txs[txid])]
+    inputs = [txs[txid]['inputs'][index]['value'] for txid in txs.keys() for index in txs[txid]['inputs'].keys() if not (valid := is_coinjoin_tx(txs[txid], mix_protocol))[0]]
     inputs_distrib = Counter(inputs)
     inputs_distrib = dict(sorted(inputs_distrib.items(), key=lambda item: (-item[1], item[0])))
     inputs_info = {'mix_id': mix_id, 'path': tx_filename, 'distrib': inputs_distrib}
