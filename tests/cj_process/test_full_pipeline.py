@@ -3,46 +3,18 @@ import subprocess
 import os
 import shutil
 import zipfile
+import utils
 from pathlib import Path
 
 from orjson import orjson
-from cj_process.parse_dumplings import main as parse_dumplings_main
 from cj_process.file_check import check_coinjoin_files
 
 TESTS = Path(__file__).resolve().parent.parent # …/repo/tests
 REPO_ROOT = TESTS.parent                       # …/repo
-DATA = REPO_ROOT / "data"                     # …/repo/data
+DATA = REPO_ROOT / "data"                      # …/repo/data
 TEMP_DUMPLINGS = REPO_ROOT.parent / "temp_dumplings"                   # temp_dumplings
 
-def run_parse_dumplings(cjtype, action, env_vars, target_path, must_succeed=True):
-    arguments = []
-    if cjtype:
-        arguments.extend(["--cjtype", f"{cjtype}"])
-    if action:
-        arguments.extend(["--action", f"{action}"])
-    if env_vars:
-        arguments.extend(["--env_vars", f"{env_vars}"])
-    if target_path:
-        arguments.extend(["--target-path", f"{target_path}"])
 
-    print(f"Running arguments: {arguments}")
-    AS_SUBPROCESSS = False  # If True, Main is executed as subprocess
-    if AS_SUBPROCESSS:
-        result = subprocess.run(
-            ["python", "cj_process/parse_dumplings.py"] + arguments,
-            capture_output=True,
-            text=True
-        )
-        print("STDOUT:", result.stdout, "\nSTDERR:", result.stderr)
-        if must_succeed:
-            assert result.returncode == 0, f"cj_process/parse_dumplings.py {arguments} failed"
-        return result.returncode
-    else:
-        # Call directly within this context
-        returncode = parse_dumplings_main(arguments)
-        if must_succeed:
-            assert returncode == 0, f"cj_process/parse_dumplings.py {arguments} failed"
-        return returncode
 
 
 def assert_process_dumplings(extract_dir, coord, num_cjtxs, num_addresses, num_coins, num_distrib_values,
@@ -112,7 +84,7 @@ def test_run_cj_process_ww2():
     #
     # Run initial processing
     #
-    run_parse_dumplings("ww2", "process_dumplings",
+    utils.run_parse_dumplings("ww2", "process_dumplings",
                         f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
                         extract_dir)
     # ASSERT
@@ -132,7 +104,7 @@ def test_run_cj_process_ww2():
     #
     # Run false positives detection
     #
-    run_parse_dumplings("ww2", "detect_false_positives",
+    utils.run_parse_dumplings("ww2", "detect_false_positives",
                         f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
                         extract_dir)
     # ASSERT
@@ -164,10 +136,10 @@ def test_run_cj_process_ww2():
         shutil.copy(os.path.join(DATA, "wasabi2", "txid_coord.json"), os.path.join(target_dir, "txid_coord.json"))
         shutil.copy(os.path.join(DATA, "wasabi2", "txid_coord_t.json"), os.path.join(target_dir, "txid_coord_t.json"))
 
-    run_parse_dumplings("ww2", "detect_coordinators",
+    utils.run_parse_dumplings("ww2", "detect_coordinators",
                         f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
                         extract_dir)
-    run_parse_dumplings("ww2", "split_coordinators",
+    utils.run_parse_dumplings("ww2", "split_coordinators",
                         f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
                         extract_dir)
     # TODO: ASSERT 'txid_coord_discovered_renamed.json'
@@ -184,7 +156,7 @@ def test_run_cj_process_ww2():
     #
     # Analyze liquidity
     #
-    run_parse_dumplings("ww2", None,
+    utils.run_parse_dumplings("ww2", None,
                         f"ANALYSIS_LIQUIDITY=True;interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
                         extract_dir)
     # ASSERT
@@ -210,13 +182,13 @@ def test_run_cj_process_ww2():
     #
     # Plot some graphs
     #
-    run_parse_dumplings("ww2", "plot_coinjoins",
+    utils.run_parse_dumplings("ww2", "plot_coinjoins",
                         f"PLOT_REMIXES_MULTIGRAPH=False;MIX_IDS=['wasabi2', 'wasabi2_others', 'wasabi2_zksnacks'];interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
                         extract_dir)
-    # run_parse_dumplings("ww2", "plot_coinjoins",
+    # utils.run_parse_dumplings("ww2", "plot_coinjoins",
     #                     f"PLOT_REMIXES_MULTIGRAPH=True;MIX_IDS=['wasabi2', 'wasabi2_others', 'wasabi2_zksnacks'];interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
     #                     extract_dir)
-    run_parse_dumplings("ww2", None,
+    utils.run_parse_dumplings("ww2", None,
                         f"VISUALIZE_ALL_COINJOINS_INTERVALS=True;MIX_IDS=['wasabi2', 'wasabi2_others', 'wasabi2_zksnacks'];interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
                         extract_dir)
 
@@ -249,7 +221,7 @@ def test_run_cj_process_ww1():
     #
     # Run initial processing
     #
-    run_parse_dumplings("ww1", "process_dumplings",
+    utils.run_parse_dumplings("ww1", "process_dumplings",
                         f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
                         extract_dir)
     # ASSERT
@@ -266,7 +238,7 @@ def test_run_cj_process_ww1():
     #
     # Run false positives detection
     #
-    run_parse_dumplings("ww1", "detect_false_positives",
+    utils.run_parse_dumplings("ww1", "detect_false_positives",
                         f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
                         extract_dir)
     # ASSERT
@@ -293,8 +265,8 @@ def test_run_cj_process_ww1():
     #
     # Detect and split additional coordinators
     #
-    # run_parse_dumplings("ww1", "detect_coordinators", f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}", extract_dir)
-    run_parse_dumplings("ww1", "split_coordinators",
+    # utils.run_parse_dumplings("ww1", "detect_coordinators", f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}", extract_dir)
+    utils.run_parse_dumplings("ww1", "split_coordinators",
                         f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
                         extract_dir)
     # TODO: ASSERT 'txid_coord_discovered_renamed.json'
@@ -318,7 +290,7 @@ def test_run_cj_process_ww1():
     #
     # Analyze liquidity
     #
-    run_parse_dumplings("ww1", None,
+    utils.run_parse_dumplings("ww1", None,
                         f"ANALYSIS_LIQUIDITY=True;interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
                         extract_dir)
     # ASSERT
@@ -343,13 +315,13 @@ def test_run_cj_process_ww1():
     #
     # Plot some graphs
     #
-    run_parse_dumplings("ww1", "plot_coinjoins",
+    utils.run_parse_dumplings("ww1", "plot_coinjoins",
                         f"PLOT_REMIXES_MULTIGRAPH=False;MIX_IDS=['wasabi1', 'wasabi1_others', 'wasabi1_zksnacks'];interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
                         extract_dir)
-    # run_parse_dumplings("ww1", "plot_coinjoins",
+    # utils.run_parse_dumplings("ww1", "plot_coinjoins",
     #                     f"PLOT_REMIXES_MULTIGRAPH=True;MIX_IDS=['wasabi1', 'wasabi1_others', 'wasabi1_zksnacks'];interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
     #                     extract_dir)
-    run_parse_dumplings("ww1", None,
+    utils.run_parse_dumplings("ww1", None,
                         f"VISUALIZE_ALL_COINJOINS_INTERVALS=True;MIX_IDS=['wasabi1', 'wasabi1_others', 'wasabi1_zksnacks'];interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
                         extract_dir)
 
