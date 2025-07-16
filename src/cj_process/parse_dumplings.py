@@ -229,7 +229,7 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                     this_input['value'] = int(segments[2])
                     this_input['wallet_name'] = 'real_unknown'
                     this_input['script'] = segments[3]
-                    this_input['script_type'] = segments[4]
+                    this_input['script_type'] = segments[4].strip()
                     # TODO: generate proper address from script, now replaced by synthetic
                     # BUGBUG: if segments[3], segments[1] is used, then incorrect synthetic address is generated in case
                     # of address resuse (cj_analysis.py", line 910) : AssertionError: Inconsistent value found for
@@ -251,7 +251,7 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                     this_output['value'] = int(segments[0])
                     this_output['wallet_name'] = 'real_unknown'
                     this_output['script'] = segments[1]
-                    this_output['script_type'] = segments[2]
+                    this_output['script_type'] = segments[2].strip()
                     this_output['address'] = get_synthetic_address(tx_id, index)  # TODO: Compute proper address from script
                     #this_output['address'], this_output['script_type'] = als.get_address(this_output['script'])
 
