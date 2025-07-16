@@ -473,7 +473,7 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
     # Filter postmix spendings only to ones really spending from coinjoins (as we removed false positives)
     prev_postmix_len = len(data['postmix'])
     filter_postmix_transactions(data)
-    print(f'Reducing postmix transactions from {prev_postmix_len} to {len(data['postmix'])} total postmix txs based on real coinjoins')
+    print(f"Reducing postmix transactions from {prev_postmix_len} to {len(data['postmix'])} total postmix txs based on real coinjoins")
     # Update 'spend_by_tx' record
     data = update_all_spend_by_reference(data)
 
