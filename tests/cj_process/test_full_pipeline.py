@@ -89,11 +89,11 @@ def test_run_cj_process_ww2():
                         extract_dir)
     # ASSERT
     assert_process_dumplings(extract_dir, 'wasabi2', 35, 9789, 9789,
-                             425, (2097152, 157), (500000000, 2), 11,
+                             449, (2097152, 157), (500000000, 2), 11,
                              "cb44436714aa5aefcbf97a2bd17e74ff2ebe885a5a472b763babd1cf471efdbe",
                              "78f3e283307fea84c735055eee6d076b13c76b224a2c0d6428e04a897d148248")
     assert_process_dumplings(extract_dir, 'wasabi2_zksnacks', 27, None, None,
-                             344, (2097152, 148), (500000000, 2), None,
+                             367, (2097152, 148), (500000000, 2), None,
                              None, None)
 
     for coord in ["wasabi2", "wasabi2_others", "wasabi2_zksnacks"]:
@@ -162,10 +162,12 @@ def test_run_cj_process_ww2():
     # ASSERT
 
     expected_results = {
-        "wasabi2_zksnacks": {"total_fresh_inputs_value": 1178.30377412,
-                             "total_friends_inputs_value": 83.07451817, "total_unmoved_outputs_value": 1252.04660712,
-                             "total_leaving_outputs_value": 9.17601111, "total_nonstandard_leaving_outputs_value": 0.0,
-                             "total_fresh_inputs_without_nonstandard_outputs_value": 1178.30377412},
+        "wasabi2_zksnacks": {"total_fresh_inputs_value": 1260.79713716,
+            "total_friends_inputs_value": 0.58115513,
+            "total_unmoved_outputs_value": 1252.04660712,
+            "total_leaving_outputs_value": 9.17601111,
+            "total_nonstandard_leaving_outputs_value": 0.0,
+            "total_fresh_inputs_without_nonstandard_outputs_value": 1260.79713716},
         "wasabi2_others": {"total_fresh_inputs_value": 2.35583906,
                            "total_friends_inputs_value": 0.0,
                            "total_unmoved_outputs_value": 2.31978756,
