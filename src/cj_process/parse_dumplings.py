@@ -330,7 +330,7 @@ def detect_false_coinjoins(data, mix_protocol, checks: CJ_TX_CHECK=CJ_TX_CHECK.A
 def filter_false_coinjoins(data, mix_protocol, checks: CJ_TX_CHECK=CJ_TX_CHECK.ALL, checks_params=None):
     false_cjtxs = detect_false_coinjoins(data, mix_protocol, checks, checks_params)
     for cjtx in false_cjtxs:
-        logging.info(f'{cjtx} is not coinjoin, removing from coinjoin list')
+        logging.debug(f'{cjtx} is not coinjoin, removing from coinjoin list')
         data["coinjoins"].pop(cjtx)
 
     return data, false_cjtxs
@@ -404,13 +404,39 @@ def update_all_spend_by_reference(data: dict):
     return data
 
 
+def analyze_false_positives(data, false_cjtxs, mix_protocol):
+    """
+    Analyze properties of detected false positives
+    :param data:
+    :param false_cjtxs:
+    :param mix_protocol:
+    :return:
+    """
+    # Detect transactions from false positives list which are referenced by real coinjoins and print it
+    referenced = detect_referenced_trasactions(data['coinjoins'], false_cjtxs)
+    if len(false_cjtxs) > 0:
+        print(f'Number of false positives coinjoins referenced by real coinjoins: {len(referenced)} of {len(false_cjtxs.keys())} false positives ({round(len(referenced) / len(false_cjtxs.keys()), 2)}%)')
+    else:
+        print(f'Number of false positives coinjoins referenced by real coinjoins: {len(referenced)} of {len(false_cjtxs.keys())} false positives ({0}%)')
+
+    for txid in referenced.keys():
+        logging.debug(f"  {txid}: {false_cjtxs[txid]['fp_reason']}")
+
+    # Detect and filter only transactions which has too small number of same value outputs
+    for min_same_values_threshold in range(2, 10):
+        # Use detection rule on for the MIN_SAME_VALUES_THRESHOLD
+        detected = detect_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD, {CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD: min_same_values_threshold})
+        print(f'Number of detected coinjoins with only {min_same_values_threshold - 1} : {len(detected)}')
+
+
 def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: str, postmix_filename: str, premix_filename: str,
                    start_date: str, stop_date: str) -> (dict, dict, dict):
+    SM.print("### Load from Dumplings artifacts")
     # All mixes are having mixing coinjoins and postmix spends
     data = {'rounds': {}, 'filename': os.path.join(target_path, mix_filename),
             'coinjoins': load_coinjoin_stats_from_file(os.path.join(target_path, mix_filename), start_date, stop_date),
             'postmix': load_coinjoin_stats_from_file(os.path.join(target_path, postmix_filename), start_date, stop_date)}
-
+    SM.print(f"  Number of raw loaded coinjoins: {len(data['coinjoins'].keys())}")
     # Only Samourai Whirlpool is having premix tx (TX0)
     cjtxs_fixed = 0
     if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
@@ -425,7 +451,7 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
                 cjtxs_fixed += 1
     else:
         data['premix'] = {}
-    logging.info(f'{cjtxs_fixed} total premix txs moved into coinjoins')
+    SM.print(f'  {cjtxs_fixed} total premix txs moved into coinjoins')
 
     # Detect misclassified Whirlpool coinjoin transactions found in Dumpling's postmix txs
     cjtxs_fixed = 0
@@ -438,42 +464,58 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
                 data['postmix'].pop(txid)
                 logging.info(f'{txid} is mix transaction, removing from postmix and putting to mix')
                 cjtxs_fixed += 1
-    logging.info(f'{cjtxs_fixed} total postmix txs moved into coinjoins')
+    SM.print(f'  {cjtxs_fixed} total postmix txs moved into coinjoins')
 
     # Filter mistakes (false positives) in Dumplings analysis of coinjoins
     data, false_cjtxs = filter_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.ALL & ~CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD)
 
-    # Detect transactions from false positives list which are referenced by real coinjoins and print it
-    referenced = detect_referenced_trasactions(data['coinjoins'], false_cjtxs)
-    if len(false_cjtxs) > 0:
-        print(f'Number of false positives coinjoins referenced by real coinjoins: {len(referenced)} of {len(false_cjtxs.keys())} false positives ({round(len(referenced) / len(false_cjtxs.keys()), 2)})')
-    else:
-        print(f'Number of false positives coinjoins referenced by real coinjoins: {len(referenced)} of {len(false_cjtxs.keys())} false positives ({0})')
+    # Analyze properties of detected false positives
+    analyze_false_positives(data, false_cjtxs, mix_protocol)
 
-    for txid in referenced.keys():
-        print(f'  {txid}')
+    # Additional filtering is required for JoinMarket. Initially, minimum number of parties was 3 (minimum_makers = 2 + taker).
+    # Commit in 2019 increased default number of participants to (5=4+1 , https://github.com/JoinMarket-Org/joinmarket-clientserver/commit/32479ae510f20cfae114f890b1bc4d5bd3793aaf#diff-eedb7249de69ad117bda87a646de65b0cad8bf900016bc25836a665a04e8f33aR252)
+    # Heuristics:
+    #   1. filter out txs with 2 equal outputs only (less than 3 participants) for whole period
+    #   2. after 09/2020, filter out also txs with less than 5 equal outputs (there are ~10k 3-equal-outputs multisig transactions in 09-10/2020)
+    if mix_protocol == MIX_PROTOCOL.JOINMARKET:
+        MIN_SAME_VALUES_THRESHOLD_ALWAYS = 5
+        # 1. Remove all transactions with (less than 3 participants or based on MIN_SAME_VALUES_THRESHOLD_ALWAYS)
+        data, false_cjtxs_min3 = filter_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD,
+                                                        {CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD: MIN_SAME_VALUES_THRESHOLD_ALWAYS})
+        SM.print(f'  Number of filtered false JoinMarket coinjoins with less than {MIN_SAME_VALUES_THRESHOLD_ALWAYS} participants: {len(false_cjtxs_min3)}')
 
-    # Detect and filter only transactions which has too small number of same value outputs
-    for min_same_values_threshold in range(2, 10):
-        # Use detection rule on for the MIN_SAME_VALUES_THRESHOLD
-        detected = detect_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD, {CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD: min_same_values_threshold})
-        print(f'Number of detected coinjoins with only {min_same_values_threshold - 1} : {len(detected)}')
+        # 2. Remove less than 5 participants, but only after 09/2020
+        false_cjtxs_min5 = detect_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD,
+                                                  {CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD: 5})
+        SM.print(f'  Number of detected coinjoins with less than 5 participants: {len(false_cjtxs_min5)}')
+        false_cjtxs_min5_ids = list(false_cjtxs_min5.keys())
+        cutoff_date = precomp_datetime.strptime("2020-09-01 00:00:00.000", "%Y-%m-%d %H:%M:%S.%f")
+        for cjtx in false_cjtxs_min5_ids:
+            if precomp_datetime.strptime(data["coinjoins"][cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") > cutoff_date:
+                logging.info(f'{cjtx} is not coinjoin (too little participants), removing from coinjoin list')
+                data["coinjoins"].pop(cjtx)
+            else:
+                # Transaction with less than 5 participants is too early before defaults change, keep it as coinjoin
+                false_cjtxs_min5.pop(cjtx)
+        SM.print(f'  Number of filtered false JoinMarket coinjoins with less than 5 participants after 2020-09-01: {len(false_cjtxs_min5)} from {len(false_cjtxs_min5_ids)}')
 
-    # Now remove transactions with too few same output values (based on default MIN_SAME_VALUES_THRESHOLD)
-    data, false_cjtxs_min2 = filter_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD, {CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD: 3})
-    false_cjtxs.update(false_cjtxs_min2)
+        false_cjtxs_min = false_cjtxs_min3
+        false_cjtxs_min.update(false_cjtxs_min5)
 
-    referenced = detect_referenced_trasactions(data['coinjoins'], false_cjtxs_min2)
-    print(f'Number of coinjoins referenced by real coinjoins with too small number of same value outputs: {len(referenced)}')
-    for txid in referenced.keys():
-        print(f'  {txid}')
+        referenced = detect_referenced_trasactions(data['coinjoins'], false_cjtxs_min)
+        SM.print(f'  Number of coinjoins referenced by real coinjoins with too small number of same value outputs: {len(referenced)}')
+        for txid in referenced.keys():
+            logging.debug(f"  {txid}: {false_cjtxs_min[txid]['fp_reason']}")
+
+        # Update complete list of filtered false positives
+        false_cjtxs.update(false_cjtxs_min)
 
     # Move false positives coinjoins into potential postmix
     data['postmix'].update(false_cjtxs)
     # Filter postmix spendings only to ones really spending from coinjoins (as we removed false positives)
     prev_postmix_len = len(data['postmix'])
     filter_postmix_transactions(data)
-    print(f"Reducing postmix transactions from {prev_postmix_len} to {len(data['postmix'])} total postmix txs based on real coinjoins")
+    SM.print(f"  Reducing postmix transactions from {prev_postmix_len} to {len(data['postmix'])} total postmix txs based on real coinjoins")
     # Update 'spend_by_tx' record
     data = update_all_spend_by_reference(data)
 
@@ -608,7 +650,11 @@ def assign_merge_cluster(tx_dict: dict) -> dict:
 
 
 def is_coinjoin_tx(test_tx: dict, mix_protocol: MIX_PROTOCOL, checks: CJ_TX_CHECK=CJ_TX_CHECK.ALL, checks_config: dict=None):
-    if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
+    # BUGBUG: For SW, WW1 and WW2, it checks expected structure (whitelist). For JoinMarket, it only checks incorrect cases (blacklist)
+    # This works well as Dumplings scanning first process SW, WW1 and WW2 and only then checks remaining coinjoin-like txs
+    # But if this function is used separately, checking for is_coinjoin_tx(JoinMarket) will return True for a lot of non-coinjoin transactions
+
+    if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:  # whitelist
         checks_config = {**CJ_TX_CHECK_WHIRLPOOL_DEFAULTS, **(checks_config or {})}
         # The transaction is whirlpool coinjoin transaction if number of inputs is bigger than 4
         if len(test_tx['inputs']) >= 5:
@@ -618,13 +664,12 @@ def is_coinjoin_tx(test_tx: dict, mix_protocol: MIX_PROTOCOL, checks: CJ_TX_CHEC
                 if all(test_tx['outputs'][vout]['value'] == test_tx['outputs']['0']['value']
                        for vout in test_tx['outputs'].keys()):
                     # ... and output sizes are one of the pool sizes [100k, 1M, 5M, 50M, 25M, 2.5M]
-                    #[100000, 1000000, 5000000, 50000000, 25000000, 2500000]
                     if all(test_tx['outputs'][vout]['value'] in WHIRLPOOL_FUNDING_TXS.keys()
                            for vout in test_tx['outputs'].keys()):
                         return True, FILTER_REASON.VALID
         return False, FILTER_REASON.INVALID_STRUCTURE
 
-    if mix_protocol == MIX_PROTOCOL.WASABI1:
+    if mix_protocol == MIX_PROTOCOL.WASABI1:  # whitelist
         checks_config = {**CJ_TX_CHECK_WASABI1_DEFAULTS, **(checks_config or {})}
         # The transaction is wasabi1 coinjoin transaction if number of inputs is at least MIN_WASABI1_INPUTS
         WASABI1_MIN_INPUTS = 5
@@ -640,18 +685,21 @@ def is_coinjoin_tx(test_tx: dict, mix_protocol: MIX_PROTOCOL, checks: CJ_TX_CHEC
                 return True, FILTER_REASON.VALID
         return False, FILTER_REASON.INVALID_STRUCTURE
 
-    if mix_protocol == MIX_PROTOCOL.WASABI2:
+    if mix_protocol == MIX_PROTOCOL.WASABI2:  # whitelist
         checks_config = {**CJ_TX_CHECK_WASABI2_DEFAULTS, **(checks_config or {})}
         # Not implemented, return True always
         return True, FILTER_REASON.VALID
         #assert False, 'is_coinjoin_tx() not supported for WASABI2'
 
-    if mix_protocol == MIX_PROTOCOL.JOINMARKET:
+    if mix_protocol == MIX_PROTOCOL.JOINMARKET:  # blacklist, original transaction is expected to be pre-selected to be coinjoin-like
         checks_config = {**CJ_TX_CHECK_JOINMARKET_DEFAULTS, **(checks_config or {})}
 
         # Positive example: 7732a03c8cf133e0475ae37e4f2f49ba77beb631378216889e33e9847aa0049b
 
-        # OP_RETURN Runestone / Atom / Omni...
+        # TODO: NO Multisig inputs : f73564ae9e7913303e9fc2a46c4e0f0d942378ce50fb65e40ebe0227adecc47d
+        # TODO: only wrapped‑segwit P2SH or native segwit addresses are used (NOT true, earlier used 1x as well)
+
+        # OP_RETURN (Runestone / Atom / Omni...)
         if checks & CJ_TX_CHECK.OP_RETURN:
             # TxNullData + data in OP_RETURN script
             for output in test_tx['outputs']:
@@ -680,43 +728,35 @@ def is_coinjoin_tx(test_tx: dict, mix_protocol: MIX_PROTOCOL, checks: CJ_TX_CHEC
                 #         test_tx['outputs'][output]['script'].find('6f6d6e69') != -1     # Omni OP_RETURN : 3dc876a23165c8e6b9f81b4aeb9e0f1caaab77466ed20231901b2fe72f1c71d8
                 #    return False
 
-        # Only two same outputs
+        # Minimal number of equal outputs
         if checks & CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD:
-            #MIN_SAME_VALUES_THRESHOLD = 3
             values = [test_tx['outputs'][index]['value'] for index in test_tx['outputs'].keys()]
             if Counter(values).most_common(1)[0][1] < checks_config[CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD]:
                 return False, FILTER_REASON.MIN_SAME_VALUES_THRESHOLD
 
         # Significant address reuse a2bd490cc63c1b70bf7b328c20f69115a1b20cdd06cd035d6b200e17ee8d934e
         if checks & CJ_TX_CHECK.ADDRESS_REUSE_THRESHOLD:
-            #ADDRESS_REUSE_THRESHOLD = 0.34
             scripts = [test_tx['inputs'][index]['script'] for index in test_tx['inputs'].keys()]
             scripts.extend([test_tx['outputs'][index]['script'] for index in test_tx['outputs'].keys()])
             if Counter(scripts).most_common(1)[0][1] / len(scripts) > checks_config[CJ_TX_CHECK.ADDRESS_REUSE_THRESHOLD]:
                 return False, FILTER_REASON.ADDRESS_REUSE_THRESHOLD
 
-        # Too many inputs or outputs
+        # Too many inputs or too many outputs (coordination with more than tens of participants will likely fail)
         if checks & CJ_TX_CHECK.NUM_INOUT_THRESHOLD:
             num_inputs = len(test_tx['inputs'])
             num_outputs = len(test_tx['outputs'])
-            #NUM_INOUT_THRESHOLD = 100
             if num_inputs > checks_config[CJ_TX_CHECK.NUM_INOUT_THRESHOLD] or num_outputs > checks_config[CJ_TX_CHECK.NUM_INOUT_THRESHOLD]:
                 return False, FILTER_REASON.NUM_INOUT_THRESHOLD
 
-        # Heavy disbalance between number of inputs and outputs 8f7933a5d127b3bd8723ae9ea9eb7da96df1e33a7a9c1bcf9e68a2e6263d0640
+        # Heavy disbalance between number of inputs and outputs: 8f7933a5d127b3bd8723ae9ea9eb7da96df1e33a7a9c1bcf9e68a2e6263d0640
         if checks & CJ_TX_CHECK.INOUTS_RATIO_THRESHOLD:
-            if num_inputs == 0 or num_outputs == 0:
-                ratio = 100000
-            else:
-                ratio = max(num_inputs, num_outputs) / min(num_inputs, num_outputs)
-            #INOUTS_RATIO_THRESHOLD = 4
+            # Compute ratio, prevent division by zero
+            ratio = 100000 if num_inputs == 0 or num_outputs == 0 else max(num_inputs, num_outputs) / min(num_inputs, num_outputs)
             if ratio > checks_config[CJ_TX_CHECK.INOUTS_RATIO_THRESHOLD]:
                 return False, FILTER_REASON.INOUTS_RATIO_THRESHOLD
 
         # If none of the check above fails, the transaction is assumed to be coinjoin
         return True, FILTER_REASON.VALID
-
-        # TODO: NO Multisig inputs : f73564ae9e7913303e9fc2a46c4e0f0d942378ce50fb65e40ebe0227adecc47d
 
     return False, FILTER_REASON.UNSPECIFIED
 
@@ -4674,7 +4714,7 @@ def main(argv=None):
     #
     if op.ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS:
         if op.CJ_TYPE == CoinjoinType.JM:
-            interval_start_date = '2018-07-05 04:00:00.000' if op.interval_start_date == "" else op.interval_start_date
+            interval_start_date = '2015-01-01 00:00:00.000' if op.interval_start_date == "" else op.interval_start_date
             all_data = process_and_save_intervals_filter('joinmarket_all', MIX_PROTOCOL.JOINMARKET, target_path, interval_start_date, op.interval_stop_date,
                                        'OtherCoinJoins.txt', 'OtherCoinJoinPostMixTxs.txt', None,
                                                 op.SAVE_BASE_FILES_JSON, False)
@@ -4772,7 +4812,7 @@ def main(argv=None):
                 visualize_intervals(mix_id, target_path, interval_start_date, op.interval_stop_date)
 
         if op.CJ_TYPE == CoinjoinType.JM:
-            interval_start_date = '2025-05-31 00:00:07.000' if op.interval_start_date == "" else op.interval_start_date
+            interval_start_date = '2015-01-01 00:00:00.000' if op.interval_start_date == "" else op.interval_start_date
             mix_ids = ['joinmarket_all'] if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
             for mix_id in mix_ids:
                 visualize_intervals(mix_id, target_path, interval_start_date, op.interval_stop_date)
