@@ -79,13 +79,18 @@ class CJ_TX_CHECK(IntFlag):
     ADDRESS_REUSE_THRESHOLD     = auto()
     MIN_SAME_VALUES_THRESHOLD   = auto()
     OP_RETURN                   = auto()
-    ALL = INOUTS_RATIO_THRESHOLD | NUM_INOUT_THRESHOLD | ADDRESS_REUSE_THRESHOLD | MIN_SAME_VALUES_THRESHOLD | OP_RETURN
+    MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS = auto()
+    # Basic always enforced rules
+    BASIC = INOUTS_RATIO_THRESHOLD | NUM_INOUT_THRESHOLD | ADDRESS_REUSE_THRESHOLD | OP_RETURN
+    # All defined rules
+    ALL = BASIC | MIN_SAME_VALUES_THRESHOLD | MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS
 
 CJ_TX_CHECK_JOINMARKET_DEFAULTS = {
     CJ_TX_CHECK.INOUTS_RATIO_THRESHOLD: 4,      # 4 times more of inputs or outputs
     CJ_TX_CHECK.NUM_INOUT_THRESHOLD: 100,       # More than 100 inputs or outputs
     CJ_TX_CHECK.ADDRESS_REUSE_THRESHOLD: 0.34,  # More than 34% of address reuse
     CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD: 2,   # At least two same outputs
+    CJ_TX_CHECK.MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS: 1, # How many different equal outputs are allowed
     CJ_TX_CHECK.OP_RETURN: {''}                 # Any OP_RETURN without any additional check
 }
 
@@ -102,6 +107,7 @@ class FILTER_REASON(Enum):
     ADDRESS_REUSE_THRESHOLD = 'ADDRESS_REUSE_THRESHOLD'
     MIN_SAME_VALUES_THRESHOLD = 'MIN_SAME_VALUES_THRESHOLD'
     OP_RETURN = 'OP_RETURN'
+    MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS = 'MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS'
 
 
 SM = als.SummaryMessages()
@@ -312,7 +318,7 @@ def compute_mix_postmix_link(data: dict):
 
     return data
 
-def detect_false_coinjoins(data, mix_protocol, checks: CJ_TX_CHECK=CJ_TX_CHECK.ALL, checks_params=None):
+def detect_false_coinjoins(data, mix_protocol, checks: CJ_TX_CHECK=CJ_TX_CHECK.BASIC, checks_params=None):
     checks_params = {} if checks_params is None else checks_params
 
     false_cjtxs = {}
@@ -327,7 +333,7 @@ def detect_false_coinjoins(data, mix_protocol, checks: CJ_TX_CHECK=CJ_TX_CHECK.A
     return false_cjtxs
 
 
-def filter_false_coinjoins(data, mix_protocol, checks: CJ_TX_CHECK=CJ_TX_CHECK.ALL, checks_params=None):
+def filter_false_coinjoins(data, mix_protocol, checks: CJ_TX_CHECK=CJ_TX_CHECK.BASIC, checks_params=None):
     false_cjtxs = detect_false_coinjoins(data, mix_protocol, checks, checks_params)
     for cjtx in false_cjtxs:
         logging.debug(f'{cjtx} is not coinjoin, removing from coinjoin list')
@@ -467,48 +473,60 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
     SM.print(f'  {cjtxs_fixed} total postmix txs moved into coinjoins')
 
     # Filter mistakes (false positives) in Dumplings analysis of coinjoins
-    data, false_cjtxs = filter_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.ALL & ~CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD)
-
+    data, false_cjtxs = filter_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.BASIC)
+    SM.print(f'  Number of filtered false positives (CJ_TX_CHECK.BASIC): {len(false_cjtxs)}')
     # Analyze properties of detected false positives
     analyze_false_positives(data, false_cjtxs, mix_protocol)
 
-    # Additional filtering is required for JoinMarket. Initially, minimum number of parties was 3 (minimum_makers = 2 + taker).
-    # Commit in 2019 increased default number of participants to (5=4+1 , https://github.com/JoinMarket-Org/joinmarket-clientserver/commit/32479ae510f20cfae114f890b1bc4d5bd3793aaf#diff-eedb7249de69ad117bda87a646de65b0cad8bf900016bc25836a665a04e8f33aR252)
-    # Heuristics:
-    #   1. filter out txs with 2 equal outputs only (less than 3 participants) for whole period
-    #   2. after 09/2020, filter out also txs with less than 5 equal outputs (there are ~10k 3-equal-outputs multisig transactions in 09-10/2020)
     if mix_protocol == MIX_PROTOCOL.JOINMARKET:
-        MIN_SAME_VALUES_THRESHOLD_ALWAYS = 5
-        # 1. Remove all transactions with (less than 3 participants or based on MIN_SAME_VALUES_THRESHOLD_ALWAYS)
-        data, false_cjtxs_min3 = filter_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD,
-                                                        {CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD: MIN_SAME_VALUES_THRESHOLD_ALWAYS})
-        SM.print(f'  Number of filtered false JoinMarket coinjoins with less than {MIN_SAME_VALUES_THRESHOLD_ALWAYS} participants: {len(false_cjtxs_min3)}')
+        # Idea:
+        # 0. Filter away transactions with only two equal outputs (even initial joinmarket had at least three)
+        # 1. Filter transactions with less than X(=5) participants and remove from coinjoins.
+        # 2. Recursively add back into coinjoin set all transactions with at least 3 participants, if referenced from coinjoins
+        # 3. Stop when no new transaction is added back
 
-        # 2. Remove less than 5 participants, but only after 09/2020
-        false_cjtxs_min5 = detect_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD,
+        # Remove all transactions with only two equal outputs
+        REMOVE_BELOW_THREE_PARTICIPANTS_ALWAYS = True
+        if REMOVE_BELOW_THREE_PARTICIPANTS_ALWAYS:
+            data, false_cjtxs_min3 = filter_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD,
+                                                      {CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD: 3})
+            SM.print(f'  Number of filtered false positives with only 2 participants: {len(false_cjtxs_min3)}')
+            false_cjtxs.update(false_cjtxs_min3)
+
+        REMOVE_MULTIPLE_DIFFERENT_EQUAL_OUTPUTS = True
+        if REMOVE_MULTIPLE_DIFFERENT_EQUAL_OUTPUTS:
+            data, false_cjtxs_multipleEqualOuts = filter_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS,
+                                                       {CJ_TX_CHECK.MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS: 1})
+            SM.print(
+                f'  Number of filtered false positives (CJ_TX_CHECK.MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS): {len(false_cjtxs_multipleEqualOuts)}')
+            false_cjtxs.update(false_cjtxs_multipleEqualOuts)
+
+        # Remove all bellow 5 participants (but possibly return some back based on references later)
+        data, false_cjtxs_min5 = filter_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD,
                                                   {CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD: 5})
-        SM.print(f'  Number of detected coinjoins with less than 5 participants: {len(false_cjtxs_min5)}')
-        false_cjtxs_min5_ids = list(false_cjtxs_min5.keys())
-        cutoff_date = precomp_datetime.strptime("2020-09-01 00:00:00.000", "%Y-%m-%d %H:%M:%S.%f")
-        for cjtx in false_cjtxs_min5_ids:
-            if precomp_datetime.strptime(data["coinjoins"][cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") > cutoff_date:
-                logging.info(f'{cjtx} is not coinjoin (too little participants), removing from coinjoin list')
-                data["coinjoins"].pop(cjtx)
-            else:
-                # Transaction with less than 5 participants is too early before defaults change, keep it as coinjoin
-                false_cjtxs_min5.pop(cjtx)
-        SM.print(f'  Number of filtered false JoinMarket coinjoins with less than 5 participants after 2020-09-01: {len(false_cjtxs_min5)} from {len(false_cjtxs_min5_ids)}')
+        # Return some back based on references from preserved coinjoins
+        RETURN_BELOW_THRESHOLD_PARTICIPANTS_BUT_REFERENCED = True
+        if RETURN_BELOW_THRESHOLD_PARTICIPANTS_BUT_REFERENCED:
+            referenced = detect_referenced_trasactions(data['coinjoins'], false_cjtxs_min5)
+            initial_candidate_false_positives = len(false_cjtxs_min5)
+            SM.print(f'  Number of initially detected (potential) false positives with >2 & <5 participants: {len(false_cjtxs_min5)}')
+            SM.print(f'    referenced by real coinjoin txs: {len(referenced)}')
+            while len(referenced) > 0:
+                # Return back to coinjoins, remove from false list
+                for txid in list(referenced.keys()):
+                    data['coinjoins'][txid] = referenced[txid]  # Is referenced from real coinjoins, put it back
+                    data['coinjoins'][txid]['is_cjtx'] = True
+                    false_cjtxs_min5.pop(txid) # Remove from false positives
+                if len(false_cjtxs_min5) == 0:
+                    break
+                # Next iteration
+                referenced = detect_referenced_trasactions(data['coinjoins'], false_cjtxs_min5)
+                SM.print(f'    referenced by real coinjoin txs: {len(referenced)}')
 
-        false_cjtxs_min = false_cjtxs_min3
-        false_cjtxs_min.update(false_cjtxs_min5)
-
-        referenced = detect_referenced_trasactions(data['coinjoins'], false_cjtxs_min)
-        SM.print(f'  Number of coinjoins referenced by real coinjoins with too small number of same value outputs: {len(referenced)}')
-        for txid in referenced.keys():
-            logging.debug(f"  {txid}: {false_cjtxs_min[txid]['fp_reason']}")
-
-        # Update complete list of filtered false positives
-        false_cjtxs.update(false_cjtxs_min)
+        # Update complete list of filtered false positives using false positives left
+        false_cjtxs.update(false_cjtxs_min5)
+        SM.print(f'  Filtered false positives based on >2 & <5 & no_ref heuristic: {len(false_cjtxs_min5)}')
+        SM.print(f'  Candidate false positives returned back to coinjoins based on reference heuristics: {initial_candidate_false_positives - len(false_cjtxs_min5)}')
 
     # Move false positives coinjoins into potential postmix
     data['postmix'].update(false_cjtxs)
@@ -649,7 +667,7 @@ def assign_merge_cluster(tx_dict: dict) -> dict:
     return tx_dict
 
 
-def is_coinjoin_tx(test_tx: dict, mix_protocol: MIX_PROTOCOL, checks: CJ_TX_CHECK=CJ_TX_CHECK.ALL, checks_config: dict=None):
+def is_coinjoin_tx(test_tx: dict, mix_protocol: MIX_PROTOCOL, checks: CJ_TX_CHECK=CJ_TX_CHECK.BASIC, checks_config: dict=None):
     # BUGBUG: For SW, WW1 and WW2, it checks expected structure (whitelist). For JoinMarket, it only checks incorrect cases (blacklist)
     # This works well as Dumplings scanning first process SW, WW1 and WW2 and only then checks remaining coinjoin-like txs
     # But if this function is used separately, checking for is_coinjoin_tx(JoinMarket) will return True for a lot of non-coinjoin transactions
@@ -733,6 +751,14 @@ def is_coinjoin_tx(test_tx: dict, mix_protocol: MIX_PROTOCOL, checks: CJ_TX_CHEC
             values = [test_tx['outputs'][index]['value'] for index in test_tx['outputs'].keys()]
             if Counter(values).most_common(1)[0][1] < checks_config[CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD]:
                 return False, FILTER_REASON.MIN_SAME_VALUES_THRESHOLD
+
+        # Minimal number of equal outputs
+        if checks & CJ_TX_CHECK.MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS:
+            values = [test_tx['outputs'][index]['value'] for index in test_tx['outputs'].keys()]
+            counts = Counter(values)
+            num_values_with_duplicates = sum(1 for count in counts.values() if count > 1)
+            if num_values_with_duplicates > checks_config[CJ_TX_CHECK.MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS]:
+                return False, FILTER_REASON.MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS
 
         # Significant address reuse a2bd490cc63c1b70bf7b328c20f69115a1b20cdd06cd035d6b200e17ee8d934e
         if checks & CJ_TX_CHECK.ADDRESS_REUSE_THRESHOLD:
