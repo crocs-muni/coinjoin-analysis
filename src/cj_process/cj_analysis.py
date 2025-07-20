@@ -1576,6 +1576,9 @@ def load_coinjoins_from_file(target_load_path: str, false_cjtxs: dict, filter_fa
     logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
     data = load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
 
+    non_cjtxs_keys = [cjtx for cjtx in data['coinjoins'].keys() if not data['coinjoins'][cjtx]['is_cjtx']]
+    assert len(non_cjtxs_keys) == 0, f'Coinjoin list contains {len(non_cjtxs_keys)} unexpected non-coinjoin transactions, e.g., {non_cjtxs_keys[0]} '
+
     if PERF_USE_COMPACT_CJTX_STRUCTURE:
         logging.warning(f'IMPORTANT: PERF_USE_COMPACT_CJTX_STRUCTURE==True => compacting in-memory data structure')
         streamline_coinjoins_structure(data)
