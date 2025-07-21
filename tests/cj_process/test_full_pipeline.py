@@ -71,15 +71,9 @@ def test_run_cj_process_ww2():
     extract_dir = TEMP_DUMPLINGS
     target_zip = os.path.abspath(f"{extract_dir}/dumplings.zip")
 
-    #
     # Prepare test data from zip file
-    #
-    if os.path.exists(extract_dir):
-        shutil.rmtree(extract_dir)
-    os.makedirs(extract_dir, exist_ok=True)
-    shutil.copyfile(source_zip, target_zip)
-    with zipfile.ZipFile(target_zip, 'r') as zip_ref:
-        zip_ref.extractall(extract_dir)
+    utils.prepare_from_zip_file(extract_dir, source_zip, target_zip)
+
 
     #
     # Run initial processing
@@ -210,15 +204,9 @@ def test_run_cj_process_ww1():
     extract_dir = TEMP_DUMPLINGS
     target_zip = os.path.abspath(f"{extract_dir}/dumplings.zip")
 
-    #
     # Prepare test data from zip file
-    #
-    if os.path.exists(extract_dir):
-        shutil.rmtree(extract_dir)
-    os.makedirs(extract_dir, exist_ok=True)
-    shutil.copyfile(source_zip, target_zip)
-    with zipfile.ZipFile(target_zip, 'r') as zip_ref:
-        zip_ref.extractall(extract_dir)
+    utils.prepare_from_zip_file(extract_dir, source_zip, target_zip)
+
 
     #
     # Run initial processing
@@ -335,4 +323,104 @@ def test_run_cj_process_ww1():
                    'missing_files']) == 3, f"Missing files: {file_check['results']['wasabi1_zksnacks']['mix_base_files']['missing_files']}"
 
 
+
+def test_run_cj_process_jm():
+    interval_start_date = "2024-06-01 00:00:00.000000"
+    interval_stop_date = "2024-06-30 00:00:00.000000"
+
+    source_zip = os.path.abspath(os.path.join(TESTS, "fixtures", "dumplings__jm_202406.zip"))
+    extract_dir = TEMP_DUMPLINGS
+    target_zip = os.path.abspath(f"{extract_dir}/dumplings.zip")
+
+    # Prepare test data from zip file
+    utils.prepare_from_zip_file(extract_dir, source_zip, target_zip)
+
+    #
+    # Run initial processing
+    #
+    utils.run_parse_dumplings("jm", "process_dumplings",
+                        f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        extract_dir)
+    # ASSERT
+    assert_process_dumplings(extract_dir, 'joinmarket_all', 51, 1676, 1676,
+                             712, (546, 17), (879222944, 2), None,
+                             None,
+                             None)
+
+    for coord in ["joinmarket_all"]:
+        target_dir = os.path.join(extract_dir, "Scanner", coord)
+        shutil.copy(os.path.join(DATA, "joinmarket", "false_cjtxs.json"), os.path.join(target_dir, "false_cjtxs.json"))
+        shutil.copy(os.path.join(DATA, "joinmarket", "fee_rates.json"), os.path.join(target_dir, "fee_rates.json"))
+
+    #
+    # Run false positives detection
+    #
+    utils.run_parse_dumplings("jm", "detect_false_positives",
+                        f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        extract_dir)
+    # ASSERT
+    for coord in ["joinmarket_all"]:
+        with open(os.path.join(extract_dir, "Scanner", coord, "no_remix_txs.json"), "r") as file:
+            results = orjson.loads(file.read())
+            assert len(results[
+                           'inputs_noremix']) == 8, f"Expected {8} no inputs remix coinjoins, got {len(results['inputs_noremix'])}"
+            assert len(results[
+                           'outputs_noremix']) == 6, f"Expected {6} no outputs remix coinjoins, got {len(results['outputs_noremix'])}"
+            assert len(results[
+                           'both_noremix']) == 0, f"Expected {0} both no remix coinjoins, got {len(results['both_noremix'])}"
+            assert len(results[
+                           'specific_denoms_noremix_in']) == 0, f"Expected {0} specific denoms noinput in, got {len(results['specific_denoms_noremix_in'])}"
+            assert len(results[
+                           'specific_denoms_noremix_out']) == 0, f"Expected {0} specific denoms noinput out, got {len(results['specific_denoms_noremix_out'])}"
+            assert len(results[
+                           'specific_denoms_noremix_both']) == 0, f"Expected {0} specific denoms noinput both, got {len(results['specific_denoms_noremix_both'])}"
+            assert len(results[
+                           'inputs_address_reuse_0_70']) == 0, f"Expected {0} input address reuse, got {len(results['inputs_address_reuse_0_70'])}"
+            assert len(results[
+                           'outputs_address_reuse_0_70']) == 0, f"Expected {0} output address reuse, got {len(results['outputs_address_reuse_0_70'])}"
+
+
+    for coord in ["joinmarket_all"]:
+        target_dir = os.path.join(extract_dir, "Scanner", coord)
+        shutil.copy(os.path.join(DATA, "joinmarket", "false_cjtxs.json"), os.path.join(target_dir, "false_cjtxs.json"))
+        shutil.copy(os.path.join(DATA, "joinmarket", "fee_rates.json"), os.path.join(target_dir, "fee_rates.json"))
+
+    #
+    # Analyze liquidity
+    #
+    utils.run_parse_dumplings("jm", None,
+                        f"ANALYSIS_LIQUIDITY=True;interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        extract_dir)
+    # ASSERT
+    expected_results = {
+        "joinmarket_all": {"total_fresh_inputs_value": 865.79055799,
+            "total_friends_inputs_value": 0.0,
+            "total_unmoved_outputs_value": 726.1482482,
+            "total_leaving_outputs_value": 139.58063648,
+            "total_nonstandard_leaving_outputs_value": 66.7654445,
+            "total_fresh_inputs_without_nonstandard_outputs_value": 799.02511349}}
+    for coord in expected_results.keys():
+        with open(os.path.join(extract_dir, "Scanner", f"liquidity_summary_{coord}.json"), "r") as file:
+            results = orjson.loads(file.read())
+            for key in expected_results[coord].keys():
+                assert math.isclose(results[key], expected_results[coord][
+                    key]), f"Expected {expected_results[coord][key]} for {key}, got {results[key]}"
+
+    #
+    # Plot some graphs
+    #
+    utils.run_parse_dumplings("jm", "plot_coinjoins",
+                        f"PLOT_REMIXES_MULTIGRAPH=False;interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        extract_dir)
+    # utils.run_parse_dumplings("ww1", "plot_coinjoins",
+    #                     f"PLOT_REMIXES_MULTIGRAPH=True;MIX_IDS=['wasabi1', 'wasabi1_others', 'wasabi1_zksnacks'];interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+    #                     extract_dir)
+    utils.run_parse_dumplings("jm", None,
+                        f"VISUALIZE_ALL_COINJOINS_INTERVALS=True;interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        extract_dir)
+
+    # ASSERT
+    file_check = check_coinjoin_files(os.path.join(extract_dir, 'Scanner'))
+    assert len(file_check['results']['joinmarket_all']['mix_base_files'][
+                   'missing_files']) == 2, f"Missing files: {file_check['results']['joinmarket_all']['mix_base_files']['missing_files']}"
 

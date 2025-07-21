@@ -43,3 +43,4 @@ def run_parse_dumplings(cjtype, action, env_vars, target_path, must_succeed=True
         if must_succeed:
             assert returncode == 0, f"cj_process/parse_dumplings.py {arguments} failed"
         return returncode
+
