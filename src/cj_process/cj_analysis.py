@@ -87,16 +87,10 @@ def load_json_from_file(file_path: str) -> dict:
     with open(file_path, "rb") as file:
         return orjson.loads(file.read())
 
-    # with open(file_path, "r") as file:
-    #     return json.load(file)
-
 
 def save_json_to_file(file_path: str, data: dict):
     with open(file_path, "wb") as file:
         file.write(orjson.dumps(data))
-
-    # with open(file_path, "w") as file:
-    #     file.write(json.dumps(dict(sorted(data.items())), indent=4))
 
 
 def save_json_to_file_pretty(file_path: str, data: dict, sort: bool = False):
@@ -168,7 +162,7 @@ def detect_specific_cj_denoms(coinjoins: dict, specific_denoms_list: list, min_t
         if len(result) > 0 and max(result.values()) >= min_times_most_frequent_denom and min(out_counts.values()) == exact_times_least_frequent_denom:
             specific_denoms['specific_denoms'][cjtx] = coinjoins[cjtx]['broadcast_time']
 
-    logging.warning(f'Txs with specific input/output values: {specific_denoms["specific_denoms"]}')
+    #logging.warning(f'Txs with specific input/output values: {specific_denoms["specific_denoms"]}')
     return specific_denoms
 
 
@@ -1635,35 +1629,6 @@ def get_address(script_hex: str):
     address = output.address
 
     return address, output.script_type
-
-# WORKS, but only for limited script types
-# def get_address_legacy(script: str, script_type: str):
-#     try:
-#         SelectParams('mainnet')
-#         if script_type.strip().lower() == 'unknown':
-#             return None
-#
-#         scriptPubKey = CScript(x(script))
-#
-#         if script_type == 'TxWitnessV0Keyhash':
-#             return str(P2WPKHBitcoinAddress.from_scriptPubKey(scriptPubKey))
-#
-#         if script_type == 'Unknown':
-#             return str(P2WSHBitcoinAddress.from_scriptPubKey(scriptPubKey))
-#
-#         if script_type == 'TxScripthash':
-#             if (len(scriptPubKey) == 3 and
-#                     scriptPubKey[0] == OP_HASH160 and
-#                     scriptPubKey[2] == OP_EQUAL):
-#                 hash160 = scriptPubKey[1]
-#                 return str(P2SHBitcoinAddress.from_scriptPubKey(hash160))
-#
-#         # If no previous types were hit, return default type
-#         return str(P2WPKHBitcoinAddress.from_scriptPubKey(scriptPubKey))
-#
-#     except CBitcoinAddressError as e:
-#         logging.error(f'{script_type}: {e}')
-#         return None
 
 
 def detect_bybit_hack(target_path: str, interval: str, bybit_hack_addresses: dict):

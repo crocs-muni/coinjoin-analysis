@@ -730,10 +730,6 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
         cjtx_creation_time = coinjoins[cjtx]['broadcast_time']
 
         if True:  # Always compute
-        # if 'unmixed_utxos_in_wallets' not in coinjoins[cjtx]['analysis2'].keys() and \
-        #     'unmixed_utxos_in_wallets' not in coinjoins[cjtx]['analysis2'].keys() and \
-        #     'mixed_utxos_in_wallets' not in coinjoins[cjtx]['analysis2'].keys():
-
             for wallet_name in wallets_coins.keys():
                 unmixed_utxos = []
                 mixed_utxos = []
@@ -830,9 +826,6 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
         else:
             print('Missing start timestamp for {}'.format(round_id))
     if cjtx_in_hours[len(cjtx_in_hours.keys()) - 1] == []:  # remove last slot if no coinjoins are available there
-        # while cjtx_in_hours[len(cjtx_in_hours.keys()) - 1] == [] and \
-        #     cjtx_blame_in_hours[len(cjtx_blame_in_hours.keys()) - 1] == []:
-        #     #rounds_started_in_hours[len(rounds_started_in_hours.keys()) - 1] == []:  # remove all dates from back with no coinjoin
         del cjtx_in_hours[len(cjtx_in_hours.keys()) - 1]
         del cjtx_blame_in_hours[len(cjtx_blame_in_hours.keys()) - 1]
         del rounds_started_in_hours[len(rounds_started_in_hours.keys()) - 1]
@@ -1090,20 +1083,6 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
         cjplt.ax_available_utxos.set_ylabel('Number of txos')
         cjplt.ax_available_utxos.legend(loc='lower left')
         cjplt.ax_available_utxos.set_title(f'Number of txos available in wallets when given cjtx is starting (all transactions)\n{experiment_name}')
-
-    #
-    # Number of different wallets involved time
-    #
-    # Now redundant, moved to ax_num_inoutputs
-    # num_wallets_in_time_data = [coinjoins[cjtx['txid']]['num_wallets_involved'] for cjtx in sorted_cj_time]
-    # num_wallets_in_time_data_avg100 = sliding_window_average(num_wallets_in_time_data, 100)
-    # x = range(1, len(num_wallets_in_time_data))
-    # ax_num_participating_wallets.plot(num_wallets_in_time_data, label='Number of participating wallets')
-    # ax_num_participating_wallets.plot(x[100-2:], num_wallets_in_time_data_avg100, label='Number of participating wallets avg(100)', linewidth=3, color='red')
-    # ax_num_participating_wallets.set_xlabel('Coinjoin in time')
-    # ax_num_participating_wallets.set_ylabel('Number of wallets')
-    # ax_num_participating_wallets.legend()
-    # ax_num_participating_wallets.set_title(f'Number of wallets participating in coinjoin transaction (all transactions)\n{experiment_name}')
 
     #
     # Wallet efficiency in time
@@ -2321,15 +2300,6 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
                         wallets_info[wallet_name] = {}
                     else:
                         wallets_info[wallet_name] = {addr_data['address']: addr_data for addr_data in wallet_keys}
-
-                # Code below partially reconstruct wallet_addresses from parsed_coins,
-                # but now we can read directly 'keys.json' so no longer in use
-                # wallet_addresses = []
-                # for coin in parsed_coins:
-                #     json_representation = {"fullKeyPath": "", "internal": True, "keyState": 2, "label": "",
-                #                            "scriptPubKey": "", "pubkey": "", "pubKeyHash": "", "address": coin.address}
-                #     wallet_addresses.append(json_representation)
-                # wallets_info[wallet_name] = wallet_addresses
 
         # Sometimes, all_tx_db is not complete for all logged coinjoins
         # Create artificial record for some future time
