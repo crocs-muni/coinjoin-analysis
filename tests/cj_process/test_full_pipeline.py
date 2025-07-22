@@ -79,7 +79,7 @@ def test_run_cj_process_ww2():
     # Run initial processing
     #
     utils.run_parse_dumplings("ww2", "process_dumplings",
-                        f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
     # ASSERT
     assert_process_dumplings(extract_dir, 'wasabi2', 35, 9789, 9789,
@@ -99,7 +99,7 @@ def test_run_cj_process_ww2():
     # Run false positives detection
     #
     utils.run_parse_dumplings("ww2", "detect_false_positives",
-                        f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
     # ASSERT
     for coord in ["wasabi2"]:
@@ -131,10 +131,10 @@ def test_run_cj_process_ww2():
         shutil.copy(os.path.join(DATA, "wasabi2", "txid_coord_t.json"), os.path.join(target_dir, "txid_coord_t.json"))
 
     utils.run_parse_dumplings("ww2", "detect_coordinators",
-                        f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
     utils.run_parse_dumplings("ww2", "split_coordinators",
-                        f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
     # TODO: ASSERT 'txid_coord_discovered_renamed.json'
 
@@ -151,7 +151,7 @@ def test_run_cj_process_ww2():
     # Analyze liquidity
     #
     utils.run_parse_dumplings("ww2", None,
-                        f"ANALYSIS_LIQUIDITY=True;interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"ANALYSIS_LIQUIDITY=True;interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
     # ASSERT
 
@@ -179,13 +179,16 @@ def test_run_cj_process_ww2():
     # Plot some graphs
     #
     utils.run_parse_dumplings("ww2", "plot_coinjoins",
-                        f"PLOT_REMIXES_MULTIGRAPH=False;MIX_IDS=['wasabi2', 'wasabi2_others', 'wasabi2_zksnacks'];interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"PLOT_REMIXES_MULTIGRAPH=False;MIX_IDS=['wasabi2', 'wasabi2_others', 'wasabi2_zksnacks'];interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
+                        extract_dir)
+    utils.run_parse_dumplings("ww2", "plot_coinjoins",
+                        f"PLOT_REMIXES_MULTIGRAPH=True;MIX_IDS=['wasabi2', 'wasabi2_others', 'wasabi2_zksnacks'];interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
     # utils.run_parse_dumplings("ww2", "plot_coinjoins",
-    #                     f"PLOT_REMIXES_MULTIGRAPH=True;MIX_IDS=['wasabi2', 'wasabi2_others', 'wasabi2_zksnacks'];interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+    #                     f"PLOT_REMIXES_MULTIGRAPH=True;MIX_IDS=['wasabi2', 'wasabi2_others', 'wasabi2_zksnacks'];interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
     #                     extract_dir)
     utils.run_parse_dumplings("ww2", None,
-                        f"VISUALIZE_ALL_COINJOINS_INTERVALS=True;MIX_IDS=['wasabi2', 'wasabi2_others', 'wasabi2_zksnacks'];interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"VISUALIZE_ALL_COINJOINS_INTERVALS=True;MIX_IDS=['wasabi2', 'wasabi2_others', 'wasabi2_zksnacks'];interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
 
     # ASSERT
@@ -212,7 +215,7 @@ def test_run_cj_process_ww1():
     # Run initial processing
     #
     utils.run_parse_dumplings("ww1", "process_dumplings",
-                        f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
     # ASSERT
     assert_process_dumplings(extract_dir, 'wasabi1', 196, 26033, 26033,
@@ -229,7 +232,7 @@ def test_run_cj_process_ww1():
     # Run false positives detection
     #
     utils.run_parse_dumplings("ww1", "detect_false_positives",
-                        f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
     # ASSERT
     for coord in ["wasabi1"]:
@@ -255,9 +258,9 @@ def test_run_cj_process_ww1():
     #
     # Detect and split additional coordinators
     #
-    # utils.run_parse_dumplings("ww1", "detect_coordinators", f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}", extract_dir)
+    # utils.run_parse_dumplings("ww1", "detect_coordinators", f"interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'", extract_dir)
     utils.run_parse_dumplings("ww1", "split_coordinators",
-                        f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
     # TODO: ASSERT 'txid_coord_discovered_renamed.json'
 
@@ -281,7 +284,7 @@ def test_run_cj_process_ww1():
     # Analyze liquidity
     #
     utils.run_parse_dumplings("ww1", None,
-                        f"ANALYSIS_LIQUIDITY=True;interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"ANALYSIS_LIQUIDITY=True;interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
     # ASSERT
 
@@ -306,13 +309,13 @@ def test_run_cj_process_ww1():
     # Plot some graphs
     #
     utils.run_parse_dumplings("ww1", "plot_coinjoins",
-                        f"PLOT_REMIXES_MULTIGRAPH=False;MIX_IDS=['wasabi1', 'wasabi1_others', 'wasabi1_zksnacks'];interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"PLOT_REMIXES_MULTIGRAPH=False;MIX_IDS=['wasabi1', 'wasabi1_others', 'wasabi1_zksnacks'];interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
-    # utils.run_parse_dumplings("ww1", "plot_coinjoins",
-    #                     f"PLOT_REMIXES_MULTIGRAPH=True;MIX_IDS=['wasabi1', 'wasabi1_others', 'wasabi1_zksnacks'];interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
-    #                     extract_dir)
+    utils.run_parse_dumplings("ww1", "plot_coinjoins",
+                        f"PLOT_REMIXES_MULTIGRAPH=True;MIX_IDS=['wasabi1', 'wasabi1_others', 'wasabi1_zksnacks'];interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
+                        extract_dir)
     utils.run_parse_dumplings("ww1", None,
-                        f"VISUALIZE_ALL_COINJOINS_INTERVALS=True;MIX_IDS=['wasabi1', 'wasabi1_others', 'wasabi1_zksnacks'];interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"VISUALIZE_ALL_COINJOINS_INTERVALS=True;MIX_IDS=['wasabi1', 'wasabi1_others', 'wasabi1_zksnacks'];interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
 
     # ASSERT
@@ -339,7 +342,7 @@ def test_run_cj_process_jm():
     # Run initial processing
     #
     utils.run_parse_dumplings("jm", "process_dumplings",
-                        f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
     # ASSERT
     assert_process_dumplings(extract_dir, 'joinmarket_all', 51, 1676, 1676,
@@ -356,7 +359,7 @@ def test_run_cj_process_jm():
     # Run false positives detection
     #
     utils.run_parse_dumplings("jm", "detect_false_positives",
-                        f"interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
     # ASSERT
     for coord in ["joinmarket_all"]:
@@ -389,7 +392,7 @@ def test_run_cj_process_jm():
     # Analyze liquidity
     #
     utils.run_parse_dumplings("jm", None,
-                        f"ANALYSIS_LIQUIDITY=True;interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"ANALYSIS_LIQUIDITY=True;interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
     # ASSERT
     expected_results = {
@@ -410,13 +413,13 @@ def test_run_cj_process_jm():
     # Plot some graphs
     #
     utils.run_parse_dumplings("jm", "plot_coinjoins",
-                        f"PLOT_REMIXES_MULTIGRAPH=False;interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"PLOT_REMIXES_MULTIGRAPH=False;interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
-    # utils.run_parse_dumplings("ww1", "plot_coinjoins",
-    #                     f"PLOT_REMIXES_MULTIGRAPH=True;MIX_IDS=['wasabi1', 'wasabi1_others', 'wasabi1_zksnacks'];interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
-    #                     extract_dir)
+    utils.run_parse_dumplings("jm", "plot_coinjoins",
+                        f"PLOT_REMIXES_MULTIGRAPH=True;interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
+                        extract_dir)
     utils.run_parse_dumplings("jm", None,
-                        f"VISUALIZE_ALL_COINJOINS_INTERVALS=True;interval_start_date={interval_start_date};interval_stop_date={interval_stop_date}",
+                        f"VISUALIZE_ALL_COINJOINS_INTERVALS=True;interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
                         extract_dir)
 
     # ASSERT

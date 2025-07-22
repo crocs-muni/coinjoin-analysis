@@ -3639,7 +3639,7 @@ def analyze_liquidity_summary(mix_protocol, target_path: str):
     if mix_protocol == CoinjoinType.SW:
         pools_default = WHIRLPOOL_POOL_NAMES_ALL
         # Force MIX_IDS subset if required
-        pools = pools_default if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+        pools = pools_default if op.MIX_IDS == "" else op.MIX_IDS
         for mix_id in pools:
             data = als.load_coinjoins_from_file(os.path.join(target_path, mix_id), None, True)
             SM.print(f'{mix_id}')
@@ -4046,15 +4046,15 @@ class DumplingsParseOptions:
                     key, value = map(str.strip, item.split("=", 1))  # Split and strip spaces
 
                     try:
-                        if not isinstance(value, str):
-                            value = ast.literal_eval(value)  # Safely evaluate literals
-                        if hasattr(self, key):  # Only set existing attributes
-                            setattr(self, key, value)
-                        else:
-                            logging.warning(f"'{item}' command line is not a recognized attribute and will be ignored.")
+                        value = ast.literal_eval(value)  # Try to evaluate the value (e.g., bool, list, int)
                     except (ValueError, SyntaxError):
-                        logging.warning(f"Unable to parse value '{value}' for key '{key}', ignored.")
+                        logging.warning(f"Unable to parse value '{value}' for key '{key}', using raw string.")
+                        value = value  # Fallback: use the original string as-is
 
+                    if hasattr(self, key):  # Only set existing attributes
+                        setattr(self, key, value)
+                    else:
+                        logging.warning(f"'{item}' command line is not a recognized attribute and will be ignored.")
     def default_values(self):
         self.DEBUG = False
         self.CJ_TYPE = CoinjoinType.WW2
@@ -4753,7 +4753,7 @@ def main(argv=None):
 
             mix_ids_default = WHIRLPOOL_POOL_NAMES_ALL
             # Force MIX_IDS subset if required
-            mix_ids = mix_ids_default if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            mix_ids = mix_ids_default if op.MIX_IDS == "" else op.MIX_IDS
             # Split and process Whirlpool-based on pools
             for mix_id in mix_ids:
                 whirlpool_extract_pool(all_data, 'whirlpool', target_path, mix_id, WHIRLPOOL_POOL_SIZES[mix_id])
@@ -4780,7 +4780,7 @@ def main(argv=None):
             free_memory(data)
 
             # Force MIX_IDS subset if required
-            mix_ids = split_pool_info.keys() if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            mix_ids = split_pool_info.keys() if op.MIX_IDS == "" else op.MIX_IDS
 
             # WW2 needs additional treatment - detect and fix origin of WW1 inflows as friends
             # Do first separated pools, then the original (large) unseparated one
@@ -4821,25 +4821,25 @@ def main(argv=None):
     if op.VISUALIZE_ALL_COINJOINS_INTERVALS:
         if op.CJ_TYPE == CoinjoinType.SW:
             interval_start_date = '2019-04-17 01:38:07.000' if op.interval_start_date == "" else op.interval_start_date
-            mix_ids = ['whirlpool'] if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            mix_ids = ['whirlpool'] if op.MIX_IDS == "" else op.MIX_IDS
             for mix_id in mix_ids:
                 visualize_intervals(mix_id, target_path, interval_start_date, op.interval_stop_date)
 
         if op.CJ_TYPE == CoinjoinType.WW1:
             interval_start_date = '2018-07-19 01:38:07.000' if op.interval_start_date == "" else op.interval_start_date
-            mix_ids = ['wasabi1'] if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            mix_ids = ['wasabi1'] if op.MIX_IDS == "" else op.MIX_IDS
             for mix_id in mix_ids:
                 visualize_intervals(mix_id, target_path, interval_start_date, op.interval_stop_date)
 
         if op.CJ_TYPE == CoinjoinType.WW2:
             interval_start_date = '2022-06-01 00:00:07.000' if op.interval_start_date == "" else op.interval_start_date
-            mix_ids = ['wasabi2', 'wasabi2_zksnacks'] if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            mix_ids = ['wasabi2', 'wasabi2_zksnacks'] if op.MIX_IDS == "" else op.MIX_IDS
             for mix_id in mix_ids:
                 visualize_intervals(mix_id, target_path, interval_start_date, op.interval_stop_date)
 
         if op.CJ_TYPE == CoinjoinType.JM:
             interval_start_date = '2015-01-01 00:00:00.000' if op.interval_start_date == "" else op.interval_start_date
-            mix_ids = ['joinmarket_all'] if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            mix_ids = ['joinmarket_all'] if op.MIX_IDS == "" else op.MIX_IDS
             for mix_id in mix_ids:
                 visualize_intervals(mix_id, target_path, interval_start_date, op.interval_stop_date)
 
@@ -4853,7 +4853,7 @@ def main(argv=None):
         if op.CJ_TYPE == CoinjoinType.SW:
             mix_ids_default = WHIRLPOOL_POOL_NAMES_ALL
             # Force MIX_IDS subset if required
-            mix_ids = mix_ids_default if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            mix_ids = mix_ids_default if op.MIX_IDS == "" else op.MIX_IDS
             for mix_id in mix_ids:
                 wasabi_detect_false(os.path.join(target_path, mix_id), 'coinjoin_tx_info.json')
 
@@ -4873,7 +4873,7 @@ def main(argv=None):
             selected_coords_default = ["kruw", "mega", "btip", "gingerwallet", "wasabicoordinator", "coinjoin_nl",
                                "opencoordinator", "dragonordnance", "wasabist", "strange_2025"]
             # Force MIX_IDS subset if required
-            selected_coords = selected_coords_default if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            selected_coords = selected_coords_default if op.MIX_IDS == "" else op.MIX_IDS
 
             split_pool_info = wasabi2_extract_other_pools(selected_coords, data, target_path, op.interval_stop_date, coord_tx_mapping)
             # Perform splitting into month intervals for all processed coordinators
@@ -4891,7 +4891,7 @@ def main(argv=None):
             coord_tx_mapping = None
             selected_coords_default = ['zksnacks', 'mystery', 'others']
             # Force MIX_IDS subset if required
-            selected_coords = selected_coords_default if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            selected_coords = selected_coords_default if op.MIX_IDS == "" else op.MIX_IDS
 
             interval_start_date = '2018-07-19 01:38:07.000' if op.interval_start_date == "" else op.interval_start_date
             split_pool_info = wasabi1_extract_other_pools(selected_coords, data, target_path, interval_start_date, op.interval_stop_date, coord_tx_mapping)
@@ -4937,7 +4937,7 @@ def main(argv=None):
     if op.PLOT_REMIXES:
         def ww_plot_remixes_helper(mix_ids_default: list, mix_protocol):
             # Force MIX_IDS subset if required
-            mix_ids = mix_ids_default if op.MIX_IDS == "" else ast.literal_eval(op.MIX_IDS)
+            mix_ids = mix_ids_default if op.MIX_IDS == "" else op.MIX_IDS
             logging.info(f'Going to process following mixes: {mix_ids}')
             for mix_id in mix_ids:
                 target_base_path = os.path.join(target_path, mix_id)
