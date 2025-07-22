@@ -87,16 +87,10 @@ def load_json_from_file(file_path: str) -> dict:
     with open(file_path, "rb") as file:
         return orjson.loads(file.read())
 
-    # with open(file_path, "r") as file:
-    #     return json.load(file)
-
 
 def save_json_to_file(file_path: str, data: dict):
     with open(file_path, "wb") as file:
         file.write(orjson.dumps(data))
-
-    # with open(file_path, "w") as file:
-    #     file.write(json.dumps(dict(sorted(data.items())), indent=4))
 
 
 def save_json_to_file_pretty(file_path: str, data: dict, sort: bool = False):
@@ -168,7 +162,7 @@ def detect_specific_cj_denoms(coinjoins: dict, specific_denoms_list: list, min_t
         if len(result) > 0 and max(result.values()) >= min_times_most_frequent_denom and min(out_counts.values()) == exact_times_least_frequent_denom:
             specific_denoms['specific_denoms'][cjtx] = coinjoins[cjtx]['broadcast_time']
 
-    logging.warning(f'Txs with specific input/output values: {specific_denoms["specific_denoms"]}')
+    #logging.warning(f'Txs with specific input/output values: {specific_denoms["specific_denoms"]}')
     return specific_denoms
 
 
@@ -868,7 +862,7 @@ def recompute_enter_remix_liquidity_after_removed_cjtxs(coinjoins, mix_protocol:
                     coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] = 0
 
 
-def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins:dict = None, ww1_postmix_spend:dict = None, warn_if_not_found_in_postmix:bool = True):
+def analyze_input_out_liquidity(target_path: str, coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins:dict = None, ww1_postmix_spend:dict = None, warn_if_not_found_in_postmix:bool = True):
     """
     Requires performance speedup, will not finish (after 8 hours) for Whirlpool with very large number of coins
     :param coinjoins:
@@ -1046,7 +1040,7 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
     difference_counts = dict(Counter(broadcast_reorder_times_diff_mins))
     print(f'Broadcast time differences: {difference_counts}')
     difference_counts_str = {str(key): item for key, item in difference_counts.items()}
-    save_json_to_file('tx_reordering_stats.json', difference_counts_str)
+    save_json_to_file(os.path.join(target_path, 'tx_reordering_stats.json'), difference_counts_str)
 
     # Print summary results
     print_liquidity_summary(coinjoins, '')
@@ -1576,6 +1570,9 @@ def load_coinjoins_from_file(target_load_path: str, false_cjtxs: dict, filter_fa
     logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
     data = load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
 
+    non_cjtxs_keys = [cjtx for cjtx in data['coinjoins'].keys() if not data['coinjoins'][cjtx]['is_cjtx']]
+    assert len(non_cjtxs_keys) == 0, f'Coinjoin list contains {len(non_cjtxs_keys)} unexpected non-coinjoin transactions, e.g., {non_cjtxs_keys[0]} '
+
     if PERF_USE_COMPACT_CJTX_STRUCTURE:
         logging.warning(f'IMPORTANT: PERF_USE_COMPACT_CJTX_STRUCTURE==True => compacting in-memory data structure')
         streamline_coinjoins_structure(data)
@@ -1632,35 +1629,6 @@ def get_address(script_hex: str):
     address = output.address
 
     return address, output.script_type
-
-# WORKS, but only for limited script types
-# def get_address_legacy(script: str, script_type: str):
-#     try:
-#         SelectParams('mainnet')
-#         if script_type.strip().lower() == 'unknown':
-#             return None
-#
-#         scriptPubKey = CScript(x(script))
-#
-#         if script_type == 'TxWitnessV0Keyhash':
-#             return str(P2WPKHBitcoinAddress.from_scriptPubKey(scriptPubKey))
-#
-#         if script_type == 'Unknown':
-#             return str(P2WSHBitcoinAddress.from_scriptPubKey(scriptPubKey))
-#
-#         if script_type == 'TxScripthash':
-#             if (len(scriptPubKey) == 3 and
-#                     scriptPubKey[0] == OP_HASH160 and
-#                     scriptPubKey[2] == OP_EQUAL):
-#                 hash160 = scriptPubKey[1]
-#                 return str(P2SHBitcoinAddress.from_scriptPubKey(hash160))
-#
-#         # If no previous types were hit, return default type
-#         return str(P2WPKHBitcoinAddress.from_scriptPubKey(scriptPubKey))
-#
-#     except CBitcoinAddressError as e:
-#         logging.error(f'{script_type}: {e}')
-#         return None
 
 
 def detect_bybit_hack(target_path: str, interval: str, bybit_hack_addresses: dict):
