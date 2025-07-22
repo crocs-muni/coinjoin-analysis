@@ -1147,7 +1147,7 @@ def process_coinjoins(target_path, mix_protocol: MIX_PROTOCOL, mix_filename, pos
     SM.print(f'Dates from {min_date} to {max_date}')
 
     SM.print('### Simple chain analysis')
-    cj_relative_order = als.analyze_input_out_liquidity(data["coinjoins"], data['postmix'], data.get('premix', {}), mix_protocol)
+    cj_relative_order = als.analyze_input_out_liquidity(target_path, data["coinjoins"], data['postmix'], data.get('premix', {}), mix_protocol)
 
     analyze_postmix_spends(data)
     analyze_premix_spends(data)
@@ -1996,7 +1996,7 @@ def whirlpool_analyze_coordinator_fees(mix_id: str, data: dict):
 
 def whirlpool_analyse_remixes(mix_id: str, target_path: str):
     data = als.load_coinjoins_from_file(os.path.join(target_path, mix_id), None, True)
-    als.analyze_input_out_liquidity(data["coinjoins"], data['postmix'], data['premix'], MIX_PROTOCOL.WHIRLPOOL)
+    als.analyze_input_out_liquidity(target_path, data["coinjoins"], data['postmix'], data['premix'], MIX_PROTOCOL.WHIRLPOOL)
     whirlpool_analyze_fees(mix_id, data)
     inputs_value_burntime_heatmap(mix_id, data)
     burntime_histogram(mix_id, data)
@@ -2004,7 +2004,7 @@ def whirlpool_analyse_remixes(mix_id: str, target_path: str):
 
 def wasabi2_analyse_remixes(mix_id: str, target_path: str):
     data = als.load_coinjoins_from_file(os.path.join(target_path, mix_id), None, False)
-    cj_relative_order = als.analyze_input_out_liquidity(data["coinjoins"], data['postmix'], [], MIX_PROTOCOL.WASABI2)
+    cj_relative_order = als.analyze_input_out_liquidity(target_path, data["coinjoins"], data['postmix'], [], MIX_PROTOCOL.WASABI2)
     als.save_json_to_file_pretty(os.path.join(target_path, mix_id, f'cj_relative_order.json'), cj_relative_order)
 
     wasabi2_analyze_fees(mix_id, data)
@@ -2565,7 +2565,7 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
 
 def wasabi1_analyse_remixes(mix_id: str, target_path: str):
     data = als.load_coinjoins_from_file(os.path.join(target_path, mix_id), None, False)
-    als.analyze_input_out_liquidity(data["coinjoins"], data['postmix'], [], MIX_PROTOCOL.WASABI1)
+    als.analyze_input_out_liquidity(target_path, data["coinjoins"], data['postmix'], [], MIX_PROTOCOL.WASABI1)
 
     wasabi1_analyze_fees(mix_id, data)
     inputs_value_burntime_heatmap(mix_id, data)
@@ -3133,7 +3133,7 @@ def wasabi2_recompute_inputs_outputs_other_pools(selected_coords: list, target_p
         target_save_path = os.path.join(target_path, coord_full_name)
         data = als.load_coinjoins_from_file(target_save_path, None, False)
 
-        als.analyze_input_out_liquidity(data["coinjoins"], data.get('postmix', {}), data.get('premix', {}),
+        als.analyze_input_out_liquidity(target_path, data["coinjoins"], data.get('postmix', {}), data.get('premix', {}),
                                         mix_protocol, None, None, False)
 
         als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), data)

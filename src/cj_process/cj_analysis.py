@@ -862,7 +862,7 @@ def recompute_enter_remix_liquidity_after_removed_cjtxs(coinjoins, mix_protocol:
                     coinjoins[cjtx]['outputs'][output]['burn_time_cjtxs'] = 0
 
 
-def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins:dict = None, ww1_postmix_spend:dict = None, warn_if_not_found_in_postmix:bool = True):
+def analyze_input_out_liquidity(target_path: str, coinjoins, postmix_spend, premix_spend, mix_protocol: MIX_PROTOCOL, ww1_coinjoins:dict = None, ww1_postmix_spend:dict = None, warn_if_not_found_in_postmix:bool = True):
     """
     Requires performance speedup, will not finish (after 8 hours) for Whirlpool with very large number of coins
     :param coinjoins:
@@ -1040,7 +1040,7 @@ def analyze_input_out_liquidity(coinjoins, postmix_spend, premix_spend, mix_prot
     difference_counts = dict(Counter(broadcast_reorder_times_diff_mins))
     print(f'Broadcast time differences: {difference_counts}')
     difference_counts_str = {str(key): item for key, item in difference_counts.items()}
-    save_json_to_file('tx_reordering_stats.json', difference_counts_str)
+    save_json_to_file(os.path.join(target_path, 'tx_reordering_stats.json'), difference_counts_str)
 
     # Print summary results
     print_liquidity_summary(coinjoins, '')
