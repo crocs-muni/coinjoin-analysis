@@ -3,5 +3,8 @@ Scripts/__pycache__/
 .idea/
 
 src/Scripts_untracked/
+src/coinjoin_analysis.egg-info/
 
 build/
+
+scripts/upload_results.sh

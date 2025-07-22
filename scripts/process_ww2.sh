@@ -72,9 +72,3 @@ python3 -m cj_process.parse_dumplings --cjtype ww2 --target-path $TMP_DIR/ --env
 
 
 
-#
-# Run check for created files
-#
-python3 -m cj_process.file_check $TMP_DIR/Scanner/  | tee parse_dumplings.py.log
-
-
