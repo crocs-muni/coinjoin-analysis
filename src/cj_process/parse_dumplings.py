@@ -529,7 +529,7 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
         SM.print(f'  Filtered false positives based on >2 & <5 & no_ref heuristic: {len(false_cjtxs_min5)}')
         SM.print(f'  Candidate false positives returned back to coinjoins based on reference heuristics: {initial_candidate_false_positives - len(false_cjtxs_min5)}')
 
-    SM.print(f'  Total detected coinjoins: {len(data['coinjoins'])}')
+    SM.print(f"  Total detected coinjoins: {len(data['coinjoins'])}")
 
     # Move false positives coinjoins into potential postmix
     data['postmix'].update(false_cjtxs)
