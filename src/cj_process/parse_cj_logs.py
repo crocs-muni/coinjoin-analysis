@@ -6,14 +6,14 @@ import shutil
 import subprocess
 import json
 import sys
-import wcli
+import emulation.wcli as wcli
 from graphviz import Digraph
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 import os.path
 from enum import Enum
 sys.path.append('boltzmann/boltzmann/')
@@ -24,9 +24,9 @@ from decimal import Decimal
 import jsonpickle
 from multiprocessing.pool import ThreadPool, Pool
 from tqdm import tqdm
-import anonymity_score
 # import bitcoinlib.transactions
 # from bitcoinlib.transactions import Transaction
+import emulation.anonymity_score as anonymity_score
 import cj_analysis as als
 from cj_analysis import MIX_PROTOCOL
 from cj_analysis import CJ_LOG_TYPES
