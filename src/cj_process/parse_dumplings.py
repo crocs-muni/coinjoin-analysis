@@ -81,9 +81,9 @@ class CJ_TX_CHECK(IntFlag):
     OP_RETURN                   = auto()
     MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS = auto()
     # Basic always enforced rules
-    BASIC = INOUTS_RATIO_THRESHOLD | NUM_INOUT_THRESHOLD | ADDRESS_REUSE_THRESHOLD | OP_RETURN
+    BASIC = INOUTS_RATIO_THRESHOLD | NUM_INOUT_THRESHOLD | ADDRESS_REUSE_THRESHOLD | OP_RETURN | MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS
     # All defined rules
-    ALL = BASIC | MIN_SAME_VALUES_THRESHOLD | MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS
+    ALL = BASIC | MIN_SAME_VALUES_THRESHOLD
 
 CJ_TX_CHECK_JOINMARKET_DEFAULTS = {
     CJ_TX_CHECK.INOUTS_RATIO_THRESHOLD: 4,      # 4 times more of inputs or outputs
@@ -318,6 +318,7 @@ def compute_mix_postmix_link(data: dict):
 
     return data
 
+
 def detect_false_coinjoins(data, mix_protocol, checks: CJ_TX_CHECK=CJ_TX_CHECK.BASIC, checks_params=None):
     checks_params = {} if checks_params is None else checks_params
 
@@ -527,6 +528,8 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
         false_cjtxs.update(false_cjtxs_min5)
         SM.print(f'  Filtered false positives based on >2 & <5 & no_ref heuristic: {len(false_cjtxs_min5)}')
         SM.print(f'  Candidate false positives returned back to coinjoins based on reference heuristics: {initial_candidate_false_positives - len(false_cjtxs_min5)}')
+
+    SM.print(f'  Total detected coinjoins: {len(data['coinjoins'])}')
 
     # Move false positives coinjoins into potential postmix
     data['postmix'].update(false_cjtxs)
