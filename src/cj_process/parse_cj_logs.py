@@ -1710,12 +1710,12 @@ def analyze_aggregated_coinjoin_stats(multi_cjtx_stats, base_path):
     # Average anonscore for different base parameter (number of wallets participating)
     visualize_scatter_num_wallets_weighted(ax1, multi_cjtx_stats, 'wallets_anonscore_histogram_avg', np.median,
                                            False, 'Number of wallets in mix', 'Median anonscore',
-                                  f'Dependency of {'wallets_anonscore_histogram_avg'} on number of wallets')
+                                  f"Dependency of {'wallets_anonscore_histogram_avg'} on number of wallets")
 
     # DONE: Histogram of number of wallets participating in coinjoins (normalized)
     weighted_wallets_participating(ax4, multi_cjtx_stats, 'coinjoin_number_different_wallets', sum,
                                            True, 'Number of wallets in mix', 'Fraction of different wallets in coinjoins',
-                                           f'Dependency of {'coinjoin_number_different_wallets'} on number of wallets')
+                                           f"Dependency of {'coinjoin_number_different_wallets'} on number of wallets")
 
     #
     # Absolute number computations FUNCT[data[data_index]]
@@ -1725,32 +1725,32 @@ def analyze_aggregated_coinjoin_stats(multi_cjtx_stats, base_path):
     # DONE: Number of coinjoins finished for different base parameter (number of wallets participating)
     visualize_scatter_num_wallets(ax2, multi_cjtx_stats, 'coinjoins_finished_all',
                                   1, sum, False, False, 'Number of wallets in mix', 'Number of coinjoins',
-                                  f'Dependency of {'coinjoins_finished_all'} on number of wallets')
+                                  f"Dependency of {'coinjoins_finished_all'} on number of wallets")
 
     # DONE: Number of utxos in prison
     visualize_scatter_num_wallets(ax3, multi_cjtx_stats, 'utxos_in_prison',
                                   1, sum, False, False, 'Number of wallets in mix', 'Number of utxos in prison',
-                                  f'Dependency of {'utxos_in_prison'} on number of wallets')
+                                  f"Dependency of {'utxos_in_prison'} on number of wallets")
 
     # Median frequency a wallet was used in mix
     visualize_scatter_num_wallets(ax5, multi_cjtx_stats, 'wallets_times_used_as_input',
                                   1, np.median, True, True, 'Number of wallets in mix', 'Fraction of participation',
-                                  f'Dependency of {'wallets_times_used_as_input'} on number of wallets')
+                                  f"Dependency of {'wallets_times_used_as_input'} on number of wallets")
 
     # Average number of inputs into cjtxs
     visualize_scatter_num_wallets(ax6, multi_cjtx_stats, 'coinjoin_number_inputs_in_time',
                                   1, sum, True, False, 'Number of wallets in mix', 'Number of inputs of cjtx',
-                                  f'Dependency of {'coinjoin_number_inputs_in_time'} (average number of inputs) on number of wallets')
+                                  f"Dependency of {'coinjoin_number_inputs_in_time'} (average number of inputs) on number of wallets")
 
     # Average number of outputs into cjtxs
     visualize_scatter_num_wallets(ax7, multi_cjtx_stats, 'coinjoin_number_outputs_in_time',
                                   1, sum, True, False, 'Number of wallets in mix', 'Number of outputs of cjtx',
-                                  f'Dependency of {'coinjoin_number_outputs_in_time'} (average number of outputs) on number of wallets')
+                                  f"Dependency of {'coinjoin_number_outputs_in_time'} (average number of outputs) on number of wallets")
 
     # Average entropy of coinjoins
     visualize_scatter_num_wallets(ax8, multi_cjtx_stats, 'coinjoin_utxos_entropy_in_time',
                                   1, sum, True, False, 'Number of wallets in mix', 'Entropy',
-                                  f'Dependency of {'coinjoin_utxos_entropy_in_time'} (average entropy of coinjoin round) on number of wallets')
+                                  f"Dependency of {'coinjoin_utxos_entropy_in_time'} (average entropy of coinjoin round) on number of wallets")
 
     # coinjoin_txos_entropy_in_time
 
@@ -2127,7 +2127,7 @@ def visualize_coinjoins(cjtx_stats, base_path='', output_name='coinjoin_graph', 
 
 
 def get_input_name_string(input):
-    return f'vin_{input[0]}_{input[1]['vin']}'
+    return f"vin_{input[0]}_{input[1]['vin']}"
 
 
 def extract_txid_from_inout_string(inout_string):
