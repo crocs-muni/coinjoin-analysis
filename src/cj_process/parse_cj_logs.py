@@ -1829,6 +1829,7 @@ def joinmarket_parse_coinjoin_logs(base_path: str, raw_tx_db: dict = {}):
             tx_record['round_start_time'] = all_coinjoins[cjtxid]['timestamp']  # BUGBUG: bad round start time, needs to be extracted from logs better
             tx_record['broadcast_time'] = all_coinjoins[cjtxid]['timestamp']
             tx_record['is_blame_round'] = False
+            tx_record['is_cjtx'] = True
             cjtx_stats[cjtxid] = tx_record
         else:
             print('ERROR: decoding transaction for tx={}'.format(cjtxid))
@@ -1887,6 +1888,7 @@ def parse_backend_coinjoin_logs(coord_input_file, raw_tx_db: dict = {}):
             tx_record['round_start_time'] = start_round_ids[round_id][0]['timestamp']
             tx_record['broadcast_time'] = success_coinjoin_round_ids[round_id][0]['timestamp']
             tx_record['is_blame_round'] = True if round_id in start_blame_rounds_id.keys() else False
+            tx_record['is_cjtx'] = True
             cjtx_stats[cjtxid] = tx_record
         else:
             print('ERROR: decoding transaction for tx={} (round id={})'.format(round_cjtx_mapping[round_id], round_id))
