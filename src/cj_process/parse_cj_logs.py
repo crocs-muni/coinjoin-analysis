@@ -1,3 +1,4 @@
+import ast
 import csv
 import math
 import random
@@ -21,9 +22,9 @@ import jsonpickle
 from multiprocessing.pool import ThreadPool
 from tqdm import tqdm
 import emulation.anonymity_score as anonymity_score
-import cj_analysis as als
-from cj_analysis import MIX_PROTOCOL
-from cj_analysis import CJ_LOG_TYPES
+import cj_process.cj_analysis as als
+from cj_process.cj_analysis import MIX_PROTOCOL
+from cj_process.cj_analysis import CJ_LOG_TYPES
 import logging
 import argparse
 
@@ -42,7 +43,6 @@ UNKNOWN_WALLET_STRING = 'UNKNOWN'
 COORDINATOR_WALLET_STRING = 'Coordinator'
 PRINT_COLLATED_COORD_CLIENT_LOGS = False
 INSERT_WALLET_NODES = False
-ASSUME_COORDINATOR_WALLET = False
 VERBOSE = False
 NUM_THREADS = 1
 SATS_IN_BTC = 100000000
@@ -252,7 +252,7 @@ def graphviz_insert_wallet(wallet_name, graphdot):
         graphdot.attr('node', fontsize='20')
         graphdot.attr('node', id=wallet_name)
         graphdot.attr('node', label='{}'.format(wallet_name))
-        graphdot.node() if GENERATE_COINJOIN_GRAPH_BLIND else graphdot.node(wallet_name)
+        graphdot.node() if op.GENERATE_COINJOIN_GRAPH_BLIND else graphdot.node(wallet_name)
 
 
 def graphviz_insert_address(addr, fill_color, graphdot):
@@ -265,7 +265,7 @@ def graphviz_insert_address(addr, fill_color, graphdot):
     graphdot.attr('node', style='filled')
     graphdot.attr('node', fontsize='20')
     graphdot.attr('node', id=addr)
-    if not GENERATE_COINJOIN_GRAPH_BLIND:
+    if not op.GENERATE_COINJOIN_GRAPH_BLIND:
         graphdot.attr('node', label='{}'.format(addr))
     graphdot.node(addr)
 
@@ -299,7 +299,7 @@ def graphviz_insert_cjtxid(coinjoin_tx, graphdot):
     else:
         graphdot.attr('node', label='coinjoin tx:\n{}\n{}\n{}\ntx_entropy={}\nnum_dlinks={}'.format(cjtxid, coinjoin_tx['broadcast_time'],
                                                                  coinjoin_tx['broadcast_time'], tx_entropy_str, num_dlinks))
-    if GENERATE_COINJOIN_GRAPH_BLIND:
+    if op.GENERATE_COINJOIN_GRAPH_BLIND:
         graphdot.attr('node', label='')
     graphdot.node(cjtxid)
 
@@ -331,7 +331,7 @@ def prepare_node_attribs(coinjoin_txid, addr, value_size):
 def graphviz_insert_address_cjtx_mapping(addr, coinjoin_txid, value_size, edge_color, vin_index, graphdot):
     coinjoin_txid, addr, width = prepare_node_attribs(coinjoin_txid, addr, value_size)
     label = "{}{:.8f}₿".format('[{}] '.format(vin_index), value_size if value_size > 0 else '')
-    if GENERATE_COINJOIN_GRAPH_BLIND:
+    if op.GENERATE_COINJOIN_GRAPH_BLIND:
         label = ''
     graphdot.edge(addr, coinjoin_txid, color=edge_color, label=label, style='solid', penwidth=width) \
 
@@ -340,7 +340,7 @@ def graphviz_insert_cjtx_address_mapping(coinjoin_txid, addr, value_size, entrop
     coinjoin_txid, addr, width = prepare_node_attribs(coinjoin_txid, addr, value_size)
     label = "{}{:.8f}₿".format('[{}] '.format(vout_index), value_size if value_size > 0 else '')
     label += " e={}".format(round(entropy, 1)) if entropy > 0 else ''
-    if GENERATE_COINJOIN_GRAPH_BLIND:
+    if op.GENERATE_COINJOIN_GRAPH_BLIND:
         label = ''
     graphdot.edge(coinjoin_txid, addr, color=edge_color, style='solid', label=label, penwidth=width)
 
@@ -2114,7 +2114,7 @@ def visualize_coinjoins(cjtx_stats, base_path='', output_name='coinjoin_graph', 
     for cjtxid in sorted_cjs:
         # Visualize into large connected graph
         visualize_cjtx_graph(cjtx_stats['coinjoins'], cjtxid, address_wallet_mapping, dot2)
-        if GENERATE_COINJOIN_GRAPH_LINEAR and prev_cjtxid:
+        if op.GENERATE_COINJOIN_GRAPH_LINEAR and prev_cjtxid:
             dot2.edge(prepare_display_cjtxid(prev_cjtxid), prepare_display_cjtxid(cjtxid), constraint='true')
         prev_cjtxid = cjtxid
 
@@ -2125,10 +2125,6 @@ def visualize_coinjoins(cjtx_stats, base_path='', output_name='coinjoin_graph', 
 
 def get_input_name_string(input):
     return f'vin_{input[0]}_{input[1]['vin']}'
-
-
-def get_output_name_string(output):
-    return get_output_name_string(output[1]['txid'], output[1]['vout'])
 
 
 def extract_txid_from_inout_string(inout_string):
@@ -2245,7 +2241,7 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
         # Load wallets info via WasabiWallet RPC
         wallets_info, wallets_coins_all, wallet_coins_unspent = load_wallets_info()
         # Save wallets info into json
-        if not READ_ONLY_COINJOIN_TX_INFO:
+        if not op.READ_ONLY_COINJOIN_TX_INFO:
             print("Saving current wallets into {}".format(wallets_file))
             with open(wallets_file, "w") as file:
                 file.write(json.dumps(dict(sorted(wallets_info.items())), indent=4))
@@ -2557,7 +2553,7 @@ def process_experiment(args):
     SM.print(f'INPUT PATH: {base_path}')
     save_file = os.path.join(WASABIWALLET_DATA_DIR, "coinjoin_tx_info.json")
     save_file_stats = os.path.join(WASABIWALLET_DATA_DIR, "coinjoin_tx_info_stats.json")
-    if LOAD_TXINFO_FROM_FILE:
+    if op.LOAD_TXINFO_FROM_FILE:
         # Load parsed coinjoin transactions again
         with open(save_file, "r") as file:
             cjtx_stats = json.load(file)
@@ -2565,12 +2561,12 @@ def process_experiment(args):
         # Build mapping between address and controlling wallet
         if 'address_wallet_mapping' not in cjtx_stats.keys():
             cjtx_stats['address_wallet_mapping'] = build_address_wallet_mapping(cjtx_stats)
-            if not READ_ONLY_COINJOIN_TX_INFO:
+            if not op.READ_ONLY_COINJOIN_TX_INFO:
                 with open(save_file, "w") as file:
                     file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
     else:
         # Load transaction info from serialized files
-        if LOAD_TXINFO_FROM_DOCKER_FILES:
+        if op.LOAD_TXINFO_FROM_DOCKER_FILES:
             # Load tx from logs stored by Bitcoin fullnode - all transactions available
             tx_path = os.path.join(base_path, 'data', 'btc-node')
             RAW_TXS_DB = load_tx_database_from_btccore(tx_path)
@@ -2583,7 +2579,7 @@ def process_experiment(args):
         # Load wallets info
         cjtx_stats = {}
         cjtx_stats['wallets_info'], cjtx_stats['wallets_coins'] = (
-            obtain_wallets_info(WASABIWALLET_DATA_DIR, LOAD_WALLETS_INFO_VIA_RPC, LOAD_TXINFO_FROM_DOCKER_FILES, RAW_TXS_DB))
+            obtain_wallets_info(WASABIWALLET_DATA_DIR, op.LOAD_WALLETS_INFO_VIA_RPC, op.LOAD_TXINFO_FROM_DOCKER_FILES, RAW_TXS_DB))
 
         # Parse conjoins from logs
         # Case 1: Local WalletWasabi folder
@@ -2603,18 +2599,18 @@ def process_experiment(args):
         cjtx_stats['address_wallet_mapping'] = build_address_wallet_mapping(cjtx_stats)
 
         # Assume coordinator for all 32B addresses
-        if ASSUME_COORDINATOR_WALLET:
+        if op.ASSUME_COORDINATOR_WALLET:
             cjtx_stats = fix_coordinator_wallet_addresses(cjtx_stats)
 
         # Analyze error states
-        if PARSE_ERRORS:
+        if op.PARSE_ERRORS:
             coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'WalletWasabi/Backend/Logs.txt')
             if not os.path.exists(coord_input_file):  # if not found, try dockerized path
                 coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'data', 'wasabi-backend', 'backend', 'Logs.txt')
             parse_coinjoin_errors(cjtx_stats, coord_input_file)
 
         # Save parsed coinjoin transactions info into json
-        if not READ_ONLY_COINJOIN_TX_INFO:
+        if not op.READ_ONLY_COINJOIN_TX_INFO:
             with open(save_file, "w") as file:
                 file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
@@ -2623,20 +2619,20 @@ def process_experiment(args):
     updated_cjtx_stats |= optimize_txvalue_info(cjtx_stats)
     if updated_cjtx_stats is True:
         # Save optimized coinjoin transactions info into json
-        if not READ_ONLY_COINJOIN_TX_INFO:
+        if not op.READ_ONLY_COINJOIN_TX_INFO:
             with open(save_file, "w") as file:
                 file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
     # Assume coordinator for all 32B addresses
-    if ASSUME_COORDINATOR_WALLET:
+    if op.ASSUME_COORDINATOR_WALLET:
         cjtx_stats = fix_coordinator_wallet_addresses(cjtx_stats)
         print('Potential coordinator addresses recomputed, saving...', end='')
-        if not READ_ONLY_COINJOIN_TX_INFO:
+        if not op.READ_ONLY_COINJOIN_TX_INFO:
             with open(save_file, "w") as file:
                 file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
         print('done')
 
-    if LOAD_COMPUTED_TRANSACTION_INFO:
+    if op.LOAD_COMPUTED_TRANSACTION_INFO:
         # if available, use already computed tx entropy analysis
         #   (expected files 'tx_analysis_cjtxid'.json in 'tx' folder)
         tx_info_path = os.path.join(WASABIWALLET_DATA_DIR, "tx")
@@ -2653,7 +2649,7 @@ def process_experiment(args):
                     cjtx_stats['coinjoins'][cjtxid]['analysis'].update(tx_analysis[cjtxid])
 
             print('Saving updated transaction info (tx_analysis)...', end='')
-            if not READ_ONLY_COINJOIN_TX_INFO:
+            if not op.READ_ONLY_COINJOIN_TX_INFO:
                 with open(save_file, "w") as file:
                     file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
             print('done')
@@ -2666,7 +2662,7 @@ def process_experiment(args):
 
     load_anonscore_data(cjtx_stats, WASABIWALLET_DATA_DIR)
 
-    if not READ_ONLY_COINJOIN_TX_INFO:
+    if not op.READ_ONLY_COINJOIN_TX_INFO:
         with open(save_file, "w") as file:
             file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
@@ -2676,7 +2672,7 @@ def process_experiment(args):
                                             [cjtxid for cjtxid in cjtx_stats['coinjoins'].keys()])
     als.analyze_input_out_liquidity(base_path, cjtx_stats['coinjoins'], cjtx_stats.get('postmix', {}), cjtx_stats.get('premix', {}), mix_protocol)
 
-    if not READ_ONLY_COINJOIN_TX_INFO:
+    if not op.READ_ONLY_COINJOIN_TX_INFO:
         with open(save_file, "w") as file:
             file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
@@ -2698,7 +2694,7 @@ def process_experiment(args):
         SM.print(f'Basic coinjoins statistics saved into {fig_save_file}')
 
     # Save updated information with analysis results
-    if not READ_ONLY_COINJOIN_TX_INFO and SAVE_ANALYTICS_TO_FILE:
+    if not op.READ_ONLY_COINJOIN_TX_INFO and op.SAVE_ANALYTICS_TO_FILE:
         with open(save_file, "w") as file:
             file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
 
@@ -2707,7 +2703,7 @@ def process_experiment(args):
         file.write(json.dumps(dict(sorted(analysis_results.items())), indent=4))
 
     # Visualize coinjoins in aggregated fashion
-    if GENERATE_COINJOIN_GRAPH_BLIND:
+    if op.GENERATE_COINJOIN_GRAPH_BLIND:
         visualize_coinjoins_aggregated(cjtx_stats, WASABIWALLET_DATA_DIR, 'coinjoin_graph_aggregated', False)
 
     # Visualize coinjoins in verbose mode (possibly only subset of coinjoins visualized to prevent graphviz overload)
@@ -2715,7 +2711,7 @@ def process_experiment(args):
     #to_visualize = dict(list(cjtx_stats['coinjoins'].items())[:64])
     #to_visualize = dict(list(cjtx_stats['coinjoins'].items())[100:121])
     cjtx_stats['coinjoins'] = to_visualize
-    if GENERATE_COINJOIN_GRAPH:
+    if op.GENERATE_COINJOIN_GRAPH:
         print('Going to render coinjoin relations graph (may take several minutes if larger number of coinjoins '
               'are visualized) ... ', end='')
         visualize_coinjoins(cjtx_stats, WASABIWALLET_DATA_DIR, 'coinjoin_graph', False)
@@ -3105,7 +3101,7 @@ def backup_log_files(target_path: str):
         logging.warning(f'Log file {log_file_path} does not found, not copied.')
 
 
-def parse_arguments():
+def parse_arguments(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("-a", "--action",
                         help="Action to performed. collect_local...from running instances; "
@@ -3114,14 +3110,21 @@ def parse_arguments():
                         action="store",
                         required=False)
     parser.add_argument("-tp", "--target-path",
-                        help="Target path with experiment(s) to be processed. Can be repeated.",
+                        help="Target path with experiment(s) to be processed.",
                         action="append", metavar="PATH",
                         required=False)
     parser.add_argument("-lc", "--load-config",
                         help="Load all configuration from file",
                         action="store", metavar="FILE",
                         required=False)
-    return parser.parse_args()
+    parser.add_argument("-ev", "--env_vars",
+                        help="Allows to set internal variable and switches. Use with maximal care.",
+                        action="store", metavar="ENV_VARS",
+                        required=False)
+
+    parser.print_help()
+
+    return parser.parse_args(argv)
 
 
 class AnalysisType(Enum):
@@ -3141,137 +3144,224 @@ class AnalysisType(Enum):
     COMPUTE_COINJOIN_TXINFO_REMOTE = 5
 
 
-if __name__ == "__main__":
-    # parse arguments, overwrite default settings if required
-    args = parse_arguments()
+class EmulParseOptions:
+    # Extract all info from running wallet and fullnode
+    cfg_type = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
 
+    # If True, preprocessed files extracted from dockerized instances are assumed.
+    # If False, local instance with Wasabi wallet is assumed.
+    LOAD_TXINFO_FROM_DOCKER_FILES = False
+    # If True, existence of coinjoin_tx_info.json is assumed and all data are read from it.
+    # Bitcoin Core/Wallet RPC is not required
+    LOAD_TXINFO_FROM_FILE = False
+    # If True, info is obtained via RPC from WalletWasabi client, otherwise existence of wallets_info.json
+    # with wallet information is assumed and loaded from
+    LOAD_WALLETS_INFO_VIA_RPC = True
+    # If True, coordinator logs are parsed for various error logs
+    PARSE_ERRORS = True
+    # If True, transaction info is retrieved from Bitcoin Core via RPC
+    RETRIEVE_TRANSACTION_INFO = True
+    # If True, subfolder 'tx' is searched for existence of already computed transaction analysis results
+    # (tx_analysis_*.json). Used when tx analysis is performed externally and not all at once
+    # (e.g., with high paralellism)
+    LOAD_COMPUTED_TRANSACTION_INFO = False
+    # If True, then coinjoin_tx_info.json is not written to with intermediate updates
+    READ_ONLY_COINJOIN_TX_INFO = False
+    # If True, coinjoin analysis (Boltzmann links etc.) is performed if not yet done for given tx
+    COMPUTE_COINJOIN_STATS = False
+    # If True, recomputation of coinjoin analysis is performed even if already computed before
+    FORCE_COMPUTE_COINJOIN_STATS = False
+    # If True, multiple analysis threads (NUM_THREADS) are started for analysis
+    PARALLELIZE_COMPUTE_COINJOIN_STATS = False
+    # If True, graphviz tx graph is executed
+    GENERATE_COINJOIN_GRAPH = False
+    # If True, final analytics are saved into base coinjoin_tx_info.json file
+    SAVE_ANALYTICS_TO_FILE = True
     PROFILE_PERFORMANCE = False
 
-    # Analysis type
-    #cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL
-    cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
-    #cfg = AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL
-    #cfg = AnalysisType.COMPUTE_COINJOIN_TXINFO_REMOTE
-
-    if args.action is not None:
-        if args.action == "collect_local":
-            cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL
-        if args.action == "collect_docker":
-            cfg = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
-        if args.action == "analyze_only":
-            cfg = AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL
-
-    SM.print('Analysis configuration: {}'.format(cfg.name))
-
-    RAW_TXS_DB = {}
-
-    if cfg == AnalysisType.COLLECT_COINJOIN_DATA_LOCAL:
-        # Extract all info from running wallet and fullnode
-
-        # If True, preprocessed files extracted from dockerized instances are assumed.
-        # If False, local instance with Wasabi wallet is assumed.
-        LOAD_TXINFO_FROM_DOCKER_FILES = False
-        # If True, existence of coinjoin_tx_info.json is assumed and all data are read from it.
-        # Bitcoin Core/Wallet RPC is not required
-        LOAD_TXINFO_FROM_FILE = False
-        # If True, info is obtained via RPC from WalletWasabi client, otherwise existence of wallets_info.json
-        # with wallet information is assumed and loaded from
-        LOAD_WALLETS_INFO_VIA_RPC = True
-        # If True, coordinator logs are parsed for various error logs
-        PARSE_ERRORS = True
-        # If True, transaction info is retrieved from Bitcoin Core via RPC
-        RETRIEVE_TRANSACTION_INFO = True
-        # If True, subfolder 'tx' is searched for existence of already computed transaction analysis results
-        # (tx_analysis_*.json). Used when tx analysis is performed externally and not all at once
-        # (e.g., with high paralellism)
-        LOAD_COMPUTED_TRANSACTION_INFO = False
-        # If True, then coinjoin_tx_info.json is not written to with intermediate updates
-        READ_ONLY_COINJOIN_TX_INFO = False
-        # If True, coinjoin analysis (Boltzmann links etc.) is performed if not yet done for given tx
-        COMPUTE_COINJOIN_STATS = False
-        # If True, recomputation of coinjoin analysis is performed even if already computed before
-        FORCE_COMPUTE_COINJOIN_STATS = False
-        # If True, multiple analysis threads (NUM_THREADS) are started for analysis
-        PARALLELIZE_COMPUTE_COINJOIN_STATS = False
-        # If True, graphviz tx graph is executed
-        GENERATE_COINJOIN_GRAPH = False
-        # If True, final analytics are saved into base coinjoin_tx_info.json file
-        SAVE_ANALYTICS_TO_FILE = True
-    elif cfg == AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER:
-        # Extract info from static files previously created and collected from dockerized instances
-        LOAD_TXINFO_FROM_DOCKER_FILES = True
-        LOAD_TXINFO_FROM_FILE = False
-        LOAD_WALLETS_INFO_VIA_RPC = False
-        PARSE_ERRORS = True
-        RETRIEVE_TRANSACTION_INFO = False
-        LOAD_COMPUTED_TRANSACTION_INFO = False
-        READ_ONLY_COINJOIN_TX_INFO = False
-        COMPUTE_COINJOIN_STATS = False
-        FORCE_COMPUTE_COINJOIN_STATS = False
-        PARALLELIZE_COMPUTE_COINJOIN_STATS = False
-        GENERATE_COINJOIN_GRAPH = False
-        SAVE_ANALYTICS_TO_FILE = True
-    elif cfg == AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL:
-        # Just recompute analysis
-        LOAD_TXINFO_FROM_DOCKER_FILES = False
-        LOAD_TXINFO_FROM_FILE = True
-        LOAD_WALLETS_INFO_VIA_RPC = False
-        PARSE_ERRORS = False
-
-        RETRIEVE_TRANSACTION_INFO = False
-
-        LOAD_COMPUTED_TRANSACTION_INFO = True
-        READ_ONLY_COINJOIN_TX_INFO = False
-
-        COMPUTE_COINJOIN_STATS = False
-        FORCE_COMPUTE_COINJOIN_STATS = False
-        PARALLELIZE_COMPUTE_COINJOIN_STATS = False
-
-        GENERATE_COINJOIN_GRAPH = True
-        SAVE_ANALYTICS_TO_FILE = True
-    elif cfg == AnalysisType.COMPUTE_COINJOIN_TXINFO_REMOTE:
-        # Compute only time-consuming transaction entropy analysis from pre-retrieved transactions
-
-        LOAD_TXINFO_FROM_DOCKER_FILES = False
-        LOAD_TXINFO_FROM_FILE = True
-        LOAD_WALLETS_INFO_VIA_RPC = False
-        GENERATE_COINJOIN_GRAPH = False
-        PARSE_ERRORS = False
-
-        RETRIEVE_TRANSACTION_INFO = False
-
-        LOAD_COMPUTED_TRANSACTION_INFO = True
-        READ_ONLY_COINJOIN_TX_INFO = False
-
-        COMPUTE_COINJOIN_STATS = True
-        FORCE_COMPUTE_COINJOIN_STATS = True
-        PARALLELIZE_COMPUTE_COINJOIN_STATS = True
-        NUM_THREADS = 100
-
-        GENERATE_COINJOIN_GRAPH = False
-
-
-    GENERATE_COINJOIN_GRAPH = False
     GENERATE_COINJOIN_GRAPH_BLIND = False
     GENERATE_COINJOIN_GRAPH_LINEAR = False
-    #FORCE_COMPUTE_COINJOIN_STATS = True
-    #COMPUTE_COINJOIN_STATS = True
-    #PARALLELIZE_COINJOIN_STATS = False
-    #LOAD_WALLETS_INFO_VIA_RPC = False
-    #LOAD_TXINFO_FROM_FILE = False
-
     ASSUME_COORDINATOR_WALLET = True
 
-    #READ_ONLY_COINJOIN_TX_INFO = True
-    SAVE_ANALYTICS_TO_FILE = False
+    RAW_TXS_DB = {}
+    NUM_THREADS = 100
+
+    target_path = ""
+
+    def __init__(self):
+        self.default_values(None)
+
+    def set_analysis_defaults(self, cfg):
+        if cfg == AnalysisType.COLLECT_COINJOIN_DATA_LOCAL:
+            # Extract all info from running wallet and fullnode
+
+            # If True, preprocessed files extracted from dockerized instances are assumed.
+            # If False, local instance with Wasabi wallet is assumed.
+            self.LOAD_TXINFO_FROM_DOCKER_FILES = False
+            # If True, existence of coinjoin_tx_info.json is assumed and all data are read from it.
+            # Bitcoin Core/Wallet RPC is not required
+            self.LOAD_TXINFO_FROM_FILE = False
+            # If True, info is obtained via RPC from WalletWasabi client, otherwise existence of wallets_info.json
+            # with wallet information is assumed and loaded from
+            self.LOAD_WALLETS_INFO_VIA_RPC = True
+            # If True, coordinator logs are parsed for various error logs
+            self.PARSE_ERRORS = True
+            # If True, transaction info is retrieved from Bitcoin Core via RPC
+            self.RETRIEVE_TRANSACTION_INFO = True
+            # If True, subfolder 'tx' is searched for existence of already computed transaction analysis results
+            # (tx_analysis_*.json). Used when tx analysis is performed externally and not all at once
+            # (e.g., with high paralellism)
+            self.LOAD_COMPUTED_TRANSACTION_INFO = False
+            # If True, then coinjoin_tx_info.json is not written to with intermediate updates
+            self.READ_ONLY_COINJOIN_TX_INFO = False
+            # If True, coinjoin analysis (Boltzmann links etc.) is performed if not yet done for given tx
+            self.COMPUTE_COINJOIN_STATS = False
+            # If True, recomputation of coinjoin analysis is performed even if already computed before
+            self.FORCE_COMPUTE_COINJOIN_STATS = False
+            # If True, multiple analysis threads (NUM_THREADS) are started for analysis
+            self.PARALLELIZE_COMPUTE_COINJOIN_STATS = False
+            # If True, graphviz tx graph is executed
+            self.GENERATE_COINJOIN_GRAPH = False
+            # If True, final analytics are saved into base coinjoin_tx_info.json file
+            self.SAVE_ANALYTICS_TO_FILE = True
+        elif cfg == AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER:
+            # Extract info from static files previously created and collected from dockerized instances
+            self.LOAD_TXINFO_FROM_DOCKER_FILES = True
+            self.LOAD_TXINFO_FROM_FILE = False
+            self.LOAD_WALLETS_INFO_VIA_RPC = False
+            self.PARSE_ERRORS = True
+            self.RETRIEVE_TRANSACTION_INFO = False
+            self.LOAD_COMPUTED_TRANSACTION_INFO = False
+            self.READ_ONLY_COINJOIN_TX_INFO = False
+            self.COMPUTE_COINJOIN_STATS = False
+            self.FORCE_COMPUTE_COINJOIN_STATS = False
+            self.PARALLELIZE_COMPUTE_COINJOIN_STATS = False
+            self.GENERATE_COINJOIN_GRAPH = False
+            self.SAVE_ANALYTICS_TO_FILE = True
+        elif cfg == AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL:
+            # Just recompute analysis
+            self.LOAD_TXINFO_FROM_DOCKER_FILES = False
+            self.LOAD_TXINFO_FROM_FILE = True
+            self.LOAD_WALLETS_INFO_VIA_RPC = False
+            self.PARSE_ERRORS = False
+
+            self.RETRIEVE_TRANSACTION_INFO = False
+
+            self.LOAD_COMPUTED_TRANSACTION_INFO = True
+            self.READ_ONLY_COINJOIN_TX_INFO = False
+
+            self.COMPUTE_COINJOIN_STATS = False
+            self.FORCE_COMPUTE_COINJOIN_STATS = False
+            self.PARALLELIZE_COMPUTE_COINJOIN_STATS = False
+
+            self.GENERATE_COINJOIN_GRAPH = True
+            self.SAVE_ANALYTICS_TO_FILE = True
+        elif cfg == AnalysisType.COMPUTE_COINJOIN_TXINFO_REMOTE:
+            # Compute only time-consuming transaction entropy analysis from pre-retrieved transactions
+
+            self.LOAD_TXINFO_FROM_DOCKER_FILES = False
+            self.LOAD_TXINFO_FROM_FILE = True
+            self.LOAD_WALLETS_INFO_VIA_RPC = False
+            self.GENERATE_COINJOIN_GRAPH = False
+            self.PARSE_ERRORS = False
+
+            self.RETRIEVE_TRANSACTION_INFO = False
+
+            self.LOAD_COMPUTED_TRANSACTION_INFO = True
+            self.READ_ONLY_COINJOIN_TX_INFO = False
+
+            self.COMPUTE_COINJOIN_STATS = True
+            self.FORCE_COMPUTE_COINJOIN_STATS = True
+            self.PARALLELIZE_COMPUTE_COINJOIN_STATS = True
+            self.NUM_THREADS = 100
+
+            self.GENERATE_COINJOIN_GRAPH = False
+        else:
+            assert False, f'Unknown configuration type {cfg}'
+
+    def set_args(self, a):
+        if a.action is not None:
+            if a.action == "collect_local":
+                self.cfg_type = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL
+            if a.action == "collect_docker":
+                self.cfg_type = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
+            if a.action == "analyze_only":
+                self.cfg_type = AnalysisType.ANALYZE_COINJOIN_DATA_LOCAL
+
+        SM.print('Analysis configuration: {}'.format(self.cfg_type.name))
+
+        self.set_analysis_defaults(self.cfg_type)
+
+        # BUGBUG: Analyze overrides below
+        self.GENERATE_COINJOIN_GRAPH_BLIND = False
+        self.GENERATE_COINJOIN_GRAPH_LINEAR = False
+        # FORCE_COMPUTE_COINJOIN_STATS = True
+        # COMPUTE_COINJOIN_STATS = True
+        # PARALLELIZE_COINJOIN_STATS = False
+        # LOAD_WALLETS_INFO_VIA_RPC = False
+        # LOAD_TXINFO_FROM_FILE = False
+        self.ASSUME_COORDINATOR_WALLET = True
+        # READ_ONLY_COINJOIN_TX_INFO = True
+        self.SAVE_ANALYTICS_TO_FILE = False
+        # end BUGBUG: Analyze overrides above
+
+
+        if a.target_path is not None:
+            self.target_path = a.target_path
+
+        # Parse any directly provided arguments
+        if a.env_vars is not None:
+            for item in a.env_vars.split(";"):
+                item = item.strip()  # Remove extra spaces
+                if "=" in item:
+                    key, value = map(str.strip, item.split("=", 1))  # Split and strip spaces
+
+                    try:
+                        value = ast.literal_eval(value)  # Try to evaluate the value (e.g., bool, list, int)
+                    except (ValueError, SyntaxError):
+                        logging.warning(f"Unable to parse value '{value}' for key '{key}', using raw string.")
+                        value = value  # Fallback: use the original string as-is
+
+                    if hasattr(self, key):  # Only set existing attributes
+                        setattr(self, key, value)
+                    else:
+                        logging.warning(f"'{item}' command line is not a recognized attribute and will be ignored.")
+
+    def default_values(self, target_cfg_type):
+        self.PROFILE_PERFORMANCE = False
+        self.RAW_TXS_DB = {}
+
+        if target_cfg_type is None:
+            self.cfg_type = AnalysisType.COLLECT_COINJOIN_DATA_LOCAL_DOCKER
+
+        self.set_analysis_defaults(self.cfg_type)
+
+
+    def print_attributes(self):
+        print('*******************************************')
+        print('EmulParseOptions parameters:')
+        for attr, value in vars(self).items():
+            print(f'  {attr}={value}')
+        print('*******************************************')
+
+
+def main(argv=None):
+    # parse arguments, overwrite default settings if required
+    #args = parse_arguments()
+
+    global op
+    op = EmulParseOptions()
+    # parse arguments, overwrite default settings if required
+    args = parse_arguments(argv)
+    op.set_args(args)
 
     #
     # Analysis of single experiment
     #
-    #target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\grid_paretosum-static-30utxo\\2024-01-26_19-35_paretosum-static-500-30utxo')
+    target_base_path = ('c:\\!blockchains\\CoinJoin\\WasabiWallet_experiments\\sol12\\grid_paretosum-static-30utxo\\2024-01-26_19-35_paretosum-static-500-30utxo')
     target_base_path = None
     if target_base_path is not None:
-        if PROFILE_PERFORMANCE:
+        if op.PROFILE_PERFORMANCE:
             with Profile() as profile:
                 process_experiment((target_base_path, True))
                 Stats(profile).strip_dirs().sort_stats(SortKey.TIME).print_stats()
@@ -3321,9 +3411,9 @@ if __name__ == "__main__":
     target_base_paths = [os.path.join(super_base_path, '!unproccesed')]
 
     # If provided, use paths from cli arguments instead
-    if args.target_path is not None:
-        super_base_path = longest_common_prefix(args.target_path)
-        target_base_paths = [path for path in args.target_path]
+    if op.target_path is not None:
+        super_base_path = longest_common_prefix(op.target_path)
+        target_base_paths = [path for path in op.target_path]
 
     NUM_THREADS = 1  # if -1, then every experiment has own thread
     SAVE_BASE_FIGS = True if NUM_THREADS == 1 else False
@@ -3339,7 +3429,7 @@ if __name__ == "__main__":
     SM.print_summary()
     print('### END SUMMARY #########################')
     backup_log_files(target_base_paths[0])
-    exit(0)
+    return 0
 
     #
     # Generate aggregated visualizations
@@ -3367,3 +3457,10 @@ if __name__ == "__main__":
     # TODO: Add computation of time required to finish given analysis => summary for easy identification of analyses to skip
     # TODO: Sort distributions as x, xsum, lognormal (coinjoin_tx_info_stats.json.pdf)
     # TODO: Catch exceptions, move folder with crash into !bad folder and continue
+
+    return 0
+
+
+if __name__ == "__main__":
+    main()
+
