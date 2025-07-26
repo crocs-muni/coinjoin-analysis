@@ -9,6 +9,9 @@ import emulation.wcli as wcli
 from graphviz import Digraph
 import numpy as np
 import matplotlib
+
+from cj_process.cj_structs import SummaryMessages
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from collections import Counter
@@ -57,7 +60,7 @@ COLORS = ['darkorange', 'green', 'lightblue', 'gray', 'aquamarine', 'darkorchid1
           'greenyellow', 'indigo', 'lightslateblue', 'plum3', 'tan1', 'black']
 LINE_STYLES = ['-', '--', '-.', ':']
 
-SM = als.SummaryMessages()
+SM = SummaryMessages()
 als.SM = SM
 
 

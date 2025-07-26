@@ -2,7 +2,7 @@ import os
 import subprocess
 from collections import Counter
 import sqlite3
-
+import logging
 #import msgpack
 import orjson
 import json
@@ -20,9 +20,9 @@ from bitcoin.core import CTransaction, CMutableTransaction, CTxWitness
 # from bitcoin.wallet import P2WPKHBitcoinAddress, CBitcoinAddressError, P2SHBitcoinAddress, P2WSHBitcoinAddress
 
 from bitcoinlib.transactions import Output
-from cj_process.cj_consts import *
-from cj_process.cj_structs import *
 
+from cj_process.cj_consts import SATS_IN_BTC, VerboseTransactionInfoLineSeparator
+from cj_process.cj_structs import MIX_EVENT_TYPE, precomp_datetime, MIX_PROTOCOL, SM, CJ_LOG_TYPES, CJ_ALICE_TYPES
 
 
 SORT_COINJOINS_BY_RELATIVE_ORDER = True  # If True then relative ordering of transactions based on remix connections

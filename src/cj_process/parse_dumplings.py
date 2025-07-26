@@ -1,3 +1,4 @@
+import logging
 import copy
 import math
 import multiprocessing
@@ -6,14 +7,15 @@ import pickle
 import random
 import shutil
 from copy import deepcopy
+from enum import Enum
 from multiprocessing.pool import ThreadPool
-from datetime import timedelta, UTC
+from datetime import timedelta, UTC, datetime
 from collections import defaultdict, Counter
 from pathlib import Path
 
 import pandas as pd
 import numpy as np
-from cj_process.cj_analysis import MIX_EVENT_TYPE, get_output_name_string, get_input_name_string
+from cj_process.cj_analysis import get_output_name_string, get_input_name_string
 from cj_process import cj_analysis as als
 import argparse
 import gc
@@ -25,10 +27,13 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import List
 import tracemalloc
 
-from cj_process.cj_consts import *
-from cj_process.cj_structs import *
 
 import cj_process.cj_visualize as cjvis
+from cj_process.cj_consts import VerboseInOutInfoInLineSeparator, WHIRLPOOL_FUNDING_TXS, SATS_IN_BTC, \
+    WHIRLPOOL_POOL_NAMES_ALL, WHIRLPOOL_POOL_SIZES
+from cj_process.cj_structs import CJ_TX_CHECK, MIX_PROTOCOL, CLUSTER_INDEX, MIX_EVENT_TYPE, SM, \
+    CJ_TX_CHECK_WHIRLPOOL_DEFAULTS, FILTER_REASON, CJ_TX_CHECK_WASABI1_DEFAULTS, CJ_TX_CHECK_WASABI2_DEFAULTS, \
+    CJ_TX_CHECK_JOINMARKET_DEFAULTS, precomp_datetime, CoinMixInfo, CoinJoinStats
 
 # If True, difference between assigned and existing cluster id is checked and failed upon if different
 # If False, only warning is printed, but execution continues.
@@ -38,6 +43,10 @@ CLUSTER_ID_CHECK_HARD_ASSERT = False
 op = None  # Global settings for the experiment
 
 
+# Configure the logging module
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logger_to_disable = logging.getLogger("mathplotlib")
+logger_to_disable.setLevel(logging.WARNING)
 
 
 # SM = als.SummaryMessages()
@@ -102,7 +111,7 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                 block_index = None if parts[2] is None else int(parts[2])
                 record['block_index'] = block_index
 
-                inputs = [input.strip('{') for input in parts[4].split(als.VerboseInOutInfoInLineSeparator)] if parts[4] else None
+                inputs = [input.strip('{') for input in parts[4].split(VerboseInOutInfoInLineSeparator)] if parts[4] else None
                 record['inputs'] = {}
                 index = 0
                 for input in inputs:
@@ -129,7 +138,7 @@ def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date
                     record['inputs'][f'{index}'] = this_input
                     index += 1
 
-                outputs = [output.strip('{') for output in parts[5].split(als.VerboseInOutInfoInLineSeparator)] if parts[5] else None
+                outputs = [output.strip('{') for output in parts[5].split(VerboseInOutInfoInLineSeparator)] if parts[5] else None
                 record['outputs'] = {}
                 index = 0
                 for output in outputs:
@@ -3354,8 +3363,6 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
-
-
 
 
     # TODO: Set x labels for histogram of frequencies to rounded denominations

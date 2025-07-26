@@ -2,12 +2,6 @@ import logging
 from datetime import datetime
 from enum import Enum, IntFlag, auto
 
-# Configure the logging module
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-logger_to_disable = logging.getLogger("mathplotlib")
-logger_to_disable.setLevel(logging.WARNING)
-
-
 class MIX_EVENT_TYPE(Enum):
     MIX_ENTER = 'MIX_ENTER'  # New liquidity coming to mix
     MIX_LEAVE = 'MIX_LEAVE'  # Liquidity leaving mix (postmix spend)
