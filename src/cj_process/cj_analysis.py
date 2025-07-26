@@ -764,8 +764,7 @@ def joinmarket_find_coinjoins(filename):
             lines = file.readlines()
             line_index = 0
             while line_index < len(lines):
-                #regex_pattern = "(?P<timestamp>.*) \[INFO\]  obtained tx"
-                regex_pattern = r"(?P<timestamp>.*) [INFO]  obtained tx"
+                regex_pattern = "(?P<timestamp>.*) \[INFO\]  obtained tx"
                 match = re.search(regex_pattern, lines[line_index])
                 line_index = line_index + 1
                 if match is None:
