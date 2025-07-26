@@ -2277,6 +2277,7 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
                     if isinstance(wallet_coins, str) and (wallet_coins.lower() == 'timeout' or wallet_coins.lower() == 'this method is not available in joinmarket'):
                         logging.error(f'Loading wallet keys failed with \"{wallet_coins}\" for \"{target_base_path}\"')
                         wallets_coins_all[wallet_name] = {}
+                    else:
                         for item in wallet_coins:
                             item.setdefault("anonymityScore", 1)
                         parsed_coins = anonymity_score.parse_wallet_coins(wallet_name, wallet_coins)
