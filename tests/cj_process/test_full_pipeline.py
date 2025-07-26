@@ -5,12 +5,16 @@ import utils
 from pathlib import Path
 
 from orjson import orjson
+
+from cj_process.cj_analysis import load_coinjoins_from_file
 from cj_process.file_check import check_coinjoin_files
+from cj_process.file_check import check_expected_files_in_folder
 
 TESTS = Path(__file__).resolve().parent.parent # …/repo/tests
 REPO_ROOT = TESTS.parent                       # …/repo
 DATA = REPO_ROOT / "data"                      # …/repo/data
-TEMP_DUMPLINGS = REPO_ROOT.parent / "temp_dumplings"                   # temp_dumplings
+TEMP_DUMPLINGS = REPO_ROOT.parent / "temp_dumplings"         # temp_dumplings
+TEMP_EMUL = REPO_ROOT.parent / "temp_emul"                   # temp_emul
 
 
 
@@ -425,3 +429,100 @@ def test_run_cj_process_jm():
     assert len(file_check['results']['joinmarket_all']['mix_base_files'][
                    'missing_files']) == 2, f"Missing files: {file_check['results']['joinmarket_all']['mix_base_files']['missing_files']}"
 
+
+
+def test_run_cj_parse_logs_ww2():
+    base_experiment_name = 'grid_lognorm-static-5utxo'
+    experiments = ['2024-04-05_15-19_lognorm-static-10-5utxo', '2024-04-05_17-21_lognorm-static-10-5utxo']
+    source_zip = os.path.abspath(os.path.join(TESTS, "fixtures", "emul__ww2_lognorm-static-5utxo.zip"))
+    expected_results = {
+        '2024-04-05_15-19_lognorm-static-10-5utxo': {
+            'len_coinjoins': 6,
+            'len_wallets_info': 11,
+            'num_all_coins': 260,
+            'len_address_wallet_mapping': 258,
+            'len_rounds': 9
+        },
+        '2024-04-05_17-21_lognorm-static-10-5utxo': {
+            'len_coinjoins': 6,
+            'len_wallets_info': 11,
+            'num_all_coins': 232,
+            'len_address_wallet_mapping': 231,
+            'len_rounds': 8
+        }}
+    helper_run_cj_parse_logs(base_experiment_name, experiments, source_zip, expected_results)
+
+
+def test_run_cj_parse_logs_joinmarket():
+    base_experiment_name = 'joinmarket_1taker_2tumbler_40maker'
+    experiments = ['2025-02-10_08-08_Joinmarket_1Taker_2Tumbler_40Maker']
+    source_zip = os.path.abspath(os.path.join(TESTS, "fixtures", "emul__joinmarket_1taker_2tumbler_40maker_pruned.zip"))
+    expected_results = {
+        '2025-02-10_08-08_Joinmarket_1Taker_2Tumbler_40Maker': {
+            'len_coinjoins': 32,
+            'len_wallets_info': 44,
+            'num_all_coins': 402,
+            'len_address_wallet_mapping': 368,
+            'len_rounds': 1
+        }}
+    helper_run_cj_parse_logs(base_experiment_name, experiments, source_zip, expected_results)
+
+
+def helper_run_cj_parse_logs(base_experiment_name: str, experiments: list, source_zip: str, expected_results: dict):
+    extract_dir = TEMP_EMUL
+    target_zip = os.path.abspath(f"{extract_dir}/emul.zip")
+
+    # Prepare test data from zip file
+    utils.prepare_from_zip_file(extract_dir, source_zip, target_zip)
+    #
+    # Run initial processing
+    #
+    utils.run_parse_emul(None, "collect_docker",None, os.path.join(extract_dir, base_experiment_name))
+
+    for experiment in experiments:
+        data = load_coinjoins_from_file(os.path.join(extract_dir, base_experiment_name, experiment), None, False)
+        assert len(data['coinjoins'].keys()) == expected_results[experiment]['len_coinjoins'], f"Unexpected number of coinjoins extracted: {len(data['coinjoins'].keys())}"
+        assert len(data['wallets_info'].keys()) == expected_results[experiment]['len_wallets_info'], f"Unexpected number of wallets_info extracted: {len(data['wallets_info'].keys())}"
+        num_all_coins = sum([len(data['wallets_coins'][wallet]) for wallet in data['wallets_coins'].keys()])
+        assert num_all_coins == expected_results[experiment]['num_all_coins'], f"Unexpected number of wallets_coins extracted: {num_all_coins}"
+        assert len(data['address_wallet_mapping'].keys()) == expected_results[experiment]['len_address_wallet_mapping'], f"Unexpected number of address_wallet_mapping extracted: {len(data['address_wallet_mapping'].keys())}"
+        assert len(data['rounds'].keys()) == expected_results[experiment]['len_rounds'], f"Unexpected number of rounds extracted: {len(data['rounds'].keys())}"
+    #
+    # data = load_coinjoins_from_file(os.path.join(extract_dir, base_experiment_name, experiments[1]),  None, False)
+    # assert len(data['coinjoins'].keys()) == 6, f"Unexpected number of coinjoins extracted: {len(data['coinjoins'].keys())}"
+    # assert len(data['wallets_info'].keys()) == 11, f"Unexpected number of wallets_info extracted: {len(data['wallets_info'].keys())}"
+    # num_all_coins = sum([len(data['wallets_coins'][wallet]) for wallet in data['wallets_coins'].keys()])
+    # assert num_all_coins == 232, f"Unexpected number of wallets_coins extracted: {num_all_coins}"
+    # assert len(data['address_wallet_mapping'].keys()) == 231, f"Unexpected number of address_wallet_mapping extracted: {len(data['address_wallet_mapping'].keys())}"
+    # assert len(data['rounds'].keys()) == 8, f"Unexpected number of rounds extracted: {len(data['rounds'].keys())}"
+
+    # ASSERT
+    missing, _ = check_expected_files_in_folder(os.path.join(extract_dir, base_experiment_name),
+                        {'aggregated_coinjoin_stats.3.pdf': None, 'aggregated_coinjoin_stats.3.png': None})
+    assert len(missing) == 0, f"Missing files for {base_experiment_name}: {missing}"
+
+    for experiment in experiments:
+        missing, _ = check_expected_files_in_folder(os.path.join(extract_dir, base_experiment_name, experiment),
+                            {'coinjoin_tx_info.json': None, 'wallets_coins.json': None, 'wallets_info.json': None,
+                             'coinjoin_tx_info_stats.json': None, 'coinjoin_stats.3.pdf': None, 'coinjoin_stats.3.png': None})
+        assert len(missing) == 0, f"Missing files for {experiment}: {missing}"
+
+    #
+    # Re-run analysis
+    #
+
+    # Remove analysis files
+    os.remove(os.path.join(extract_dir, base_experiment_name, 'aggregated_coinjoin_stats.3.pdf'))
+    os.remove(os.path.join(extract_dir, base_experiment_name, 'aggregated_coinjoin_stats.3.png'))
+    for experiment in experiments:
+        os.remove(os.path.join(extract_dir, base_experiment_name, experiment, 'coinjoin_stats.3.pdf'))
+        os.remove(os.path.join(extract_dir, base_experiment_name, experiment, 'coinjoin_stats.3.png'))
+
+    utils.run_parse_emul(None, "analyze_only",None, os.path.join(extract_dir, base_experiment_name))
+
+    # ASSERT
+    for experiment in experiments:
+        missing, _ = check_expected_files_in_folder(os.path.join(extract_dir, base_experiment_name, experiment),
+                            {'coinjoin_tx_info_stats.json': None, 'coinjoin_stats.3.pdf': None,
+                             'coinjoin_stats.3.png': None, 'coinjoin_graph.pdf': None})
+        assert len(missing) == 0, f"Missing files for {experiment}: {missing}"
