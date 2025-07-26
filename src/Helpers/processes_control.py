@@ -1,5 +1,5 @@
-import Helpers.global_constants as global_constants
-import Helpers.regtest_control as regtest_control
+import helpers.global_constants as global_constants
+import helpers.regtest_control as regtest_control
 import subprocess
 import time
 import signal

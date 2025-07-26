@@ -3,7 +3,7 @@ import os
 import requests
 import time
 import json
-import Helpers.global_constants as global_constants
+import helpers.global_constants as global_constants
 
 
 class RPCCommandsConstants():
