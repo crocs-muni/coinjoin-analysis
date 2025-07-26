@@ -18,7 +18,7 @@ from cProfile import Profile
 from pstats import SortKey, Stats
 from decimal import Decimal
 import jsonpickle
-from multiprocessing.pool import ThreadPool, Pool
+from multiprocessing.pool import ThreadPool
 from tqdm import tqdm
 import emulation.anonymity_score as anonymity_score
 import cj_analysis as als
@@ -26,6 +26,8 @@ from cj_analysis import MIX_PROTOCOL
 from cj_analysis import CJ_LOG_TYPES
 import logging
 import argparse
+
+import cj_process.cj_visualize as cjvis
 
 # Configure the logging module
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -624,7 +626,6 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
     Analyze coinjoin transactions statistics and plot it to provided CoinJoinPlots structure.
     If given subgraph attribute is None, then only analysis is performed without plotting.
     :param cjtx_stats:
-    :param address_wallet_mapping:
     :param cjplt: plots for coinjoin graphs
     @param short_exp_name if provided, short experiment name is put into legend
     :return:
@@ -1510,14 +1511,14 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
 
     if cjplt.ax_inputs_type_value_ratio:
         time_liquidity = {}
-        als.plot_inputs_type_ratio(f'{experiment_name}', cjtx_stats, 0, cjplt.ax_inputs_type_value_ratio,True, False)
+        cjvis.plot_inputs_type_ratio(f'{experiment_name}', cjtx_stats, 0, cjplt.ax_inputs_type_value_ratio,True, False)
         ax2 = cjplt.ax_inputs_type_value_ratio.twinx()
-        als.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, (0, 0, 0, 0, 0), time_liquidity, 0, ax2)
+        cjvis.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, (0, 0, 0, 0, 0), time_liquidity, 0, ax2)
 
     if cjplt.ax_inputs_type_num_ratio:
-        als.plot_inputs_type_ratio(f'{experiment_name}', cjtx_stats, 0, cjplt.ax_inputs_type_num_ratio, False, True)
+        cjvis.plot_inputs_type_ratio(f'{experiment_name}', cjtx_stats, 0, cjplt.ax_inputs_type_num_ratio, False, True)
         ax2 = cjplt.ax_inputs_type_num_ratio.twinx()
-        als.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, (0, 0, 0, 0, 0), time_liquidity, 0, ax2)
+        cjvis.plot_mix_liquidity(f'{experiment_name}', cjtx_stats, (0, 0, 0, 0, 0), time_liquidity, 0, ax2)
 
     return analysis_stats
 
@@ -2126,10 +2127,6 @@ def get_input_name_string(input):
 
 def get_output_name_string(output):
     return get_output_name_string(output[1]['txid'], output[1]['vout'])
-
-
-def get_output_name_string(txid, output_index):
-    return f'vout_{txid}_{output_index}'
 
 
 def extract_txid_from_inout_string(inout_string):
@@ -2895,7 +2892,6 @@ def generate_aggregated_visualization(paths_to_process: list):
     Generate separate graph picture from every analyzed property separately
     (specific graph from all experiments in one picture)
     :param paths_to_process:
-    :param base_path:
     :return:
     """
 
