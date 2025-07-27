@@ -358,6 +358,7 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
             if valid:
                 # Misclassified mix transaction, move between groups
                 data["coinjoins"][txid] = data['postmix'][txid]
+                data["coinjoins"][txid]['is_cjtx'] = True
                 data['postmix'].pop(txid)
                 logging.info(f'{txid} is mix transaction, removing from postmix and putting to mix')
                 cjtxs_fixed += 1
