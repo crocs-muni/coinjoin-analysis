@@ -2551,7 +2551,14 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
     for coord_id in pair_coords.keys():
         if coord_id in coord_txs_to_save:
             coord_txs_to_save[pair_coords[coord_id]] = coord_txs_to_save.pop(coord_id)
-    als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_discovered_renamed.json'), coord_txs_to_save)
+    coord_txs_to_save_sorted = {}
+    for coord_id in coord_txs_to_save.keys():
+        without_date_sorted = [txid for txid in coord_txs_to_save[coord_id] if txid not in cjtxs.keys()]
+        with_date = [txid for txid in coord_txs_to_save[coord_id] if txid in cjtxs.keys()]
+        with_date_sorted = sorted(with_date, key=lambda x: cjtxs[x]['broadcast_time'])
+        coord_txs_to_save_sorted[coord_id] = without_date_sorted + with_date_sorted
+
+    als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_discovered_renamed.json'), coord_txs_to_save_sorted)
 
     PRINT_FINAL = False
     if PRINT_FINAL:
