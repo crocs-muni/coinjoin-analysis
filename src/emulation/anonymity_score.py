@@ -1,6 +1,6 @@
-import Helpers.rpc_commands as rpc_commands
-import Helpers.processes_control as processes_control
-import Helpers.global_constants as global_constants
+import helpers.rpc_commands as rpc_commands
+import helpers.processes_control as processes_control
+import helpers.global_constants as global_constants
 import os
 from typing import List
 import time

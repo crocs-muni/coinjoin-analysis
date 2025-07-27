@@ -105,6 +105,17 @@ def replace_name_in_dict(data, str_to_replace, str_value):
         return data
 
 
+def check_expected_files_in_folder(folder_path, expected_files):
+    # Load files in folder
+    files = [f for f in Path(folder_path).iterdir() if f.is_file()]
+    files_names = {f.name: f for f in files}
+    # Check against expected list
+    missing_files = [file for file in expected_files.keys() if file not in files_names.keys()]
+    found_files = [file for file in expected_files.keys() if file in files_names.keys()]
+
+    return missing_files, found_files
+
+
 def check_coinjoin_files(base_path):
     print(f'Processing check_coinjoin_files({base_path})')
     mix_results_check = {}
@@ -121,16 +132,6 @@ def check_coinjoin_files(base_path):
         # Prepare expected files list customized for mix_id
         expected_files_mix = copy.deepcopy(expected_files)
         expected_files_mix = replace_name_in_dict(expected_files_mix, '$MIX_NAME$', mix_path.name)
-
-        def check_expected_files_in_folder(folder_path, expected_files):
-            # Load files in folder
-            files = [f for f in Path(folder_path).iterdir() if f.is_file()]
-            files_names = {f.name: f for f in files}
-            # Check against expected list
-            missing_files = [file for file in expected_files.keys() if file not in files_names.keys()]
-            found_files = [file for file in expected_files.keys() if file in files_names.keys()]
-
-            return missing_files, found_files
 
         #
         # Check mix_base_files

@@ -29,6 +29,11 @@ $BASE_PATH/btc/coinjoin-analysis/scripts/process_aw.sh
 #
 $BASE_PATH/btc/coinjoin-analysis/scripts/process_jm.sh
 
+#
+# Process Wasabi 1.0 
+#
+$BASE_PATH/btc/coinjoin-analysis/scripts/process_ww1.sh
+
 
 
 
