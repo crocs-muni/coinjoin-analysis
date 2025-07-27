@@ -2380,7 +2380,7 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
     ordering = als.compute_cjtxs_relative_ordering(cjtxs)
     sorted_cjtxs = sorted(ordering, key=ordering.get)
 
-    # Load known coordinators (will be used as starting set to expend to additional transactions)
+    # Load known coordinators (will be used as starting set to expand to additional transactions)
     if os.path.exists(os.path.join(target_path, 'txid_coord_t.json')):
         initial_known_txs = als.load_json_from_file(os.path.join(target_path, 'txid_coord_t.json'))  # Load known coordinators
     else:
