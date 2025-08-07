@@ -1104,7 +1104,7 @@ def load_coinjoin_txids_from_file(target_file, start_date: str = None, stop_date
     return cjtxs
 
 
-def load_coinjoins_from_file(target_load_path: str, false_cjtxs: dict, filter_false_positives: bool) -> dict:
+def load_coinjoins_from_file(target_load_path: str, false_cjtxs: dict, filter_false_positives: bool, filtered_false_coinjoins: dict=None) -> dict:
     logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
     data = load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
 
@@ -1117,11 +1117,21 @@ def load_coinjoins_from_file(target_load_path: str, false_cjtxs: dict, filter_fa
 
     # Filter false positives if required
     if filter_false_positives:
+        if not filtered_false_coinjoins:
+            filtered_false_coinjoins = {}
         if false_cjtxs is None:
             false_cjtxs = load_false_cjtxs_from_file(os.path.join(target_load_path, 'false_cjtxs.json'))
         for false_tx in false_cjtxs:
             if false_tx in data['coinjoins'].keys():
-                data['coinjoins'].pop(false_tx)
+                # Remove false transaction and place it into separate list (if provided)
+                removed = data['coinjoins'].pop(false_tx)
+                if filtered_false_coinjoins:
+                    filtered_false_coinjoins[false_tx] = removed
+
+        if filtered_false_coinjoins:
+            # Store transactions filtered based on false positives file
+            false_cjtxs_file = os.path.join(target_load_path, f'false_filtered_cjtxs_manual.json')
+            save_json_to_file_pretty(false_cjtxs_file, filtered_false_coinjoins)
 
     return data
 

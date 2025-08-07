@@ -793,7 +793,8 @@ def process_coinjoins(target_path, mix_protocol: MIX_PROTOCOL, mix_filename, pos
     if len(data["coinjoins"]) == 0:
         return data
 
-    false_cjtxs_file = os.path.join(target_path, f'{mix_protocol.name}_false_filtered_cjtxs.json')
+    # Store transactions filtered based on false positives rules
+    false_cjtxs_file = os.path.join(target_path, f'{mix_protocol.name.lower()}_false_filtered_cjtxs.json')
     als.save_json_to_file_pretty(false_cjtxs_file, false_cjtxs)
 
     SM.print('*******************************************')
@@ -1437,12 +1438,16 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
         target_base_path = os.path.join(target_path, dir_name)
         tx_json_file = os.path.join(target_base_path, f'{tx_file}')
         if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
+            # Perform bare loading and filtering using pre-loaded false_cjtxs list
             data = als.load_json_from_file(tx_json_file)
-
-            # Filter already known false positives
+            filtered_false_coinjoins = {}
             for false_tx in false_cjtxs:
                 if false_tx in data["coinjoins"].keys():
-                    data["coinjoins"].pop(false_tx)
+                    filtered_false_coinjoins[false_tx] = data["coinjoins"].pop(false_tx)
+            # Store transactions filtered based on false positives file
+            false_cjtxs_file = os.path.join(target_base_path, f'false_filtered_cjtxs_manual.json')
+            als.save_json_to_file_pretty(false_cjtxs_file, filtered_false_coinjoins)
+
 
             # Detect transactions with no remixes on input/out or both
             no_remix = als.detect_no_inout_remix_txs(data["coinjoins"])
