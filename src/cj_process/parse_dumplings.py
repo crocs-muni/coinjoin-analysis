@@ -76,7 +76,29 @@ def get_synthetic_address(create_txid, vout_index):
     return f'synbc1{create_txid[:16]}_{vout_index}'
 
 
-def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date: str = None):
+def load_coinjoin_stats_from_dumplings(target_file, start_date: str = None, stop_date: str = None, multiple_files: bool = True):
+    """
+    Loads stored coinjoin records from files created by Dumplings project into internal structure.
+    Multiple files can be loaded from all files with 'target_file' prefix (if exists) with results merged together.
+    :param target_file: target file name
+    :param start_date: start date to filter
+    :param stop_date: end date to filter
+    :param multiple_files: if false, hen only target_file is parsed. If true, target_file is treated as prefix with 'target_file' and any 'target_file.*' also loaded if present
+    :return: loaded internal structure from one or more files merged together
+    """
+    search_target = Path(target_file)
+    candidates = [search_target]
+    if multiple_files:
+        candidates = candidates + list(search_target.parent.glob(f"{search_target.name}.*"))  # Grab every candidate that starts with 'target_file'
+
+    cj_stats = {}
+    for file in candidates:
+        cj_stats.update(load_coinjoin_stats_from_dumplings_file(str(file), start_date, stop_date))
+
+    return cj_stats
+
+
+def load_coinjoin_stats_from_dumplings_file(target_file: str, start_date: str = None, stop_date: str = None):
     cj_stats = {}
     logging.debug(f'Processing file {target_file}')
     json_file = target_file + '.json'
@@ -174,7 +196,7 @@ def load_coinjoin_stats(base_path):
 
     for file in files:
         target_file = os.path.join(base_path, file)
-        coinjoin_stats[target_file]["coinjoins"] = load_coinjoin_stats_from_file(target_file)
+        coinjoin_stats[target_file]["coinjoins"] = load_coinjoin_stats_from_dumplings(target_file)
 
     return coinjoin_stats
 
@@ -331,13 +353,13 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
     SM.print("### Load from Dumplings artifacts")
     # All mixes are having mixing coinjoins and postmix spends
     data = {'rounds': {}, 'filename': os.path.join(target_path, mix_filename),
-            'coinjoins': load_coinjoin_stats_from_file(os.path.join(target_path, mix_filename), start_date, stop_date),
-            'postmix': load_coinjoin_stats_from_file(os.path.join(target_path, postmix_filename), start_date, stop_date)}
+            'coinjoins': load_coinjoin_stats_from_dumplings(os.path.join(target_path, mix_filename), start_date, stop_date),
+            'postmix': load_coinjoin_stats_from_dumplings(os.path.join(target_path, postmix_filename), start_date, stop_date)}
     SM.print(f"  Number of raw loaded coinjoins: {len(data['coinjoins'].keys())}")
     # Only Samourai Whirlpool is having premix tx (TX0)
     cjtxs_fixed = 0
     if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
-        data['premix'] = load_coinjoin_stats_from_file(os.path.join(target_path, premix_filename), start_date, stop_date)
+        data['premix'] = load_coinjoin_stats_from_dumplings(os.path.join(target_path, premix_filename), start_date, stop_date)
         for txid in list(data['premix'].keys()):
             valid, reason = is_coinjoin_tx(data['premix'][txid], mix_protocol)
             if valid:
@@ -1009,7 +1031,7 @@ def find_whirlpool_tx0_reuse(mix_id: str, target_path: Path, premix_filename: st
     :param premix_filename:
     :return:
     """
-    txs = load_coinjoin_stats_from_file(os.path.join(target_path, premix_filename))
+    txs = load_coinjoin_stats_from_dumplings(os.path.join(target_path, premix_filename))
     # If potential reuse detected, check if not coordinator address for fees
     # pools are 100k (=>5000), 1M (=>50000), 5M (=>175000), 50M (=> 1750000)
     return find_address_reuse(mix_id, txs, target_path, [0, 5000, 50000, 175000, 1750000, 250000, 2500000])
@@ -1023,7 +1045,7 @@ def find_txs_address_reuse(mix_id: str, target_path: Path, tx_filename: str, sav
     :param tx_filename:
     :return:
     """
-    txs = load_coinjoin_stats_from_file(os.path.join(target_path, tx_filename))
+    txs = load_coinjoin_stats_from_dumplings(os.path.join(target_path, tx_filename))
     return find_address_reuse(mix_id, txs, target_path, [], save_outputs)
 
 
@@ -1134,7 +1156,7 @@ def analyze_interval_data(interval_data, stats: CoinJoinStats, results: dict):
 
 def process_inputs_distribution_whirlpool(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_filename: str, save_outputs: bool= False):
     logging.info(f'Processing {mix_id}')
-    txs = load_coinjoin_stats_from_file(os.path.join(target_path, tx_filename))
+    txs = load_coinjoin_stats_from_dumplings(os.path.join(target_path, tx_filename))
 
     # Process TX0 transactions, try to find ones with many pool outputs and long time to mix them (possible chain analysis input)
     tx0_by_outputs_dict = {}
@@ -1613,15 +1635,15 @@ def analyze_mixes_flows(target_path):
         flows_in_time = extract_flows_dumplings(flows)
         cjvis.plot_flows_steamgraph(flows_in_time, 'Dumplings flows (1 hop)')
     else:
-        whirlpool_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiPostMixTxs.txt'))
-        wasabi1_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
-        wasabi2_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'Wasabi2PostMixTxs.txt'))
+        whirlpool_postmix = load_coinjoin_stats_from_dumplings(os.path.join(target_path, 'SamouraiPostMixTxs.txt'))
+        wasabi1_postmix = load_coinjoin_stats_from_dumplings(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
+        wasabi2_postmix = load_coinjoin_stats_from_dumplings(os.path.join(target_path, 'Wasabi2PostMixTxs.txt'))
 
-        wasabi1_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiCoinJoins.txt'))
-        wasabi2_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'Wasabi2CoinJoins.txt'))
-        whirlpool_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiCoinJoins.txt'))
+        wasabi1_cj = load_coinjoin_stats_from_dumplings(os.path.join(target_path, 'WasabiCoinJoins.txt'))
+        wasabi2_cj = load_coinjoin_stats_from_dumplings(os.path.join(target_path, 'Wasabi2CoinJoins.txt'))
+        whirlpool_cj = load_coinjoin_stats_from_dumplings(os.path.join(target_path, 'SamouraiCoinJoins.txt'))
 
-        whirlpool_premix = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiTx0s.txt'))
+        whirlpool_premix = load_coinjoin_stats_from_dumplings(os.path.join(target_path, 'SamouraiTx0s.txt'))
 
         def load_premix_tx_dict(target_path, file_name, full_tx_dict):
             """
