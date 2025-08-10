@@ -1,4 +1,4 @@
-# Wallet Wasabi 1.x, Wallet Wasabi 2.x and JoinMarket coinjoin analysis 
+# Wallet Wasabi 1.x, Wallet Wasabi 2.x, Whirlpool and JoinMarket coinjoin analysis 
 
 Set of scripts for processing, analysis, and visualization of coinjoin transactions. Performs processing and visualization of 1) real coinjoins as extracted from Bitcoin mainnet by [Dumplings](https://github.com/nopara73/dumplings) tool (no ground truth knowledge about coins to wallets mapping) and 2) base files with coinjoins for  Wallet Wasabi 1.x, Wallet Wasabi 2.x and JoinMarket clients and coordinators executed in emulated environment by [EmuCoinJoin](https://github.com/crocs-muni/coinjoin-emulator) (known mapping between coins and wallets). 
 
@@ -6,6 +6,7 @@ Set of scripts for processing, analysis, and visualization of coinjoin transacti
 Clone repository:
 ```
 git clone https://github.com/crocs-muni/coinjoin-analysis.git
+cd coinjoin-analysis
 ```
 
 Optional: make Python virtual environment
@@ -185,3 +186,9 @@ If the analysis finishes successfully, the following files are created:
 ![image](https://github.com/user-attachments/assets/5325a4ae-468b-4b52-b58f-95d521c15b1c)
 
 ---
+
+## Similar and related projects
+
+[Dumplings project](https://github.com/nopara73/dumplings): Extraction of Wasabi 1.0, Wasabi 2.0, Whirlpool and other equal output (potential) coinjoin transactions. Written in C#, used by this repository for basic extraction. Very limited analysis. 
+
+[Ashi-Whirlpool-Analysis](https://github.com/Ziya-Sadr/Ashi-Whirlpool-Analysis): Analysis of Ashigaru Whirlpool: Unspent Capacity & Anonymity Sets. 
