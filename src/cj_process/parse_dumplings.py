@@ -394,7 +394,7 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
         # 2. Recursively add back into coinjoin set all transactions with at least 3 participants, if referenced from coinjoins
         # 3. Stop when no new transaction is added back
 
-        # Remove all transactions with only two equal outputs
+        # Remove all transactions with only two equal outputs (=2 participants). Even early JoinMarket client had 2makers+1taker => 3
         REMOVE_BELOW_THREE_PARTICIPANTS_ALWAYS = True
         if REMOVE_BELOW_THREE_PARTICIPANTS_ALWAYS:
             data, false_cjtxs_min3 = filter_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD,
@@ -409,6 +409,8 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
             SM.print(
                 f'  Number of filtered false positives (CJ_TX_CHECK.MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS): {len(false_cjtxs_multipleEqualOuts)}')
             false_cjtxs.update(false_cjtxs_multipleEqualOuts)
+
+        # BUGBUG: early joinmarket scripts had initially 2 participants as default: https://chatgpt.com/share/6889d27b-84ec-8000-ad54-a8204ac9c08f
 
         # Remove all bellow 5 participants (but possibly return some back based on references later)
         data, false_cjtxs_min5 = filter_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD,
@@ -623,12 +625,44 @@ def is_coinjoin_tx(test_tx: dict, mix_protocol: MIX_PROTOCOL, checks: CJ_TX_CHEC
     if mix_protocol == MIX_PROTOCOL.JOINMARKET:  # blacklist, original transaction is expected to be pre-selected to be coinjoin-like
         checks_config = {**CJ_TX_CHECK_JOINMARKET_DEFAULTS, **(checks_config or {})}
 
-        # Positive example: 7732a03c8cf133e0475ae37e4f2f49ba77beb631378216889e33e9847aa0049b
+        # Precompute common stats to avoid repeated computation inside each rule
+        num_inputs = len(test_tx['inputs'])
+        num_outputs = len(test_tx['outputs'])
+        output_values = [test_tx['outputs'][index]['value'] for index in test_tx['outputs'].keys()]
+        outputs_counts = Counter(output_values)
+        num_values_with_duplicates = sum(1 for count in outputs_counts.values() if count > 1)
+        num_most_frequent_equal_output = Counter(output_values).most_common(1)[0][1]
 
+        #
+        # Whitelisting rule(s) - check basic expected structure
+        #
+        if checks & CJ_TX_CHECK.CORE_STRUCTURE:
+            # Positive example: 7732a03c8cf133e0475ae37e4f2f49ba77beb631378216889e33e9847aa0049b
+
+            # FILTER CODE FROM DUMPLINGS: isOtherCj =
+            # 1:      indistinguishableOutputs.Length == 1 // If it isn't, then it'd be likely a multidenomination CJ, which only Wasabi does.
+            # 2:      && (mostFrequentEqualOutputCount == outputCount - mostFrequentEqualOutputCount || mostFrequentEqualOutputCount == outputCount - mostFrequentEqualOutputCount + 1) // <------
+            # 3:      && outputs.Select(x => x.ScriptPubKey).Distinct().Count() >= mostFrequentEqualOutputCount // Otherwise more participants would be single actors which makes no sense.
+            # 4:      && inputs.Select(x => x.ScriptPubKey).Distinct().Count() >= mostFrequentEqualOutputCount // Otherwise more participants would be single actors which makes no sense.
+            # 5:      && inputValues.Max() <= mostFrequentEqualOutputValue + outputValues.Where(x => x != mostFrequentEqualOutputValue).Max() - Money.Coins(0.0001m); // I don't want to run expensive subset sum, so this is a shortcut to at least filter out false positives.
+
+            # Conditions in this function
+            # 1: MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS (later rule): Exactly one equal output value group (checked later by MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS)
+            # 2: Number of 2 * mostFrequentEqualOutputCount == outputCount (every anon output has corresponding change)
+            #   or 2 * mostFrequentEqualOutputCount == outputCount + 1 (taker's anon output does not have corresponding change output while all makers does)
+            if not ((2 * num_most_frequent_equal_output == num_outputs) or (2 * num_most_frequent_equal_output == num_outputs + 1)):
+                return False, FILTER_REASON.INVALID_STRUCTURE
+            # 3: ADDRESS_REUSE_THRESHOLD (later rule): Number of distinct addresses for outputs is at least mostFrequentEqualOutputCount (checked later by ADDRESS_REUSE_THRESHOLD)
+            # 4: ADDRESS_REUSE_THRESHOLD (later rule): Number of distinct addresses for intputs is at least mostFrequentEqualOutputCount (checked later by ADDRESS_REUSE_THRESHOLD)
+            # 5: (not checked for now): Largest input value is lower or equal to mostFrequentEqualOutputValue + largestNotEqualOutputValue - 0.0001m (mining fees)
+
+        #
+        # Blacklisting rule(s) - forbidden structure properties
+        #
         # TODO: NO Multisig inputs : f73564ae9e7913303e9fc2a46c4e0f0d942378ce50fb65e40ebe0227adecc47d
         # TODO: only wrapped‑segwit P2SH or native segwit addresses are used (NOT true, earlier used 1x as well)
 
-        # OP_RETURN (Runestone / Atom / Omni...)
+        # Check no OP_RETURN (Runestone / Atom / Omni...)
         if checks & CJ_TX_CHECK.OP_RETURN:
             # TxNullData + data in OP_RETURN script
             for output in test_tx['outputs']:
@@ -657,35 +691,29 @@ def is_coinjoin_tx(test_tx: dict, mix_protocol: MIX_PROTOCOL, checks: CJ_TX_CHEC
                 #         test_tx['outputs'][output]['script'].find('6f6d6e69') != -1     # Omni OP_RETURN : 3dc876a23165c8e6b9f81b4aeb9e0f1caaab77466ed20231901b2fe72f1c71d8
                 #    return False
 
-        # Minimal number of equal outputs
+        # Check minimal number of equal outputs
         if checks & CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD:
-            values = [test_tx['outputs'][index]['value'] for index in test_tx['outputs'].keys()]
-            if Counter(values).most_common(1)[0][1] < checks_config[CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD]:
+            if num_most_frequent_equal_output < checks_config[CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD]:
                 return False, FILTER_REASON.MIN_SAME_VALUES_THRESHOLD
 
-        # Minimal number of equal outputs
+        # Check minimal number of equal outputs
         if checks & CJ_TX_CHECK.MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS:
-            values = [test_tx['outputs'][index]['value'] for index in test_tx['outputs'].keys()]
-            counts = Counter(values)
-            num_values_with_duplicates = sum(1 for count in counts.values() if count > 1)
             if num_values_with_duplicates > checks_config[CJ_TX_CHECK.MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS]:
                 return False, FILTER_REASON.MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS
 
-        # Significant address reuse a2bd490cc63c1b70bf7b328c20f69115a1b20cdd06cd035d6b200e17ee8d934e
+        # Check significant address reuse a2bd490cc63c1b70bf7b328c20f69115a1b20cdd06cd035d6b200e17ee8d934e
         if checks & CJ_TX_CHECK.ADDRESS_REUSE_THRESHOLD:
             scripts = [test_tx['inputs'][index]['script'] for index in test_tx['inputs'].keys()]
             scripts.extend([test_tx['outputs'][index]['script'] for index in test_tx['outputs'].keys()])
             if Counter(scripts).most_common(1)[0][1] / len(scripts) > checks_config[CJ_TX_CHECK.ADDRESS_REUSE_THRESHOLD]:
                 return False, FILTER_REASON.ADDRESS_REUSE_THRESHOLD
 
-        # Too many inputs or too many outputs (coordination with more than tens of participants will likely fail)
+        # Check too many inputs or too many outputs (coordination with more than tens of participants will likely fail)
         if checks & CJ_TX_CHECK.NUM_INOUT_THRESHOLD:
-            num_inputs = len(test_tx['inputs'])
-            num_outputs = len(test_tx['outputs'])
             if num_inputs > checks_config[CJ_TX_CHECK.NUM_INOUT_THRESHOLD] or num_outputs > checks_config[CJ_TX_CHECK.NUM_INOUT_THRESHOLD]:
                 return False, FILTER_REASON.NUM_INOUT_THRESHOLD
 
-        # Heavy disbalance between number of inputs and outputs: 8f7933a5d127b3bd8723ae9ea9eb7da96df1e33a7a9c1bcf9e68a2e6263d0640
+        # Check heavy disbalance between number of inputs and outputs: 8f7933a5d127b3bd8723ae9ea9eb7da96df1e33a7a9c1bcf9e68a2e6263d0640
         if checks & CJ_TX_CHECK.INOUTS_RATIO_THRESHOLD:
             # Compute ratio, prevent division by zero
             ratio = 100000 if num_inputs == 0 or num_outputs == 0 else max(num_inputs, num_outputs) / min(num_inputs, num_outputs)
