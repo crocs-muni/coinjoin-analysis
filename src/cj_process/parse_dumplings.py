@@ -235,7 +235,7 @@ def detect_false_coinjoins(data, mix_protocol, checks: CJ_TX_CHECK=CJ_TX_CHECK.B
         valid, reason = is_coinjoin_tx(data["coinjoins"][cjtx], mix_protocol, checks, checks_params)
         if not valid:
             false_cjtxs[cjtx] = deepcopy(data["coinjoins"][cjtx])
-            false_cjtxs[cjtx]['is_cjtx'] = False
+            #false_cjtxs[cjtx]['is_cjtx'] = False  # Do not set false as it has to be set to true again when loaded elsewhere
             false_cjtxs[cjtx]['fp_reason'] = reason.name
 
     return false_cjtxs
