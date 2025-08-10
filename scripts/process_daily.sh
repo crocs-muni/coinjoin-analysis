@@ -1,6 +1,5 @@
-#!/bin/bash
-BASE_PATH=$HOME
-TMP_DIR="$BASE_PATH/btc/dumplings_temp2"
+# Prepare expected environment
+source activate_env.sh
 
 #
 # Extract Dumplings results
@@ -25,15 +24,25 @@ $BASE_PATH/btc/coinjoin-analysis/scripts/process_ww2.sh
 $BASE_PATH/btc/coinjoin-analysis/scripts/process_aw.sh
 
 #
-# Process JoinMarket 
-#
-$BASE_PATH/btc/coinjoin-analysis/scripts/process_jm.sh
-
-#
 # Process Wasabi 1.0 
 #
 $BASE_PATH/btc/coinjoin-analysis/scripts/process_ww1.sh
 
+#
+# Process JoinMarket 
+# Note: Needs to come after Wasabi 1.0 and Wasabi 2.0 for false positives restoration 
+#
+$BASE_PATH/btc/coinjoin-analysis/scripts/process_jm.sh
+
+
+
+#
+# Visualize processed coinjoins
+#
+$BASE_PATH/btc/coinjoin-analysis/scripts/visualize_ww2.sh
+$BASE_PATH/btc/coinjoin-analysis/scripts/visualize_aw.sh
+$BASE_PATH/btc/coinjoin-analysis/scripts/visualize_jm.sh
+$BASE_PATH/btc/coinjoin-analysis/scripts/visualize_ww1.sh
 
 
 
@@ -83,7 +92,7 @@ montage $image_list -tile 2x -geometry +2+2 $DEST_DIR/Scanner/wasabi2/wasabi2_ti
 
 # Ashigaru + JoinMarket
 image_list=""
-for pool in joinmarket_all whirlpool_ashigaru_2_5M whirlpool_ashigaru_25M; do
+for pool in whirlpool_ashigaru_2_5M whirlpool_ashigaru_25M joinmarket_all; do
     pool_PATH="$DEST_DIR/Scanner/$pool/${pool}_cummul_values_norm.png"
     image_list="$image_list $pool_PATH"
 done
