@@ -1,5 +1,6 @@
 # Prepare expected environment
-source activate_env.sh
+BASE_PATH=$HOME
+source $BASE_PATH/btc/coinjoin-analysis/scripts/activate_env.sh
 
 #
 # Extract Dumplings results
@@ -8,7 +9,7 @@ source activate_env.sh
 rm -rf $TMP_DIR/
 # Create new temporary directory
 mkdir $TMP_DIR/
-# Unzip processed dumplings files
+#Unzip processed dumplings files
 unzip $BASE_PATH/btc/dumplings.zip -d $TMP_DIR/
 
 

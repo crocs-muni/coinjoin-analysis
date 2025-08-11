@@ -1,5 +1,6 @@
 # Prepare expected environment
-source activate_env.sh
+BASE_PATH=$HOME
+source $BASE_PATH/btc/coinjoin-analysis/scripts/activate_env.sh
 
 # Restore false positives from WW1 and WW2 into inputs for JoinMarket
 python3 -m cj_process.parse_dumplings --cjtype jm --env_vars "RESTORE_FALSE_POSITIVES_FOR_OTHERS=True" --target-path $TMP_DIR/ | tee parse_dumplings.py.log

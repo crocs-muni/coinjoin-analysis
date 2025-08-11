@@ -1,5 +1,6 @@
 # Prepare expected environment
-source activate_env.sh
+BASE_PATH=$HOME
+source $BASE_PATH/btc/coinjoin-analysis/scripts/activate_env.sh
 
 # Copy processed metadata 
 #cp $BASE_PATH/btc/coinjoin-analysis/data/wasabi2/wasabi2_wallet_predictions.json $TMP_DIR/Scanner/
