@@ -99,6 +99,44 @@ for pool in whirlpool_ashigaru_2_5M whirlpool_ashigaru_25M joinmarket_all; do
 done
 montage $image_list -tile 2x -geometry +2+2 $DEST_DIR/Scanner/ashigaru_joinmarket_all_cummul_values_norm.png
 
+
+#
+# Summary montage
+#
+# Whole wasabi2 + JoinMarket 
+image_list=(
+  "$DEST_DIR/Scanner/wasabi2/wasabi2_cummul_values_norm.png"
+  "$DEST_DIR/Scanner/joinmarket_all/joinmarket_all_cummul_values_norm.png"
+  "$DEST_DIR/Scanner/wasabi1/wasabi1_cummul_values_norm.png"
+)
+
+# Ashigaru pools
+for pool in whirlpool_ashigaru_2_5M whirlpool_ashigaru_25M; do
+    image_list+=("$DEST_DIR/Scanner/$pool/${pool}_cummul_values_norm.png")
+done
+
+# wasabi2 pools
+for pool in others kruw gingerwallet opencoordinator coinjoin_nl; do
+    image_list+=("$DEST_DIR/Scanner/wasabi2_$pool/wasabi2_${pool}_cummul_values_norm.png")
+done
+
+montage "${image_list[@]}" -tile 2x -geometry +2+2 $DEST_DIR/Scanner/summary_tiles_all_cummul_values_norm.png
+
+# Last months of selected pools
+image_list=()
+LAST_INTERVAL="$(date +%Y-%m)-01 00-00-00--$(date -d "$(date +%Y-%m-01) +1 month" +%Y-%m)-01 00-00-00_unknown-static-100-1utxo" 
+echo $LAST_INTERVAL
+for pool in wasabi2_kruw wasabi2_gingerwallet wasabi2_opencoordinator wasabi2_coinjoin_nl whirlpool_ashigaru_2_5M joinmarket_all; do
+    image_list+=("$DEST_DIR/Scanner/$pool/${LAST_INTERVAL}/${pool}_input_types_values_norm.png")
+done
+
+montage "${image_list[@]}" \
+  -geometry 1600x1600+2+2 \
+  -tile 3x \
+  -strip -define png:compression-level=9 \
+  "$DEST_DIR/Scanner/summary2_tiles_all_cummul_values_norm.png"
+
+
 #
 # Upload selected files (separate scripts, can be configured based on desired upload service)
 #
