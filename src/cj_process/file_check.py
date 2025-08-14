@@ -59,7 +59,6 @@ expected_files = {
         "no_remix_txs.json": 10240,
         "no_remix_txs_simplified.json": 10240,
         "txid_coord.json": 10240,
-        "txid_coord_t.json": 10240,
 
         "$MIX_NAME$_coinjoin_stats.pdf": 10240,
         "$MIX_NAME$_coinjoin_stats.png": 10240,

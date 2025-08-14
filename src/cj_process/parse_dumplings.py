@@ -2437,16 +2437,13 @@ def wasabi_detect_coordinators_orig(mix_id: str, protocol: MIX_PROTOCOL, target_
     sorted_cjtxs = sorted(ordering, key=ordering.get)
 
     # Load known coordinators (will be used as starting set to expend to additional transactions)
-    if os.path.exists(os.path.join(target_path, 'txid_coord_t.json')):
-        initial_known_txs = als.load_json_from_file(os.path.join(target_path, 'txid_coord_t.json'))  # Load known coordinators
-    else:
-        ground_truth_known_coord_txs = als.load_json_from_file(os.path.join(target_path, 'txid_coord.json'))  # Load known coordinators
-        # Transform dictionary to {'coord': [cjtstxs]} format
-        transformed_dict = defaultdict(list)
-        for key, value in ground_truth_known_coord_txs.items():
-            transformed_dict[value].append(key)
-        initial_known_txs = dict(transformed_dict)
-        als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_t.json'), initial_known_txs)
+    ground_truth_known_coord_txs = als.load_json_from_file(os.path.join(target_path, 'txid_coord.json'))  # Load known coordinators
+    # Transform dictionary to {'coord': [cjtstxs]} format
+    transformed_dict = defaultdict(list)
+    for key, value in ground_truth_known_coord_txs.items():
+        transformed_dict[value].append(key)
+    initial_known_txs = dict(transformed_dict)
+    als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_t.json'), initial_known_txs)
 
     # Establish coordinator ids using two-pass process:
     # 1. First pass: Count dominant already existing coordinator for cjtx inputs.
