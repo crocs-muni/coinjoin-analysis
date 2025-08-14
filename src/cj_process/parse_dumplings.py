@@ -2345,7 +2345,7 @@ def analyze_liquidity_summary(mix_protocol, target_path: str):
         if mix_protocol == CoinjoinType.WW2:
             coords = [('wasabi2', 'zksnacks'), ('wasabi2', 'others'), ('wasabi2', 'kruw'), ('wasabi2', 'gingerwallet'),
                       ('wasabi2', 'opencoordinator'), ('wasabi2', 'coinjoin_nl'), ('wasabi2', 'wasabicoordinator'),
-                      ('wasabi2', 'mega'), ('wasabi2', 'btip')]
+                      ('wasabi2', 'mega'), ('wasabi2', 'btip'), ('wasabi2', 'unknown_2024')]
         if mix_protocol == CoinjoinType.WW1:
             coords = [('wasabi1', 'zksnacks'), ('wasabi1', 'others')]
         if mix_protocol == CoinjoinType.JM:
@@ -3462,7 +3462,7 @@ def main(argv=None):
 
             coord_tx_mapping = als.load_json_from_file(os.path.join(target_path, 'wasabi2_others', 'txid_coord_discovered_renamed.json'))
             selected_coords_default = ["kruw", "mega", "btip", "gingerwallet", "wasabicoordinator", "coinjoin_nl",
-                               "opencoordinator", "dragonordnance", "wasabist", "strange_2025"]
+                               "opencoordinator", "dragonordnance", "wasabist", "strange_2025", "unknown_2024"]
             # Force MIX_IDS subset if required
             selected_coords = selected_coords_default if op.MIX_IDS == "" else op.MIX_IDS
 
@@ -3546,7 +3546,8 @@ def main(argv=None):
         if op.CJ_TYPE == CoinjoinType.WW2:
             ww_plot_remixes_helper(['wasabi2_kruw', 'wasabi2_gingerwallet', 'wasabi2_opencoordinator',
                                     'wasabi2_coinjoin_nl', 'wasabi2_wasabicoordinator', 'wasabi2_wasabist',
-                                    'wasabi2_dragonordnance', 'wasabi2_mega', 'wasabi2_btip', 'wasabi2_strange_2025', 'wasabi2_others',
+                                    'wasabi2_dragonordnance', 'wasabi2_mega', 'wasabi2_btip', 'wasabi2_strange_2025',
+                                    'wasabi2_unknown_2024', 'wasabi2_others',
                                     'wasabi2_zksnacks', 'wasabi2'], MIX_PROTOCOL.WASABI2)
 
         if op.CJ_TYPE == CoinjoinType.SW:

@@ -11,7 +11,7 @@ python3 -m cj_process.parse_dumplings --cjtype ww2 --action plot_coinjoins --env
 python3 -m cj_process.parse_dumplings --cjtype ww2 --action plot_coinjoins --env_vars "PLOT_REMIXES_SINGLE_INTERVAL=True" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
 # Run generation of (time-consuming) multigraph plots (only for selected coordinators)
-python3 -m cj_process.parse_dumplings --cjtype ww2 --action plot_coinjoins --env_vars "PLOT_REMIXES_MULTIGRAPH=True;MIX_IDS=['wasabi2_zksnacks', 'wasabi2_kruw']" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
+#python3 -m cj_process.parse_dumplings --cjtype ww2 --action plot_coinjoins --env_vars "PLOT_REMIXES_MULTIGRAPH=True;MIX_IDS=['wasabi2_zksnacks', 'wasabi2_kruw']" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
 # Run generation of multigraph plots for all coordinators (very time consuming)
 #python3 -m cj_process.parse_dumplings --cjtype ww2 --action plot_coinjoins --env_vars "PLOT_REMIXES_MULTIGRAPH=True" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
