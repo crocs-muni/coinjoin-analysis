@@ -3204,6 +3204,12 @@ def restore_false_positives_for_others(target_path: str):
 #     return data
 
 
+def append_to_file(message: str, log_file: str | Path):
+    print(message, end="")
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(message)
+
+
 def main(argv=None):
     try:
         multiprocessing.set_start_method("spawn") # Set safer process spawning variant for multiprocessing
@@ -3225,6 +3231,13 @@ def main(argv=None):
     target_path = os.path.join(op.target_base_path, 'Scanner')
     SM.print(f'Starting analysis of {target_path}')
     op.print_attributes()
+
+    # Perform logging operation start with complete cmd line
+    log_file = os.path.join(Path(op.target_base_path).parent, "summary.log")
+    cmd_str = subprocess.list2cmdline(sys.argv)
+    message = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {cmd_str}\n"
+    append_to_file(message, log_file)
+    script_start_time = time.time()
 
     # WARNING: SW 100k pool does not match exactly mix_stay and active liqudity at the end - likely reason are neglected mining fees
 
@@ -3627,11 +3640,18 @@ def main(argv=None):
     SM.print_summary()
     print('### END SUMMARY #########################')
 
+    elapsed = time.time() - script_start_time
+    end_msg = f"  SUCCESS (elapsed: {elapsed:.2f} seconds)\n"
+    append_to_file(end_msg, log_file)
+
     return 0
+
 
 if __name__ == "__main__":
     main()
 
+
+    # TODO: For JoinMarket, detect transactions filtered as false positives which are connected to real jm cjtxs
 
     # TODO: Set x labels for histogram of frequencies to rounded denominations
     # TODO: Detect likely cases of WW2 round split due to more than 400 inputs registered
