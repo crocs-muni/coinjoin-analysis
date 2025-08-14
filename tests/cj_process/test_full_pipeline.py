@@ -425,7 +425,7 @@ def test_run_cj_process_jm():
     # ASSERT
     file_check = check_coinjoin_files(os.path.join(extract_dir, 'Scanner'))
     assert len(file_check['results']['joinmarket_all']['mix_base_files'][
-                   'missing_files']) == 2, f"Missing files: {file_check['results']['joinmarket_all']['mix_base_files']['missing_files']}"
+                   'missing_files']) == 1, f"Missing files: {file_check['results']['joinmarket_all']['mix_base_files']['missing_files']}"
 
 
 
