@@ -1267,7 +1267,12 @@ def extract_inputs_distribution(mix_id: str, target_path: str, tx_filename: str,
               txs[txid]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name]
     inputs_distrib = Counter(inputs)
     inputs_distrib = dict(sorted(inputs_distrib.items(), key=lambda item: (-item[1], item[0])))
-    inputs_info = {'mix_id': mix_id, 'path': tx_filename, 'distrib': inputs_distrib}
+
+    all_inputs = [txs[txid]['inputs'][index]['value'] for txid in txs.keys() for index in txs[txid]['inputs'].keys()]
+    all_inputs_distrib = Counter(all_inputs)
+    all_inputs_distrib = dict(sorted(all_inputs_distrib.items(), key=lambda item: (-item[1], item[0])))
+
+    inputs_info = {'mix_id': mix_id, 'path': tx_filename, 'distrib': inputs_distrib, 'all_inputs_distrib': all_inputs_distrib}
     logging.info(f'  Distribution extracted, total {len(inputs_info["distrib"])} different input values found')
     if save_outputs:
         als.save_json_to_file_pretty(os.path.join(target_path, f'{mix_id}_inputs_distribution{file_spec}.json'), inputs_info)
