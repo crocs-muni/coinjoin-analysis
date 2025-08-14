@@ -2933,6 +2933,64 @@ def wasabi_plot_remixes_serial(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
                             restrict_to_out_size, restrict_to_in_size, plot_multigraph, False)
 
 
+def restore_false_positives_for_others(target_path: str):
+        """
+        Restores previously detected false positives from Wasabi 1 and Wasabi 2 for Others (JoinMarked) processing.
+        Restore creates original Dumplings format files, requires full processing of JoinMarket transactions
+        """
+        SM.print(f'Restoring false positives of Wasabi 1 and 2 for JoinMarket processing')
+        # For ww1 and ww2 do:
+        # Load initial filtering false positives (mixid_false_filtered_cjtxs.json)
+        # Load additional filtering false positives (mixid/false_filtered_cjtxs_manual.json)
+        # Search for lines starting with 'cjtx:::000000000' inside original Dumplings files (e.g., 'Wasabi2CoinJoins.txt') and create filtered output file
+          # Gather set of each "mix_event_type": "MIX_LEAVE" output spend_by_tx transactions for each false positive coinjoin (potential postmix)
+          # Search for lines starting with 'spend_by_tx:::000000000' in post-mix Dumplings files (e.g., 'Wasabi2PostMixTxs.txt') for record in spend_by_tx set (and create filtered output file
+        # Modify JM loading to accept also these additional files inside ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS
+          # e.g., Wasabi2PostMixTxs.txt.001, Wasabi2PostMixTxs.txt.002 and similar are also accepted
+          # Modify is_coinjoin_tx(JM) to check also expected structure (atop of blacklisting)
+
+        def copy_txs_records(target_path, mix_id, from_file, to_file, to_copy_txs: dict, to_copy_txs_key_len: int):
+            """
+            Copy Dumplings records from provided from_file to to_file if exist in to_copy_txs
+            """
+            num_txs_moved = 0
+            with open(os.path.join(target_path, f'{to_file}.from_{mix_id}'), "w") as wfile:
+                with open(os.path.join(target_path, from_file), "r") as file:
+                    for line in file.readlines():
+                        if line[0:to_copy_txs_key_len] in to_copy_txs:
+                            wfile.write(line)
+                            num_txs_moved = num_txs_moved + 1
+            return num_txs_moved
+
+        # Prepare list from wasabi1
+        return_cjtxs_ww1 = {}
+        return_cjtxs_ww1.update(als.load_json_from_file(os.path.join(target_path, 'wasabi1_false_filtered_cjtxs.json')))
+        return_cjtxs_ww1.update(als.load_json_from_file(os.path.join(target_path, 'wasabi1', 'false_filtered_cjtxs_manual.json')))
+        return_cjtxs_ww1.update(als.load_json_from_file(os.path.join(target_path, 'wasabi1_others', 'coinjoin_tx_info.json'))['coinjoins'])  # Add also all "other" wasabi1 coinjoins (outside zkSNACKs)
+        # Prepare list from wasabi2
+        return_cjtxs_ww2 = {}
+        return_cjtxs_ww2.update(als.load_json_from_file(os.path.join(target_path, 'wasabi2_false_filtered_cjtxs.json')))
+        return_cjtxs_ww2.update(als.load_json_from_file(os.path.join(target_path, 'wasabi2', 'false_filtered_cjtxs_manual.json')))
+
+        for mix_id in [('wasabi2', return_cjtxs_ww2, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', 'OtherCoinJoins.txt', 'OtherCoinJoinPostMixTxs.txt'),
+                         ('wasabi1', return_cjtxs_ww1, 'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', 'OtherCoinJoins.txt', 'OtherCoinJoinPostMixTxs.txt')]:
+            return_cjtxs = mix_id[1]
+            # Precompute fast lookup dict for coinjoins
+            cjtx_search_str = {f'{cjtx}:::000000000':None for cjtx in return_cjtxs.keys()}
+            cjtx_search_str_key_len = len(next(iter(cjtx_search_str)))  # Get length of keys (all all the same length)
+            # Get all relevant postmixes into fast lookup dict
+            default_tx = 'vin_0000000000000000000000000000000000000000000000000000000000000000_0'
+            postmix_search_str = {f"{als.extract_txid_from_inout_string(return_cjtxs[cjtx]['outputs'][index].get('spend_by_tx', default_tx))[0]}:::000000000":None
+                                  for cjtx in return_cjtxs.keys() for index in return_cjtxs[cjtx]['outputs'].keys() }
+            postmix_search_str_key_len = len(next(iter(postmix_search_str)))  # Get length of keys (all all the same length)
+
+            # Copy all filtered coinjoins and postmix records
+            SM.print(f'  {mix_id[0]} -> joinmarket')
+            num_moved = copy_txs_records(target_path, mix_id[0], mix_id[2], mix_id[4], cjtx_search_str, cjtx_search_str_key_len)
+            SM.print(f'   coinjoin txs moved: {num_moved}')
+            num_moved = copy_txs_records(target_path, mix_id[0], mix_id[3], mix_id[5], postmix_search_str, postmix_search_str_key_len)
+            SM.print(f'   postmix txs moved: {num_moved}')
+
 
 # # noinspection PyUnboundLocalVariable
 # def detect_additional_cjtxs(mix_id: str, mix_protocol: MIX_PROTOCOL, base_path: Path):
@@ -3237,62 +3295,7 @@ def main(argv=None):
                 wasabi_detect_false(os.path.join(target_path, mix_id), 'coinjoin_tx_info.json')
 
     if op.RESTORE_FALSE_POSITIVES_FOR_OTHERS:
-        """
-        Restores previously detected false positives from Wasabi 1 and Wasabi 2 for Others (JoinMarked) processing.
-        Restore creates original Dumplings format files, requires full processing of JoinMarket transactions  
-        """
-        SM.print(f'Restoring false positives of Wasabi 1 and 2 for JoinMarket processing')
-        # For ww1 and ww2 do:
-        # Load initial filtering false positives (mixid_false_filtered_cjtxs.json)
-        # Load additional filtering false positives (mixid/false_filtered_cjtxs_manual.json)
-        # Search for lines starting with 'cjtx:::000000000' inside original Dumplings files (e.g., 'Wasabi2CoinJoins.txt') and create filtered output file
-          # Gather set of each "mix_event_type": "MIX_LEAVE" output spend_by_tx transactions for each false positive coinjoin (potential postmix)
-          # Search for lines starting with 'spend_by_tx:::000000000' in post-mix Dumplings files (e.g., 'Wasabi2PostMixTxs.txt') for record in spend_by_tx set (and create filtered output file
-        # Modify JM loading to accept also these additional files inside ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS
-          # e.g., Wasabi2PostMixTxs.txt.001, Wasabi2PostMixTxs.txt.002 and similar are also accepted
-          # Modify is_coinjoin_tx(JM) to check also expected structure (atop of blacklisting)
-
-        def copy_txs_records(target_path, mix_id, from_file, to_file, to_copy_txs: dict, to_copy_txs_key_len: int):
-            """
-            Copy Dumplings records from provided from_file to to_file if exist in to_copy_txs
-            """
-            num_txs_moved = 0
-            with open(os.path.join(target_path, f'{to_file}.from_{mix_id}'), "w") as wfile:
-                with open(os.path.join(target_path, from_file), "r") as file:
-                    for line in file.readlines():
-                        if line[0:to_copy_txs_key_len] in to_copy_txs:
-                            wfile.write(line)
-                            num_txs_moved = num_txs_moved + 1
-            return num_txs_moved
-
-        # Prepare list from wasabi1
-        return_cjtxs_ww1 = {}
-        return_cjtxs_ww1.update(als.load_json_from_file(os.path.join(target_path, 'wasabi1_false_filtered_cjtxs.json')))
-        return_cjtxs_ww1.update(als.load_json_from_file(os.path.join(target_path, 'wasabi1', 'false_filtered_cjtxs_manual.json')))
-        return_cjtxs_ww1.update(als.load_json_from_file(os.path.join(target_path, 'wasabi1_others', 'coinjoin_tx_info.json'))['coinjoins'])  # Add also all "other" wasabi1 coinjoins (outside zkSNACKs)
-        # Prepare list from wasabi2
-        return_cjtxs_ww2 = {}
-        return_cjtxs_ww2.update(als.load_json_from_file(os.path.join(target_path, 'wasabi2_false_filtered_cjtxs.json')))
-        return_cjtxs_ww2.update(als.load_json_from_file(os.path.join(target_path, 'wasabi2', 'false_filtered_cjtxs_manual.json')))
-
-        for mix_id in [('wasabi2', return_cjtxs_ww2, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', 'OtherCoinJoins.txt', 'OtherCoinJoinPostMixTxs.txt'),
-                         ('wasabi1', return_cjtxs_ww1, 'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', 'OtherCoinJoins.txt', 'OtherCoinJoinPostMixTxs.txt')]:
-            return_cjtxs = mix_id[1]
-            # Precompute fast lookup dict for coinjoins
-            cjtx_search_str = {f'{cjtx}:::000000000':None for cjtx in return_cjtxs.keys()}
-            cjtx_search_str_key_len = len(next(iter(cjtx_search_str)))  # Get length of keys (all all the same length)
-            # Get all relevant postmixes into fast lookup dict
-            default_tx = 'vin_0000000000000000000000000000000000000000000000000000000000000000_0'
-            postmix_search_str = {f"{als.extract_txid_from_inout_string(return_cjtxs[cjtx]['outputs'][index].get('spend_by_tx', default_tx))[0]}:::000000000":None
-                                  for cjtx in return_cjtxs.keys() for index in return_cjtxs[cjtx]['outputs'].keys() }
-            postmix_search_str_key_len = len(next(iter(postmix_search_str)))  # Get length of keys (all all the same length)
-
-            # Copy all filtered coinjoins and postmix records
-            SM.print(f'  {mix_id[0]} -> joinmarket')
-            num_moved = copy_txs_records(target_path, mix_id[0], mix_id[2], mix_id[4], cjtx_search_str, cjtx_search_str_key_len)
-            SM.print(f'   coinjoin txs moved: {num_moved}')
-            num_moved = copy_txs_records(target_path, mix_id[0], mix_id[3], mix_id[5], postmix_search_str, postmix_search_str_key_len)
-            SM.print(f'   postmix txs moved: {num_moved}')
+        restore_false_positives_for_others(target_path)
 
 
     if op.DETECT_COORDINATORS:
