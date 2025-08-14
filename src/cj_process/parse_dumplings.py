@@ -2365,12 +2365,12 @@ def discover_coordinators(cjtxs: dict, sorted_cjtxs: list, coord_txs: dict, in_o
     :param coord_txs: Mapping between cooridnator id and all its cjtxs
     :param sorted_cjtxs: Pre-sorted cjtxs (e.g., relative ordering based on transaction connections)
     :param in_or_out: if 'inputs', assignment wil be done based on cjtx inputs, if 'outputs' then on outputs
+    :param min_coord_cjtxs minimum threshold number of coinjoins under coordinator to keep from filtering
     :param min_coord_fraction: minimum fraction of inputs/outputs to specific coordinator to assign
-    :param next_coord_index incremental index for coordinators
     :return: updated value of coord_txs and next_coord_index
     """
     print(f'\nFiltering small coordinators (min={min_coord_cjtxs})...')
-    # Filter out coordinator ids with less than MIN_COORD_CJTXS transactions
+    # Filter out coordinator ids with at least MIN_COORD_CJTXS transactions
     coord_txs_filtered = {coord_id: coord_txs[coord_id] for coord_id in coord_txs.keys()
                           if len(coord_txs[coord_id]) >= min_coord_cjtxs}
     print(f'  Total non-small coordinators: {len(coord_txs_filtered)}')
@@ -2392,13 +2392,13 @@ def discover_coordinators(cjtxs: dict, sorted_cjtxs: list, coord_txs: dict, in_o
             continue
         if in_or_out == 'inputs':
             input_coords = [
-                coord_ids.get(als.extract_txid_from_inout_string(cjtxs[cjtx]['inputs'][input]['spending_tx'])[0],
-                              UNASSIGNED_COORD) for input in cjtxs[cjtx]['inputs'].keys()]
+                coord_ids.get(als.extract_txid_from_inout_string(cjtxs[cjtx]['inputs'][index]['spending_tx'])[0],
+                              UNASSIGNED_COORD) for index in cjtxs[cjtx]['inputs'].keys()]
         elif in_or_out == 'outputs':
             input_coords = [
-                coord_ids.get(als.extract_txid_from_inout_string(cjtxs[cjtx]['outputs'][input]['spend_by_tx'])[0],
-                              UNASSIGNED_COORD) for input in cjtxs[cjtx]['outputs'].keys()
-                                if 'spend_by_tx' in cjtxs[cjtx]['outputs'][input].keys()]
+                coord_ids.get(als.extract_txid_from_inout_string(cjtxs[cjtx]['outputs'][index]['spend_by_tx'])[0],
+                              UNASSIGNED_COORD) for index in cjtxs[cjtx]['outputs'].keys()
+                                if 'spend_by_tx' in cjtxs[cjtx]['outputs'][index].keys()]
         else:
             assert False, f'Incorrect parameter in_or_out={in_or_out}'
 
@@ -2422,7 +2422,7 @@ def discover_coordinators(cjtxs: dict, sorted_cjtxs: list, coord_txs: dict, in_o
     return coord_txs, next_coord_index
 
 
-def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path):
+def wasabi_detect_coordinators_orig(mix_id: str, protocol: MIX_PROTOCOL, target_path):
     """
     Detect propagation of remix outputs to identify separate coordinators. Based on the assumption,
     that coinjoins under same coordinator will have majority of remixed inputs from the same coordinator.
@@ -2436,7 +2436,7 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
     ordering = als.compute_cjtxs_relative_ordering(cjtxs)
     sorted_cjtxs = sorted(ordering, key=ordering.get)
 
-    # Load known coordinators (will be used as starting set to expand to additional transactions)
+    # Load known coordinators (will be used as starting set to expend to additional transactions)
     if os.path.exists(os.path.join(target_path, 'txid_coord_t.json')):
         initial_known_txs = als.load_json_from_file(os.path.join(target_path, 'txid_coord_t.json'))  # Load known coordinators
     else:
@@ -2607,6 +2607,146 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
     for coord_id in pair_coords.keys():
         if coord_id in coord_txs_to_save:
             coord_txs_to_save[pair_coords[coord_id]] = coord_txs_to_save.pop(coord_id)
+    als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_discovered_renamed.json'), coord_txs_to_save)
+
+    PRINT_FINAL = False
+    if PRINT_FINAL:
+        als.print_coordinators_counts(coord_txs, 2)
+        coord_txs_filtered = {coord_id: coord_txs[coord_id] for coord_id in coord_txs.keys() if
+                              len(coord_txs[coord_id]) >= MIN_COORD_CJTXS}
+        #print(coord_txs_filtered)
+        print(f'# Total non-small coordinators (min={MIN_COORD_CJTXS}): {len(coord_txs_filtered)}')
+
+
+def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path):
+    """
+    Detect propagation of remix outputs to identify separate coordinators. Is based on the assumption,
+    that coinjoins under same coordinator will have majority of remixed inputs from/to the same coordinator.
+    The method iteratively places coinjoin transaction into a cluster based on cluster of a majority of inputs/outputs,
+    combined with list of know ground truth mappings between transactions and known coordinators ('txid_coord.json').
+    The method is not fully automatic as outputs for a deceased coordinator typically join another coordinator eventually
+    and naive application of heuristic would results in overly aggresive merge of clusters (typically to a dominant one
+    at the times). Instead, candidate clusters are created and user analyst is expected to decide if ones not yet
+    attributed to specific coordinator are separate from known ones or not (see txid_coord_merge_candidates.json).
+    :param mix_id:
+    :param protocol:
+    :param target_path:
+    :return:
+    """
+    # Read, filter and sort coinjoin transactions
+    cjtxs = als.load_coinjoins_from_file(target_path, None, True)["coinjoins"]
+    ordering = als.compute_cjtxs_relative_ordering(cjtxs)
+    sorted_cjtxs = sorted(ordering, key=ordering.get)
+
+    # Load known coordinators (will be used as starting set to expand to additional transactions)
+    data = als.load_json_from_file(os.path.join(target_path, 'txid_coord.json'))  # Load known coordinators
+    ground_truth_known_coord_txs = {key:data[sublist][key] for sublist in data.keys() for key in data[sublist].keys()}
+
+    # Transform dictionary to {'coord': [cjtx]} format
+    transformed_dict = defaultdict(list)
+    for key, value in ground_truth_known_coord_txs.items():
+        transformed_dict[value].append(key)
+    initial_known_txs = dict(transformed_dict)
+    als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_t.json'), initial_known_txs)  # Save transformed version for easier human lookup
+
+    # Establish coordinator ids using two-pass process:
+    # 1. First pass: Count dominant, already existing coordinator for cjtx inputs.
+    #    If not existing yet (-1), get new unique id (counter) and assign it for future processing
+    # 2. Second pass: Perform second pass with coordinators with lower than MIN_COORD_CJTXS
+    # First pass may misclassify coordinators if transactions are out of order.
+    MIN_COORD_CJTXS = 10
+    MIN_COORD_FRACTION = 0.4
+
+    coord_txs = initial_known_txs
+    last_num_coordinators = -1
+    last_coord_txs = {}
+    pass_step = 0
+    # while last_num_coordinators != len(coord_txs):
+    #     last_num_coordinators = len(coord_txs)
+    while last_coord_txs != coord_txs:
+        last_coord_txs = copy.deepcopy(coord_txs)
+        print(f'\n# Current step {pass_step}: {len(coord_txs)} coordinators')
+
+        # Discover based on inputs
+        coord_txs, next_coord_index = discover_coordinators(cjtxs, sorted_cjtxs, coord_txs, 'inputs', MIN_COORD_CJTXS, MIN_COORD_FRACTION)
+        als.print_coordinators_counts(coord_txs, MIN_COORD_CJTXS)
+
+        # Discover additionally based on outputs
+        DISCOVER_ON_OUTPUTS = True
+        if DISCOVER_ON_OUTPUTS:
+            coord_txs, next_coord_index = discover_coordinators(cjtxs, sorted_cjtxs, coord_txs, 'outputs', MIN_COORD_CJTXS, MIN_COORD_FRACTION)
+            als.print_coordinators_counts(coord_txs, MIN_COORD_CJTXS)
+
+        pass_step = pass_step + 1
+
+    print(f'\nTotal passes executed: {pass_step}')
+
+    # Try to merge coordinators
+    # Idea: Almost all transactions are now assigned to perspective non-small coordinators
+    #   Check again if coordinator inferred from inputs and outputs match.
+    #   If not, that is candidate for merging of clusters.
+    #   'mergers' structure contains one record for each transaction, which has mismatch dominant coordinator based
+    #      on inputs and outputs => mismatched coordinators might be actually same one
+    UNASSIGNED_COORD = -1
+    coord_ids = {cjtx: coord_id for coord_id in coord_txs for cjtx in coord_txs[coord_id]}
+    merge_candidates = {coord_id: [] for coord_id in coord_txs.keys()}
+    merge_candidates_dict = {coord_id: [] for coord_id in coord_txs.keys()}
+    for cjtx in sorted_cjtxs:
+        if cjtx not in coord_ids or coord_ids[cjtx] == UNASSIGNED_COORD:
+            print(f'No coordinator set for {cjtx}')
+    for cjtx in sorted_cjtxs:
+        input_coords = [coord_ids.get(als.extract_txid_from_inout_string(cjtxs[cjtx]['inputs'][index]['spending_tx'])[0], UNASSIGNED_COORD) for index in cjtxs[cjtx]['inputs'].keys()]
+        output_coords = [coord_ids.get(als.extract_txid_from_inout_string(cjtxs[cjtx]['outputs'][index]['spend_by_tx'])[0], UNASSIGNED_COORD)for index in cjtxs[cjtx]['outputs'].keys()
+                         if 'spend_by_tx' in cjtxs[cjtx]['outputs'][index].keys()]
+        input_value_counts = Counter(input_coords)
+        output_value_counts = Counter(output_coords)
+        if len(input_value_counts) > 0 and len(output_value_counts) > 0:
+            input_dominant_coord = input_value_counts.most_common()[0]
+            output_dominant_coord = output_value_counts.most_common()[0]
+            if input_dominant_coord[0] != output_dominant_coord[0]:
+                print(f'Dominant coordinator inconsistency detected for {cjtx}: coord={input_dominant_coord[0]}:{input_dominant_coord[1]}x vs. coord={output_dominant_coord[0]}:{output_dominant_coord[1]}x')
+                print(f'  now set as {coord_ids[cjtx]}')
+                if input_dominant_coord[0] != UNASSIGNED_COORD and output_dominant_coord[0] != UNASSIGNED_COORD:
+                    print(f'  candidate for merger: {input_dominant_coord[0]} and {output_dominant_coord[0]}')
+                    print(f'    input coordinators: {input_coords}')
+                    print(f'    output coordinators: {output_coords}')
+                    merge_candidates[input_dominant_coord[0]].append(output_dominant_coord[0])
+
+                    merge_candidates_dict[input_dominant_coord[0]].append({'txid': cjtx, 'output_coord': output_dominant_coord[0], 'input_coords': input_coords, 'output_coords': output_coords})
+
+    print('Going to print detected candidates for merging. The merging shall be considered when multiple cases '
+          'of same merge candidates are shown. '
+          'E.g. {0: [1, 1], 1: [3, 3, 3, 3, 10], 2: [], 3: [1, 1, 1, 1], 4: [1], means that 1 and 3 shall be merged, while 1 and 4 likely not.')
+    print(merge_candidates)
+    als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_merge_candidates.json'), merge_candidates_dict)
+    als.print_coordinators_counts(coord_txs, MIN_COORD_CJTXS)
+    als.print_coordinators_counts(coord_txs, 2)
+
+    # Note: automated merging not performed, consult wasabi_detect_coordinators_orig.complete_bidirectional_closure() for such option
+
+    pair_cluster_index_2_coord_name = {}
+    for cluster_index in coord_txs.keys():
+        if cluster_index in pair_cluster_index_2_coord_name.keys():
+            CHECK_COORDINATOR_CONSISTENCY = True
+            if not CHECK_COORDINATOR_CONSISTENCY:
+                continue  # If already paired, then we can speedup and do no checking
+        for txid in coord_txs[cluster_index]:
+            if txid in ground_truth_known_coord_txs:
+                # Transaction is known to be paired to known coordinator => pair whole cluster
+                if cluster_index not in pair_cluster_index_2_coord_name.keys():
+                    # New pairing detected
+                    print(f'coord_ids: {cluster_index} paired to {ground_truth_known_coord_txs[txid]} by {txid}')
+                    pair_cluster_index_2_coord_name[cluster_index] = ground_truth_known_coord_txs[txid]
+                else:
+                    assert pair_cluster_index_2_coord_name[cluster_index] == ground_truth_known_coord_txs[txid], \
+                        f'Duplicate coordinator pairing detected for cluster {cluster_index}: {pair_cluster_index_2_coord_name[cluster_index]} vs. {ground_truth_known_coord_txs[txid]}'
+
+    coord_txs_to_save = coord_txs
+
+    als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_discovered.json'), coord_txs_to_save)
+    for coord_id in pair_cluster_index_2_coord_name.keys():
+        if coord_id in coord_txs_to_save:
+            coord_txs_to_save[pair_cluster_index_2_coord_name[coord_id]] = coord_txs_to_save.pop(coord_id)
     coord_txs_to_save_sorted = {}
     for coord_id in coord_txs_to_save.keys():
         without_date_sorted = [txid for txid in coord_txs_to_save[coord_id] if txid not in cjtxs.keys()]
