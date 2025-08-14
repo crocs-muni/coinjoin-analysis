@@ -1,4 +1,4 @@
-import Helpers.global_constants as global_constants
+import helpers.global_constants as global_constants
 import os
 import json
 import logging

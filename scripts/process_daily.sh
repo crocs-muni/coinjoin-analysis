@@ -1,6 +1,6 @@
-#!/bin/bash
+# Prepare expected environment
 BASE_PATH=$HOME
-TMP_DIR="$BASE_PATH/btc/dumplings_temp2"
+source $BASE_PATH/btc/coinjoin-analysis/scripts/activate_env.sh
 
 #
 # Extract Dumplings results
@@ -9,7 +9,7 @@ TMP_DIR="$BASE_PATH/btc/dumplings_temp2"
 rm -rf $TMP_DIR/
 # Create new temporary directory
 mkdir $TMP_DIR/
-# Unzip processed dumplings files
+#Unzip processed dumplings files
 unzip $BASE_PATH/btc/dumplings.zip -d $TMP_DIR/
 
 
@@ -25,15 +25,25 @@ $BASE_PATH/btc/coinjoin-analysis/scripts/process_ww2.sh
 $BASE_PATH/btc/coinjoin-analysis/scripts/process_aw.sh
 
 #
-# Process JoinMarket 
-#
-$BASE_PATH/btc/coinjoin-analysis/scripts/process_jm.sh
-
-#
 # Process Wasabi 1.0 
 #
 $BASE_PATH/btc/coinjoin-analysis/scripts/process_ww1.sh
 
+#
+# Process JoinMarket 
+# Note: Needs to come after Wasabi 1.0 and Wasabi 2.0 for false positives restoration 
+#
+$BASE_PATH/btc/coinjoin-analysis/scripts/process_jm.sh
+
+
+
+#
+# Visualize processed coinjoins
+#
+$BASE_PATH/btc/coinjoin-analysis/scripts/visualize_ww2.sh
+$BASE_PATH/btc/coinjoin-analysis/scripts/visualize_aw.sh
+$BASE_PATH/btc/coinjoin-analysis/scripts/visualize_jm.sh
+$BASE_PATH/btc/coinjoin-analysis/scripts/visualize_ww1.sh
 
 
 
@@ -83,11 +93,49 @@ montage $image_list -tile 2x -geometry +2+2 $DEST_DIR/Scanner/wasabi2/wasabi2_ti
 
 # Ashigaru + JoinMarket
 image_list=""
-for pool in joinmarket_all whirlpool_ashigaru_2_5M whirlpool_ashigaru_25M; do
+for pool in whirlpool_ashigaru_2_5M whirlpool_ashigaru_25M joinmarket_all; do
     pool_PATH="$DEST_DIR/Scanner/$pool/${pool}_cummul_values_norm.png"
     image_list="$image_list $pool_PATH"
 done
 montage $image_list -tile 2x -geometry +2+2 $DEST_DIR/Scanner/ashigaru_joinmarket_all_cummul_values_norm.png
+
+
+#
+# Summary montage
+#
+# Whole wasabi2 + JoinMarket 
+image_list=(
+  "$DEST_DIR/Scanner/wasabi2/wasabi2_cummul_values_norm.png"
+  "$DEST_DIR/Scanner/joinmarket_all/joinmarket_all_cummul_values_norm.png"
+  "$DEST_DIR/Scanner/wasabi1/wasabi1_cummul_values_norm.png"
+)
+
+# Ashigaru pools
+for pool in whirlpool_ashigaru_2_5M whirlpool_ashigaru_25M; do
+    image_list+=("$DEST_DIR/Scanner/$pool/${pool}_cummul_values_norm.png")
+done
+
+# wasabi2 pools
+for pool in others kruw gingerwallet opencoordinator coinjoin_nl; do
+    image_list+=("$DEST_DIR/Scanner/wasabi2_$pool/wasabi2_${pool}_cummul_values_norm.png")
+done
+
+montage "${image_list[@]}" -tile 2x -geometry +2+2 $DEST_DIR/Scanner/summary_tiles_all_cummul_values_norm.png
+
+# Last months of selected pools
+image_list=()
+LAST_INTERVAL="$(date +%Y-%m)-01 00-00-00--$(date -d "$(date +%Y-%m-01) +1 month" +%Y-%m)-01 00-00-00_unknown-static-100-1utxo" 
+echo $LAST_INTERVAL
+for pool in wasabi2_kruw wasabi2_gingerwallet wasabi2_opencoordinator wasabi2_coinjoin_nl whirlpool_ashigaru_2_5M joinmarket_all; do
+    image_list+=("$DEST_DIR/Scanner/$pool/${LAST_INTERVAL}/${pool}_input_types_values_norm.png")
+done
+
+montage "${image_list[@]}" \
+  -geometry 1600x1600+2+2 \
+  -tile 3x \
+  -strip -define png:compression-level=9 \
+  "$DEST_DIR/Scanner/summary2_tiles_all_cummul_values_norm.png"
+
 
 #
 # Upload selected files (separate scripts, can be configured based on desired upload service)

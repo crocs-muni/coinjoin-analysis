@@ -6,6 +6,8 @@ import os
 import pickle
 import random
 import shutil
+import subprocess
+import sys
 from copy import deepcopy
 from enum import Enum
 from multiprocessing.pool import ThreadPool
@@ -24,8 +26,8 @@ import ast
 import requests
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from typing import List
-import tracemalloc
+from typing import List, BinaryIO
+#import tracemalloc
 
 
 import cj_process.cj_visualize as cjvis
@@ -47,11 +49,6 @@ op = None  # Global settings for the experiment
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger_to_disable = logging.getLogger("mathplotlib")
 logger_to_disable.setLevel(logging.WARNING)
-
-
-# SM = als.SummaryMessages()
-# als.SM = SM
-
 
 
 def set_key_value_assert(data, key, value, hard_assert):
@@ -76,7 +73,29 @@ def get_synthetic_address(create_txid, vout_index):
     return f'synbc1{create_txid[:16]}_{vout_index}'
 
 
-def load_coinjoin_stats_from_file(target_file, start_date: str = None, stop_date: str = None):
+def load_coinjoin_stats_from_dumplings(target_file, start_date: str = None, stop_date: str = None, multiple_files: bool = True):
+    """
+    Loads stored coinjoin records from files created by Dumplings project into internal structure.
+    Multiple files can be loaded from all files with 'target_file' prefix (if exists) with results merged together.
+    :param target_file: target file name
+    :param start_date: start date to filter
+    :param stop_date: end date to filter
+    :param multiple_files: if false, hen only target_file is parsed. If true, target_file is treated as prefix with 'target_file' and any 'target_file.*' also loaded if present
+    :return: loaded internal structure from one or more files merged together
+    """
+    search_target = Path(target_file)
+    candidates = [search_target]
+    if multiple_files:
+        candidates = candidates + list(search_target.parent.glob(f"{search_target.name}.*"))  # Grab every candidate that starts with 'target_file'
+
+    cj_stats = {}
+    for file in candidates:
+        cj_stats.update(load_coinjoin_stats_from_dumplings_file(str(file), start_date, stop_date))
+
+    return cj_stats
+
+
+def load_coinjoin_stats_from_dumplings_file(target_file: str, start_date: str = None, stop_date: str = None):
     cj_stats = {}
     logging.debug(f'Processing file {target_file}')
     json_file = target_file + '.json'
@@ -174,7 +193,7 @@ def load_coinjoin_stats(base_path):
 
     for file in files:
         target_file = os.path.join(base_path, file)
-        coinjoin_stats[target_file]["coinjoins"] = load_coinjoin_stats_from_file(target_file)
+        coinjoin_stats[target_file]["coinjoins"] = load_coinjoin_stats_from_dumplings(target_file)
 
     return coinjoin_stats
 
@@ -218,7 +237,7 @@ def detect_false_coinjoins(data, mix_protocol, checks: CJ_TX_CHECK=CJ_TX_CHECK.B
         valid, reason = is_coinjoin_tx(data["coinjoins"][cjtx], mix_protocol, checks, checks_params)
         if not valid:
             false_cjtxs[cjtx] = deepcopy(data["coinjoins"][cjtx])
-            false_cjtxs[cjtx]['is_cjtx'] = False
+            #false_cjtxs[cjtx]['is_cjtx'] = False  # Do not set false as it has to be set to true again when loaded elsewhere
             false_cjtxs[cjtx]['fp_reason'] = reason.name
 
     return false_cjtxs
@@ -331,13 +350,13 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
     SM.print("### Load from Dumplings artifacts")
     # All mixes are having mixing coinjoins and postmix spends
     data = {'rounds': {}, 'filename': os.path.join(target_path, mix_filename),
-            'coinjoins': load_coinjoin_stats_from_file(os.path.join(target_path, mix_filename), start_date, stop_date),
-            'postmix': load_coinjoin_stats_from_file(os.path.join(target_path, postmix_filename), start_date, stop_date)}
+            'coinjoins': load_coinjoin_stats_from_dumplings(os.path.join(target_path, mix_filename), start_date, stop_date),
+            'postmix': load_coinjoin_stats_from_dumplings(os.path.join(target_path, postmix_filename), start_date, stop_date)}
     SM.print(f"  Number of raw loaded coinjoins: {len(data['coinjoins'].keys())}")
     # Only Samourai Whirlpool is having premix tx (TX0)
     cjtxs_fixed = 0
     if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
-        data['premix'] = load_coinjoin_stats_from_file(os.path.join(target_path, premix_filename), start_date, stop_date)
+        data['premix'] = load_coinjoin_stats_from_dumplings(os.path.join(target_path, premix_filename), start_date, stop_date)
         for txid in list(data['premix'].keys()):
             valid, reason = is_coinjoin_tx(data['premix'][txid], mix_protocol)
             if valid:
@@ -377,7 +396,7 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
         # 2. Recursively add back into coinjoin set all transactions with at least 3 participants, if referenced from coinjoins
         # 3. Stop when no new transaction is added back
 
-        # Remove all transactions with only two equal outputs
+        # Remove all transactions with only two equal outputs (=2 participants). Even early JoinMarket client had 2makers+1taker => 3
         REMOVE_BELOW_THREE_PARTICIPANTS_ALWAYS = True
         if REMOVE_BELOW_THREE_PARTICIPANTS_ALWAYS:
             data, false_cjtxs_min3 = filter_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD,
@@ -392,6 +411,8 @@ def load_coinjoins(target_path: str, mix_protocol: MIX_PROTOCOL, mix_filename: s
             SM.print(
                 f'  Number of filtered false positives (CJ_TX_CHECK.MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS): {len(false_cjtxs_multipleEqualOuts)}')
             false_cjtxs.update(false_cjtxs_multipleEqualOuts)
+
+        # BUGBUG: early joinmarket scripts had initially 2 participants as default: https://chatgpt.com/share/6889d27b-84ec-8000-ad54-a8204ac9c08f
 
         # Remove all bellow 5 participants (but possibly return some back based on references later)
         data, false_cjtxs_min5 = filter_false_coinjoins(data, mix_protocol, CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD,
@@ -606,12 +627,44 @@ def is_coinjoin_tx(test_tx: dict, mix_protocol: MIX_PROTOCOL, checks: CJ_TX_CHEC
     if mix_protocol == MIX_PROTOCOL.JOINMARKET:  # blacklist, original transaction is expected to be pre-selected to be coinjoin-like
         checks_config = {**CJ_TX_CHECK_JOINMARKET_DEFAULTS, **(checks_config or {})}
 
-        # Positive example: 7732a03c8cf133e0475ae37e4f2f49ba77beb631378216889e33e9847aa0049b
+        # Precompute common stats to avoid repeated computation inside each rule
+        num_inputs = len(test_tx['inputs'])
+        num_outputs = len(test_tx['outputs'])
+        output_values = [test_tx['outputs'][index]['value'] for index in test_tx['outputs'].keys()]
+        outputs_counts = Counter(output_values)
+        num_values_with_duplicates = sum(1 for count in outputs_counts.values() if count > 1)
+        num_most_frequent_equal_output = Counter(output_values).most_common(1)[0][1]
 
+        #
+        # Whitelisting rule(s) - check basic expected structure
+        #
+        if checks & CJ_TX_CHECK.CORE_STRUCTURE:
+            # Positive example: 7732a03c8cf133e0475ae37e4f2f49ba77beb631378216889e33e9847aa0049b
+
+            # FILTER CODE FROM DUMPLINGS: isOtherCj =
+            # 1:      indistinguishableOutputs.Length == 1 // If it isn't, then it'd be likely a multidenomination CJ, which only Wasabi does.
+            # 2:      && (mostFrequentEqualOutputCount == outputCount - mostFrequentEqualOutputCount || mostFrequentEqualOutputCount == outputCount - mostFrequentEqualOutputCount + 1) // <------
+            # 3:      && outputs.Select(x => x.ScriptPubKey).Distinct().Count() >= mostFrequentEqualOutputCount // Otherwise more participants would be single actors which makes no sense.
+            # 4:      && inputs.Select(x => x.ScriptPubKey).Distinct().Count() >= mostFrequentEqualOutputCount // Otherwise more participants would be single actors which makes no sense.
+            # 5:      && inputValues.Max() <= mostFrequentEqualOutputValue + outputValues.Where(x => x != mostFrequentEqualOutputValue).Max() - Money.Coins(0.0001m); // I don't want to run expensive subset sum, so this is a shortcut to at least filter out false positives.
+
+            # Conditions in this function
+            # 1: MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS (later rule): Exactly one equal output value group (checked later by MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS)
+            # 2: Number of 2 * mostFrequentEqualOutputCount == outputCount (every anon output has corresponding change)
+            #   or 2 * mostFrequentEqualOutputCount == outputCount + 1 (taker's anon output does not have corresponding change output while all makers does)
+            if not ((2 * num_most_frequent_equal_output == num_outputs) or (2 * num_most_frequent_equal_output == num_outputs + 1)):
+                return False, FILTER_REASON.INVALID_STRUCTURE
+            # 3: ADDRESS_REUSE_THRESHOLD (later rule): Number of distinct addresses for outputs is at least mostFrequentEqualOutputCount (checked later by ADDRESS_REUSE_THRESHOLD)
+            # 4: ADDRESS_REUSE_THRESHOLD (later rule): Number of distinct addresses for intputs is at least mostFrequentEqualOutputCount (checked later by ADDRESS_REUSE_THRESHOLD)
+            # 5: (not checked for now): Largest input value is lower or equal to mostFrequentEqualOutputValue + largestNotEqualOutputValue - 0.0001m (mining fees)
+
+        #
+        # Blacklisting rule(s) - forbidden structure properties
+        #
         # TODO: NO Multisig inputs : f73564ae9e7913303e9fc2a46c4e0f0d942378ce50fb65e40ebe0227adecc47d
         # TODO: only wrapped‑segwit P2SH or native segwit addresses are used (NOT true, earlier used 1x as well)
 
-        # OP_RETURN (Runestone / Atom / Omni...)
+        # Check no OP_RETURN (Runestone / Atom / Omni...)
         if checks & CJ_TX_CHECK.OP_RETURN:
             # TxNullData + data in OP_RETURN script
             for output in test_tx['outputs']:
@@ -640,35 +693,29 @@ def is_coinjoin_tx(test_tx: dict, mix_protocol: MIX_PROTOCOL, checks: CJ_TX_CHEC
                 #         test_tx['outputs'][output]['script'].find('6f6d6e69') != -1     # Omni OP_RETURN : 3dc876a23165c8e6b9f81b4aeb9e0f1caaab77466ed20231901b2fe72f1c71d8
                 #    return False
 
-        # Minimal number of equal outputs
+        # Check minimal number of equal outputs
         if checks & CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD:
-            values = [test_tx['outputs'][index]['value'] for index in test_tx['outputs'].keys()]
-            if Counter(values).most_common(1)[0][1] < checks_config[CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD]:
+            if num_most_frequent_equal_output < checks_config[CJ_TX_CHECK.MIN_SAME_VALUES_THRESHOLD]:
                 return False, FILTER_REASON.MIN_SAME_VALUES_THRESHOLD
 
-        # Minimal number of equal outputs
+        # Check minimal number of equal outputs
         if checks & CJ_TX_CHECK.MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS:
-            values = [test_tx['outputs'][index]['value'] for index in test_tx['outputs'].keys()]
-            counts = Counter(values)
-            num_values_with_duplicates = sum(1 for count in counts.values() if count > 1)
             if num_values_with_duplicates > checks_config[CJ_TX_CHECK.MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS]:
                 return False, FILTER_REASON.MULTIPLE_ALLOWED_DIFFERENT_EQUAL_OUTPUTS
 
-        # Significant address reuse a2bd490cc63c1b70bf7b328c20f69115a1b20cdd06cd035d6b200e17ee8d934e
+        # Check significant address reuse a2bd490cc63c1b70bf7b328c20f69115a1b20cdd06cd035d6b200e17ee8d934e
         if checks & CJ_TX_CHECK.ADDRESS_REUSE_THRESHOLD:
             scripts = [test_tx['inputs'][index]['script'] for index in test_tx['inputs'].keys()]
             scripts.extend([test_tx['outputs'][index]['script'] for index in test_tx['outputs'].keys()])
             if Counter(scripts).most_common(1)[0][1] / len(scripts) > checks_config[CJ_TX_CHECK.ADDRESS_REUSE_THRESHOLD]:
                 return False, FILTER_REASON.ADDRESS_REUSE_THRESHOLD
 
-        # Too many inputs or too many outputs (coordination with more than tens of participants will likely fail)
+        # Check too many inputs or too many outputs (coordination with more than tens of participants will likely fail)
         if checks & CJ_TX_CHECK.NUM_INOUT_THRESHOLD:
-            num_inputs = len(test_tx['inputs'])
-            num_outputs = len(test_tx['outputs'])
             if num_inputs > checks_config[CJ_TX_CHECK.NUM_INOUT_THRESHOLD] or num_outputs > checks_config[CJ_TX_CHECK.NUM_INOUT_THRESHOLD]:
                 return False, FILTER_REASON.NUM_INOUT_THRESHOLD
 
-        # Heavy disbalance between number of inputs and outputs: 8f7933a5d127b3bd8723ae9ea9eb7da96df1e33a7a9c1bcf9e68a2e6263d0640
+        # Check heavy disbalance between number of inputs and outputs: 8f7933a5d127b3bd8723ae9ea9eb7da96df1e33a7a9c1bcf9e68a2e6263d0640
         if checks & CJ_TX_CHECK.INOUTS_RATIO_THRESHOLD:
             # Compute ratio, prevent division by zero
             ratio = 100000 if num_inputs == 0 or num_outputs == 0 else max(num_inputs, num_outputs) / min(num_inputs, num_outputs)
@@ -771,7 +818,8 @@ def process_coinjoins(target_path, mix_protocol: MIX_PROTOCOL, mix_filename, pos
     if len(data["coinjoins"]) == 0:
         return data
 
-    false_cjtxs_file = os.path.join(target_path, f'{mix_protocol.name}_false_filtered_cjtxs.json')
+    # Store transactions filtered based on false positives rules
+    false_cjtxs_file = os.path.join(target_path, f'{mix_protocol.name.lower()}_false_filtered_cjtxs.json')
     als.save_json_to_file_pretty(false_cjtxs_file, false_cjtxs)
 
     SM.print('*******************************************')
@@ -826,7 +874,7 @@ def filter_liquidity_events(data):
 
 
 def process_and_save_coinjoins(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: os.path, mix_filename: str, postmix_filename: str,
-                               premix_filename: str, start_date: str, stop_date: str, target_save_path: os.path=None, save_base_files: bool=False):
+                               premix_filename: str, start_date: str | None, stop_date: str | None, target_save_path: os.path=None, save_base_files: bool=False):
     if not target_save_path:
         target_save_path = target_path
     # Process and save full conjoin information
@@ -894,7 +942,7 @@ def process_and_save_intervals_onload(mix_id: str, mix_protocol: MIX_PROTOCOL, t
         current_stop_date_str = current_stop_date.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def process_interval(mix_id: str, data: dict, mix_filename: str, premix_filename: str, target_save_path: str, last_stop_date_str: str, current_stop_date_str: str):
+def process_interval(mix_id: str, data: dict, mix_filename: str | None, premix_filename: str | None, target_save_path: str, last_stop_date_str: str, current_stop_date_str: str):
     logging.info(f'Processing interval {last_stop_date_str} - {current_stop_date_str}')
 
     # Create folder structure compatible with ww2 coinjoin simulation for further processing
@@ -920,8 +968,8 @@ def process_interval(mix_id: str, data: dict, mix_filename: str, premix_filename
         extract_inputs_distribution(mix_id, interval_path, mix_filename, interval_data["coinjoins"], True)
 
 
-def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: os.path, start_date: str, stop_date: str, mix_filename: str,
-                                      postmix_filename: str, premix_filename: str=None, save_base_files_json=True, load_base_files=False, preloaded_data: dict=None):
+def process_and_save_intervals_filter(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: os.path, start_date: str, stop_date: str, mix_filename: str | None,
+                                      postmix_filename: str | None, premix_filename: str=None, save_base_files_json=True, load_base_files=False, preloaded_data: dict=None):
     # Create directory structure with files split per month (around 1000 subsequent coinjoins)
     # Load all coinjoins first, then filter based on intervals
     target_save_path = os.path.join(target_path, mix_id)
@@ -1009,7 +1057,7 @@ def find_whirlpool_tx0_reuse(mix_id: str, target_path: Path, premix_filename: st
     :param premix_filename:
     :return:
     """
-    txs = load_coinjoin_stats_from_file(os.path.join(target_path, premix_filename))
+    txs = load_coinjoin_stats_from_dumplings(os.path.join(target_path, premix_filename))
     # If potential reuse detected, check if not coordinator address for fees
     # pools are 100k (=>5000), 1M (=>50000), 5M (=>175000), 50M (=> 1750000)
     return find_address_reuse(mix_id, txs, target_path, [0, 5000, 50000, 175000, 1750000, 250000, 2500000])
@@ -1023,11 +1071,11 @@ def find_txs_address_reuse(mix_id: str, target_path: Path, tx_filename: str, sav
     :param tx_filename:
     :return:
     """
-    txs = load_coinjoin_stats_from_file(os.path.join(target_path, tx_filename))
+    txs = load_coinjoin_stats_from_dumplings(os.path.join(target_path, tx_filename))
     return find_address_reuse(mix_id, txs, target_path, [], save_outputs)
 
 
-def find_address_reuse(mix_id: str, txs: dict, target_path: Path = None, ignore_denominations: list = [], save_outputs = False):
+def find_address_reuse(mix_id: str, txs: dict, target_path: Path = None, ignore_denominations: list = None, save_outputs = False):
     """
     Detects all address reuse in given list of transactions
     :param mix_id:
@@ -1036,6 +1084,10 @@ def find_address_reuse(mix_id: str, txs: dict, target_path: Path = None, ignore_
     :return:
     """
     logging.info(f'Processing {mix_id}')
+
+    if ignore_denominations is None:
+        ignore_denominations = []
+
     seen_addresses = defaultdict(list)
     reused_addresses = defaultdict(list)
     for txid in list(txs.keys()):
@@ -1132,9 +1184,9 @@ def analyze_interval_data(interval_data, stats: CoinJoinStats, results: dict):
         logging.info(f'  #cjs per one input coin= {round(stats.no_pool.num_mixes / stats.no_pool.num_coins, 2)}')
 
 
-def process_inputs_distribution_whirlpool(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_filename: str, save_outputs: bool= False):
+def process_inputs_distribution_whirlpool(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: str | Path, tx_filename: str, save_outputs: bool= False):
     logging.info(f'Processing {mix_id}')
-    txs = load_coinjoin_stats_from_file(os.path.join(target_path, tx_filename))
+    txs = load_coinjoin_stats_from_dumplings(os.path.join(target_path, tx_filename))
 
     # Process TX0 transactions, try to find ones with many pool outputs and long time to mix them (possible chain analysis input)
     tx0_by_outputs_dict = {}
@@ -1153,7 +1205,7 @@ def process_inputs_distribution_whirlpool(mix_id: str, mix_protocol: MIX_PROTOCO
             in_values = [txs[item]['inputs'][index]['value'] for index in txs[item]['inputs'].keys()]
             out_values = [txs[item]['outputs'][index]['value'] for index in txs[item]['outputs'].keys()]
             pool_size_out_sats = np.median(out_values)
-            pool_size = round(pool_size_out_sats / SATS_IN_BTC, 3)
+            pool_size = round(float(pool_size_out_sats) / SATS_IN_BTC, 3)
             pool_size_sats = pool_size * SATS_IN_BTC
             out_values_pool = [value for value in out_values if math.isclose(value, pool_size_sats, rel_tol=1e-1, abs_tol=0.0)]
             out_mfees = [value - pool_size_sats for value in out_values_pool]
@@ -1199,7 +1251,7 @@ def process_estimated_wallets_distribution(mix_id: str, target_path: Path, input
         cjvis.plot_wallets_distribution(target_path, mix_id, factor, wallets_distrib)
 
 
-def process_inputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_filename: str, save_outputs: bool= True):
+def process_inputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: str | Path, tx_filename: str, save_outputs: bool= True):
     logging.info(f'Processing {mix_id} process_inputs_distribution()')
     # Load txs for all pools
     target_load_path = os.path.join(target_path, mix_id)
@@ -1209,7 +1261,7 @@ def process_inputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target_
     cjvis.plot_inputs_distribution(mix_id, inputs)
 
 
-def extract_inputs_distribution(mix_id: str, target_path: Path, tx_filename: str, txs: dict, save_outputs = False, file_spec: str = ''):
+def extract_inputs_distribution(mix_id: str, target_path: str, tx_filename: str, txs: dict, save_outputs = False, file_spec: str = ''):
     inputs = [txs[txid]['inputs'][index]['value'] for txid in txs.keys() for index in txs[txid]['inputs'].keys()
               if 'mix_event_type' in txs[txid]['inputs'][index].keys() and
               txs[txid]['inputs'][index]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name]
@@ -1224,7 +1276,7 @@ def extract_inputs_distribution(mix_id: str, target_path: Path, tx_filename: str
 
 
 
-def process_outputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_filename: str, save_outputs: bool= True):
+def process_outputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: str, tx_filename: str, save_outputs: bool= True):
     logging.info(f'Processing {mix_id} process_outputs_distribution()')
     # Load txs for all pools
     target_load_path = os.path.join(target_path, mix_id)
@@ -1235,7 +1287,7 @@ def process_outputs_distribution(mix_id: str, mix_protocol: MIX_PROTOCOL, target
     #plot_distribution(outputs_all)
 
 
-def extract_outputs_distribution(mix_id: str, target_path: Path, tx_filename: str, txs: dict, save_outputs = False, file_spec: str = ''):
+def extract_outputs_distribution(mix_id: str, target_path: Path | str, tx_filename: str, txs: dict, save_outputs = False, file_spec: str = ''):
     outputs_noremix_stddenom = [txs[txid]['outputs'][index]['value'] for txid in txs.keys() for index in txs[txid]['outputs'].keys()
               if 'mix_event_type' in txs[txid]['outputs'][index].keys() and
               txs[txid]['outputs'][index]['mix_event_type'] in [MIX_EVENT_TYPE.MIX_LEAVE.name, MIX_EVENT_TYPE.MIX_STAY.name] and
@@ -1384,7 +1436,7 @@ def wasabi2_analyse_remixes(mix_id: str, target_path: str):
     cjvis.burntime_histogram(mix_id, data)
 
 
-def wasabi_detect_false(target_path: Path, tx_file: str):
+def wasabi_detect_false(target_path: str | Path, tx_file: str):
     PROCESS_SUBFOLDERS = False
     if PROCESS_SUBFOLDERS:
         # Process all subfolders
@@ -1415,12 +1467,16 @@ def wasabi_detect_false(target_path: Path, tx_file: str):
         target_base_path = os.path.join(target_path, dir_name)
         tx_json_file = os.path.join(target_base_path, f'{tx_file}')
         if os.path.isdir(target_base_path) and os.path.exists(tx_json_file):
+            # Perform bare loading and filtering using pre-loaded false_cjtxs list
             data = als.load_json_from_file(tx_json_file)
-
-            # Filter already known false positives
+            filtered_false_coinjoins = {}
             for false_tx in false_cjtxs:
                 if false_tx in data["coinjoins"].keys():
-                    data["coinjoins"].pop(false_tx)
+                    filtered_false_coinjoins[false_tx] = data["coinjoins"].pop(false_tx)
+            # Store transactions filtered based on false positives file
+            false_cjtxs_file = os.path.join(target_base_path, f'false_filtered_cjtxs_manual.json')
+            als.save_json_to_file_pretty(false_cjtxs_file, filtered_false_coinjoins)
+
 
             # Detect transactions with no remixes on input/out or both
             no_remix = als.detect_no_inout_remix_txs(data["coinjoins"])
@@ -1613,15 +1669,15 @@ def analyze_mixes_flows(target_path):
         flows_in_time = extract_flows_dumplings(flows)
         cjvis.plot_flows_steamgraph(flows_in_time, 'Dumplings flows (1 hop)')
     else:
-        whirlpool_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiPostMixTxs.txt'))
-        wasabi1_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
-        wasabi2_postmix = load_coinjoin_stats_from_file(os.path.join(target_path, 'Wasabi2PostMixTxs.txt'))
+        whirlpool_postmix = load_coinjoin_stats_from_dumplings(os.path.join(target_path, 'SamouraiPostMixTxs.txt'))
+        wasabi1_postmix = load_coinjoin_stats_from_dumplings(os.path.join(target_path, 'WasabiPostMixTxs.txt'))
+        wasabi2_postmix = load_coinjoin_stats_from_dumplings(os.path.join(target_path, 'Wasabi2PostMixTxs.txt'))
 
-        wasabi1_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'WasabiCoinJoins.txt'))
-        wasabi2_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'Wasabi2CoinJoins.txt'))
-        whirlpool_cj = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiCoinJoins.txt'))
+        wasabi1_cj = load_coinjoin_stats_from_dumplings(os.path.join(target_path, 'WasabiCoinJoins.txt'))
+        wasabi2_cj = load_coinjoin_stats_from_dumplings(os.path.join(target_path, 'Wasabi2CoinJoins.txt'))
+        whirlpool_cj = load_coinjoin_stats_from_dumplings(os.path.join(target_path, 'SamouraiCoinJoins.txt'))
 
-        whirlpool_premix = load_coinjoin_stats_from_file(os.path.join(target_path, 'SamouraiTx0s.txt'))
+        whirlpool_premix = load_coinjoin_stats_from_dumplings(os.path.join(target_path, 'SamouraiTx0s.txt'))
 
         def load_premix_tx_dict(target_path, file_name, full_tx_dict):
             """
@@ -1648,13 +1704,13 @@ def analyze_mixes_flows(target_path):
 
         # Precompute dictionary with full name (vout_txid_index and vin_txid_index) for quick queries if given 'spending_tx' and 'spend_by_tx' are included
         # Precompute for quick queries 'spending_tx' existence
-        wasabi1_vout_txid_index = {als.get_output_name_string(txid, index) for txid in wasabi1_cj.keys() for index in wasabi1_cj[txid]['outputs'].keys()}
-        wasabi2_vout_txid_index = {als.get_output_name_string(txid, index) for txid in wasabi2_cj.keys() for index in wasabi2_cj[txid]['outputs'].keys()}
-        whirlpool_vout_txid_index = {als.get_output_name_string(txid, index) for txid in whirlpool_cj.keys() for index in whirlpool_cj[txid]['outputs'].keys()}
+        wasabi1_vout_txid_index = {als.get_output_name_string(txid, index): None for txid in wasabi1_cj.keys() for index in wasabi1_cj[txid]['outputs'].keys()}
+        wasabi2_vout_txid_index = {als.get_output_name_string(txid, index): None for txid in wasabi2_cj.keys() for index in wasabi2_cj[txid]['outputs'].keys()}
+        whirlpool_vout_txid_index = {als.get_output_name_string(txid, index): None for txid in whirlpool_cj.keys() for index in whirlpool_cj[txid]['outputs'].keys()}
         # Precompute for quick queries 'spend_by_tx' existence
-        wasabi1_vin_txid_index = {wasabi1_cj[txid]['inputs'][index]['spending_tx'] for txid in wasabi1_cj.keys() for index in wasabi1_cj[txid]['inputs'].keys()}
-        wasabi2_vin_txid_index = {wasabi2_cj[txid]['inputs'][index]['spending_tx'] for txid in wasabi2_cj.keys() for index in wasabi2_cj[txid]['inputs'].keys()}
-        whirlpool_vin_txid_index = {whirlpool_cj[txid]['inputs'][index]['spending_tx'] for txid in whirlpool_cj.keys() for index in whirlpool_cj[txid]['inputs'].keys()}
+        wasabi1_vin_txid_index = {wasabi1_cj[txid]['inputs'][index]['spending_tx']: None for txid in wasabi1_cj.keys() for index in wasabi1_cj[txid]['inputs'].keys()}
+        wasabi2_vin_txid_index = {wasabi2_cj[txid]['inputs'][index]['spending_tx']: None for txid in wasabi2_cj.keys() for index in wasabi2_cj[txid]['inputs'].keys()}
+        whirlpool_vin_txid_index = {whirlpool_cj[txid]['inputs'][index]['spending_tx']: None for txid in whirlpool_cj.keys() for index in whirlpool_cj[txid]['inputs'].keys()}
 
         # Analyze flows
         flows = {}
@@ -1726,7 +1782,7 @@ def analyze_extramix_flows(experiment_id: str, target_path: Path, mix1_precomp_v
     return flow_sizes
 
 
-def whirlpool_extract_pool(full_data: dict, mix_id: str, target_path: Path, pool_id: str, pool_size: int):
+def whirlpool_extract_pool(full_data: dict, mix_id: str, target_path: str | Path, pool_id: str, pool_size: int):
     # Start from initial tx for specific pool size
     # Add iteratively additional transactions if connected to already included ones
     all_cjtxs_keys = full_data["coinjoins"].keys()
@@ -1841,7 +1897,7 @@ def wasabi2_extract_pools_destroys_data(data: dict, target_path: str, interval_s
     data["deleted"] = "deleted"
 
     # Detect transactions which were not assigned to any pool (neither zksnacks, nor others)
-    missed_cjtxs = list(set(non_zksnacks_cjtxs) - set(cjtx_others.keys()))
+    missed_cjtxs = dict(set(non_zksnacks_cjtxs) - set(cjtx_others.keys()))
     als.save_json_to_file_pretty(os.path.join(target_path, f'coinjoin_tx_info__missed.json'), missed_cjtxs)
     SM.print(f'Total transactions not separated into pools: {len(missed_cjtxs)}')
     logging.debug(missed_cjtxs)
@@ -1927,7 +1983,7 @@ def save_coinjoins_create_folder(cjtx_coord: dict, target_path: str, coord_full_
     als.save_json_to_file(os.path.join(target_save_path, 'coinjoin_tx_info.json'), {'coinjoins': cjtx_coord})
 
 
-def wasabi1_extract_other_pools(selected_coords: list, data: dict, target_path: str, interval_start_date: str, interval_stop_date: str, txid_coord_discovered: dict):
+def wasabi1_extract_other_pools(selected_coords: list, data: dict, target_path: str, interval_start_date: str, interval_stop_date: str, txid_coord_discovered: dict | None):
     """
     Takes dictionary with all post-zksnacks WW1 coinjoins and split it to separate coordinators.
     :param selected_coords: list of coordinator names which shall be separated
@@ -2024,7 +2080,7 @@ def wasabi1_extract_other_pools(selected_coords: list, data: dict, target_path: 
             'stop_date': '2019-01-02 12:57:10.000',
             'num_cjtxs': len(cjtx_coord_mystery)}
 
-    # All other cooridnators
+    # All other coordinators
     coord_full_name = f'wasabi1_others'
     cjtx_coord_others = {cjtx: data["coinjoins"][cjtx] for cjtx in data["coinjoins"].keys()
                          if cjtx not in cjtx_coord_zknacks_filtered.keys()}
@@ -2037,7 +2093,7 @@ def wasabi1_extract_other_pools(selected_coords: list, data: dict, target_path: 
     return split_pools_info
 
 
-def backup_log_files(target_path: str):
+def backup_log_files(target_path: str | Path):
     """
     This code runs before exiting
     :return:
@@ -2286,13 +2342,13 @@ def analyze_liquidity_summary(mix_protocol, target_path: str):
             als.save_json_to_file_pretty(os.path.join(target_path, f'liquidity_summary_{mix_id}.json'), liq_sum)
     else:
         coords = []
-        if op.CJ_TYPE == CoinjoinType.WW2:
+        if mix_protocol == CoinjoinType.WW2:
             coords = [('wasabi2', 'zksnacks'), ('wasabi2', 'others'), ('wasabi2', 'kruw'), ('wasabi2', 'gingerwallet'),
                       ('wasabi2', 'opencoordinator'), ('wasabi2', 'coinjoin_nl'), ('wasabi2', 'wasabicoordinator'),
                       ('wasabi2', 'mega'), ('wasabi2', 'btip')]
-        if op.CJ_TYPE == CoinjoinType.WW1:
+        if mix_protocol == CoinjoinType.WW1:
             coords = [('wasabi1', 'zksnacks'), ('wasabi1', 'others')]
-        if op.CJ_TYPE == CoinjoinType.JM:
+        if mix_protocol == CoinjoinType.JM:
             coords = [('joinmarket', 'all')]
         for coord in coords:
             cjtx_coord = als.load_coinjoins_from_file(os.path.join(target_path, f'{coord[0]}_{coord[1]}'), None, True)
@@ -2621,6 +2677,7 @@ class DumplingsParseOptions:
 
     ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
     DETECT_FALSE_POSITIVES = False
+    RESTORE_FALSE_POSITIVES_FOR_OTHERS = False
     PLOT_REMIXES = False
     PLOT_REMIXES_SINGLE_INTERVAL = False
     PLOT_REMIXES_MULTIGRAPH = True
@@ -2718,6 +2775,7 @@ class DumplingsParseOptions:
         self.SAVE_BASE_FILES_JSON = True
         self.ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS = False
         self.DETECT_FALSE_POSITIVES = False
+        self.RESTORE_FALSE_POSITIVES_FOR_OTHERS = False
         self.PLOT_REMIXES = False
         self.PLOT_REMIXES_SINGLE_INTERVAL = False  # If True, separate standalone graph is generated for each interval
         self.PLOT_REMIXES_MULTIGRAPH = True     # If True, all intervals are plotted together in single graph
@@ -2798,7 +2856,7 @@ def generate_normalized_json(base_path: str, base_txs: list):
     als.save_json_to_file_pretty(os.path.join(base_path, f'coinjoin_tx_info.json'), cjtxs)
 
 
-def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: Path, tx_file: str,
+def wasabi_plot_remixes(mix_id: str, mix_protocol: MIX_PROTOCOL, target_path: str | Path, tx_file: str,
                         analyze_values: bool = True, normalize_values: bool = True,
                         restrict_to_out_size = None, restrict_to_in_size = None,
                         plot_multigraph: bool = True, plot_only_intervals: bool = False):
@@ -2874,6 +2932,64 @@ def wasabi_plot_remixes_serial(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
         cjvis.wasabi_plot_remixes_worker(mix_id, mix_protocol, target_path, tx_file, op.SORT_COINJOINS_BY_RELATIVE_ORDER, analyze_values, normalize_values,
                             restrict_to_out_size, restrict_to_in_size, plot_multigraph, False)
 
+
+def restore_false_positives_for_others(target_path: str):
+        """
+        Restores previously detected false positives from Wasabi 1 and Wasabi 2 for Others (JoinMarked) processing.
+        Restore creates original Dumplings format files, requires full processing of JoinMarket transactions
+        """
+        SM.print(f'Restoring false positives of Wasabi 1 and 2 for JoinMarket processing')
+        # For ww1 and ww2 do:
+        # Load initial filtering false positives (mixid_false_filtered_cjtxs.json)
+        # Load additional filtering false positives (mixid/false_filtered_cjtxs_manual.json)
+        # Search for lines starting with 'cjtx:::000000000' inside original Dumplings files (e.g., 'Wasabi2CoinJoins.txt') and create filtered output file
+          # Gather set of each "mix_event_type": "MIX_LEAVE" output spend_by_tx transactions for each false positive coinjoin (potential postmix)
+          # Search for lines starting with 'spend_by_tx:::000000000' in post-mix Dumplings files (e.g., 'Wasabi2PostMixTxs.txt') for record in spend_by_tx set (and create filtered output file
+        # Modify JM loading to accept also these additional files inside ANALYSIS_PROCESS_ALL_COINJOINS_INTERVALS
+          # e.g., Wasabi2PostMixTxs.txt.001, Wasabi2PostMixTxs.txt.002 and similar are also accepted
+          # Modify is_coinjoin_tx(JM) to check also expected structure (atop of blacklisting)
+
+        def copy_txs_records(target_path, mix_id, from_file, to_file, to_copy_txs: dict, to_copy_txs_key_len: int):
+            """
+            Copy Dumplings records from provided from_file to to_file if exist in to_copy_txs
+            """
+            num_txs_moved = 0
+            with open(os.path.join(target_path, f'{to_file}.from_{mix_id}'), "w") as wfile:
+                with open(os.path.join(target_path, from_file), "r") as file:
+                    for line in file.readlines():
+                        if line[0:to_copy_txs_key_len] in to_copy_txs:
+                            wfile.write(line)
+                            num_txs_moved = num_txs_moved + 1
+            return num_txs_moved
+
+        # Prepare list from wasabi1
+        return_cjtxs_ww1 = {}
+        return_cjtxs_ww1.update(als.load_json_from_file(os.path.join(target_path, 'wasabi1_false_filtered_cjtxs.json')))
+        return_cjtxs_ww1.update(als.load_json_from_file(os.path.join(target_path, 'wasabi1', 'false_filtered_cjtxs_manual.json')))
+        return_cjtxs_ww1.update(als.load_json_from_file(os.path.join(target_path, 'wasabi1_others', 'coinjoin_tx_info.json'))['coinjoins'])  # Add also all "other" wasabi1 coinjoins (outside zkSNACKs)
+        # Prepare list from wasabi2
+        return_cjtxs_ww2 = {}
+        return_cjtxs_ww2.update(als.load_json_from_file(os.path.join(target_path, 'wasabi2_false_filtered_cjtxs.json')))
+        return_cjtxs_ww2.update(als.load_json_from_file(os.path.join(target_path, 'wasabi2', 'false_filtered_cjtxs_manual.json')))
+
+        for mix_id in [('wasabi2', return_cjtxs_ww2, 'Wasabi2CoinJoins.txt', 'Wasabi2PostMixTxs.txt', 'OtherCoinJoins.txt', 'OtherCoinJoinPostMixTxs.txt'),
+                         ('wasabi1', return_cjtxs_ww1, 'WasabiCoinJoins.txt', 'WasabiPostMixTxs.txt', 'OtherCoinJoins.txt', 'OtherCoinJoinPostMixTxs.txt')]:
+            return_cjtxs = mix_id[1]
+            # Precompute fast lookup dict for coinjoins
+            cjtx_search_str = {f'{cjtx}:::000000000':None for cjtx in return_cjtxs.keys()}
+            cjtx_search_str_key_len = len(next(iter(cjtx_search_str)))  # Get length of keys (all all the same length)
+            # Get all relevant postmixes into fast lookup dict
+            default_tx = 'vin_0000000000000000000000000000000000000000000000000000000000000000_0'
+            postmix_search_str = {f"{als.extract_txid_from_inout_string(return_cjtxs[cjtx]['outputs'][index].get('spend_by_tx', default_tx))[0]}:::000000000":None
+                                  for cjtx in return_cjtxs.keys() for index in return_cjtxs[cjtx]['outputs'].keys() }
+            postmix_search_str_key_len = len(next(iter(postmix_search_str)))  # Get length of keys (all all the same length)
+
+            # Copy all filtered coinjoins and postmix records
+            SM.print(f'  {mix_id[0]} -> joinmarket')
+            num_moved = copy_txs_records(target_path, mix_id[0], mix_id[2], mix_id[4], cjtx_search_str, cjtx_search_str_key_len)
+            SM.print(f'   coinjoin txs moved: {num_moved}')
+            num_moved = copy_txs_records(target_path, mix_id[0], mix_id[3], mix_id[5], postmix_search_str, postmix_search_str_key_len)
+            SM.print(f'   postmix txs moved: {num_moved}')
 
 
 # # noinspection PyUnboundLocalVariable
@@ -3026,8 +3142,8 @@ def main(argv=None):
             process_and_save_single_interval(interval_name, all_data, mix_type, target_path, start_date, end_date)
             shutil.copyfile(os.path.join(target_path, mix_origin_name, 'fee_rates.json'),
                             os.path.join(target_path, interval_name, 'fee_rates.json'))
-            shutil.copyfile(os.path.join(target_path, mix_origin_name, 'false_cjtxs.json'),
-                            os.path.join(target_path, interval_name, 'false_cjtxs.json'))
+            shutil.copyfile(os.path.join(target_path, mix_origin_name, 'return_cjtxs.json'),
+                            os.path.join(target_path, interval_name, 'return_cjtxs.json'))
             wasabi_plot_remixes(interval_name, MIX_PROTOCOL.WASABI1, os.path.join(target_path, interval_name),
                                 'coinjoin_tx_info.json', True, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL)
 
@@ -3177,6 +3293,10 @@ def main(argv=None):
             mix_ids = mix_ids_default if op.MIX_IDS == "" else op.MIX_IDS
             for mix_id in mix_ids:
                 wasabi_detect_false(os.path.join(target_path, mix_id), 'coinjoin_tx_info.json')
+
+    if op.RESTORE_FALSE_POSITIVES_FOR_OTHERS:
+        restore_false_positives_for_others(target_path)
+
 
     if op.DETECT_COORDINATORS:
         if op.CJ_TYPE == CoinjoinType.WW2:

@@ -368,11 +368,11 @@ def test_run_cj_process_jm():
         with open(os.path.join(extract_dir, "Scanner", coord, "no_remix_txs.json"), "r") as file:
             results = orjson.loads(file.read())
             assert len(results[
-                           'inputs_noremix']) == 8, f"Expected {8} no inputs remix coinjoins, got {len(results['inputs_noremix'])}"
+                           'inputs_noremix']) == 12, f"Expected {12} no inputs remix coinjoins, got {len(results['inputs_noremix'])}"
             assert len(results[
-                           'outputs_noremix']) == 6, f"Expected {6} no outputs remix coinjoins, got {len(results['outputs_noremix'])}"
+                           'outputs_noremix']) == 10, f"Expected {10} no outputs remix coinjoins, got {len(results['outputs_noremix'])}"
             assert len(results[
-                           'both_noremix']) == 0, f"Expected {0} both no remix coinjoins, got {len(results['both_noremix'])}"
+                           'both_noremix']) == 4, f"Expected {4} both no remix coinjoins, got {len(results['both_noremix'])}"
             assert len(results[
                            'specific_denoms_noremix_in']) == 0, f"Expected {0} specific denoms noinput in, got {len(results['specific_denoms_noremix_in'])}"
             assert len(results[
@@ -398,12 +398,12 @@ def test_run_cj_process_jm():
                         extract_dir)
     # ASSERT
     expected_results = {
-        "joinmarket_all": {"total_fresh_inputs_value": 865.79055799,
+        "joinmarket_all": {"total_fresh_inputs_value": 866.59799092,
             "total_friends_inputs_value": 0.0,
-            "total_unmoved_outputs_value": 726.1482482,
-            "total_leaving_outputs_value": 139.58063648,
-            "total_nonstandard_leaving_outputs_value": 66.7654445,
-            "total_fresh_inputs_without_nonstandard_outputs_value": 799.02511349}}
+            "total_unmoved_outputs_value": 726.76086391,
+            "total_leaving_outputs_value": 139.77221517,
+            "total_nonstandard_leaving_outputs_value": 66.92181572,
+            "total_fresh_inputs_without_nonstandard_outputs_value": 799.6761752}}
     for coord in expected_results.keys():
         with open(os.path.join(extract_dir, "Scanner", f"liquidity_summary_{coord}.json"), "r") as file:
             results = orjson.loads(file.read())

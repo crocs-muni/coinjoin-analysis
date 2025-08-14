@@ -1,13 +1,6 @@
-#!/bin/bash
+# Prepare expected environment
 BASE_PATH=$HOME
-
-TMP_DIR="$BASE_PATH/btc/dumplings_temp2"
-
-# Start processing in virtual environment
-source $BASE_PATH/btc/coinjoin-analysis/venv/bin/activate 
-
-# Go to analysis folder with scripts
-cd $BASE_PATH/btc/coinjoin-analysis/src
+source $BASE_PATH/btc/coinjoin-analysis/scripts/activate_env.sh
 
 # Extract and process Dumplings results
 python3 -m cj_process.parse_dumplings --cjtype sw --action process_dumplings --target-path $TMP_DIR/ | tee parse_dumplings.py.log
@@ -28,32 +21,3 @@ python3 -m cj_process.parse_dumplings --cjtype sw --action detect_false_positive
 
 # Analyse liquidity 
 python3 -m cj_process.parse_dumplings --cjtype sw --target-path $TMP_DIR/ --env_vars "ANALYSIS_LIQUIDITY=True" | tee parse_dumplings.py.log
-
-# Run generation of aggregated plots 
-python3 -m cj_process.parse_dumplings --cjtype sw --action plot_coinjoins --env_vars "PLOT_REMIXES_MULTIGRAPH=False" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
-
-# Run generation of plots only for specific intervals
-python3 -m cj_process.parse_dumplings --cjtype sw --action plot_coinjoins --target-path $TMP_DIR/ --env_vars "PLOT_REMIXES_SINGLE_INTERVAL=True" | tee parse_dumplings.py.log
-
-
-#
-# Backup outputs
-#
-DEST_DIR="/data/btc/dumplings_archive/results_$(date +%Y%m%d)"
-
-# Get the absolute paths of source and destination
-SOURCE_DIR=$(realpath "$TMP_DIR")
-DEST_DIR=$(realpath "$DEST_DIR")
-
-# Use find to locate all .json files except info_*.json and copy them while preserving structure
-find "$TMP_DIR" -type f \( -name "*.json" -o -name "*.pdf" -o -name "*.png" \) ! -name "coinjoin_tx_info*.json" ! -name "*_events.json"| while read -r file; do
-    # Compute relative path
-    REL_PATH="${file#$SOURCE_DIR/}"
-    # Create target directory if it does not exist
-    mkdir -p "$DEST_DIR/$(dirname "$REL_PATH")"
-    # Copy file
-    cp "$file" "$DEST_DIR/$REL_PATH"
-    #echo "Copying $file to $DEST_DIR/$REL_PATH"
-done
-
-echo "Selected files archived to: $DEST_DIR"
