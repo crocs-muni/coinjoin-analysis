@@ -1,6 +1,11 @@
+#!/usr/bin/env bash
+
+
 # Prepare expected environment
 BASE_PATH=$HOME
 source $BASE_PATH/btc/coinjoin-analysis/scripts/activate_env.sh
+
+echo "###############################################" >> $BASE_PATH/btc/summary.log
 
 #
 # Extract Dumplings results

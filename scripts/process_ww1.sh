@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # Prepare expected environment
 BASE_PATH=$HOME
 source $BASE_PATH/btc/coinjoin-analysis/scripts/activate_env.sh
@@ -38,5 +40,5 @@ python3 -m cj_process.parse_dumplings --cjtype ww1 --target-path $TMP_DIR/ --env
 
 
 # Run detection of Bybit hack
-python3 -m cj_process.parse_dumplings --cjtype ww1 --env_vars="ANALYSIS_BYBIT_HACK=True" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
+#python3 -m cj_process.parse_dumplings --cjtype ww1 --env_vars="ANALYSIS_BYBIT_HACK=True" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 

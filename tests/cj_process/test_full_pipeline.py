@@ -130,7 +130,6 @@ def test_run_cj_process_ww2():
     for coord in ["wasabi2", "wasabi2_others", "wasabi2_zksnacks"]:
         target_dir = os.path.join(extract_dir, "Scanner", coord)
         shutil.copy(os.path.join(DATA, "wasabi2", "txid_coord.json"), os.path.join(target_dir, "txid_coord.json"))
-        shutil.copy(os.path.join(DATA, "wasabi2", "txid_coord_t.json"), os.path.join(target_dir, "txid_coord_t.json"))
 
     utils.run_parse_dumplings("ww2", "detect_coordinators",
                         f"interval_start_date='{interval_start_date}';interval_stop_date='{interval_stop_date}'",
@@ -280,7 +279,6 @@ def test_run_cj_process_ww1():
         shutil.copy(os.path.join(DATA, "wasabi1", "false_cjtxs.json"), os.path.join(target_dir, "false_cjtxs.json"))
         shutil.copy(os.path.join(DATA, "wasabi1", "fee_rates.json"), os.path.join(target_dir, "fee_rates.json"))
         shutil.copy(os.path.join(DATA, "wasabi1", "txid_coord.json"), os.path.join(target_dir, "txid_coord.json"))
-        shutil.copy(os.path.join(DATA, "wasabi1", "txid_coord_t.json"), os.path.join(target_dir, "txid_coord_t.json"))
 
     #
     # Analyze liquidity
@@ -427,7 +425,7 @@ def test_run_cj_process_jm():
     # ASSERT
     file_check = check_coinjoin_files(os.path.join(extract_dir, 'Scanner'))
     assert len(file_check['results']['joinmarket_all']['mix_base_files'][
-                   'missing_files']) == 2, f"Missing files: {file_check['results']['joinmarket_all']['mix_base_files']['missing_files']}"
+                   'missing_files']) == 1, f"Missing files: {file_check['results']['joinmarket_all']['mix_base_files']['missing_files']}"
 
 
 
