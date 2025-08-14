@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # Prepare expected environment
 BASE_PATH=$HOME
 source $BASE_PATH/btc/coinjoin-analysis/scripts/activate_env.sh
@@ -39,7 +41,7 @@ for dir in kruw gingerwallet opencoordinator wasabicoordinator coinjoin_nl wasab
 done
 
 # Run detection of Bybit hack
-python3 -m cj_process.parse_dumplings --cjtype ww2 --env_vars="ANALYSIS_BYBIT_HACK=True" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
+#python3 -m cj_process.parse_dumplings --cjtype ww2 --env_vars="ANALYSIS_BYBIT_HACK=True" --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
 # Analyse liquidity 
 python3 -m cj_process.parse_dumplings --cjtype ww2 --target-path $TMP_DIR/ --env_vars "ANALYSIS_LIQUIDITY=True" | tee parse_dumplings.py.log
