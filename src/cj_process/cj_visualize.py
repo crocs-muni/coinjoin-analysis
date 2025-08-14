@@ -379,7 +379,7 @@ def plot_analyze_liquidity(mix_id: str, cjtxs):
     return None
 
 
-def plot_wallets_distribution(target_path: str, mix_id: str, factor: float, wallets_distrib: dict):
+def plot_wallets_distribution(target_path: str | Path, mix_id: str, factor: float, wallets_distrib: dict):
     labels = list(wallets_distrib.keys())
     values = list(wallets_distrib.values())
     plt.figure(figsize=(10, 3))

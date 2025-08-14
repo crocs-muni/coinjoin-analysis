@@ -3,12 +3,14 @@ import subprocess
 from collections import Counter
 import sqlite3
 import logging
+from pathlib import Path
+
 #import msgpack
 import orjson
 import json
 import time
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import timedelta
 import re
 import math
 #from  txstore import TxStore, TxStoreMsgPack
@@ -31,7 +33,7 @@ PERF_USE_SHORT_TXID = False
 PERF_TX_SHORT_LEN = 16
 
 
-def load_json_from_file(file_path: str) -> dict:
+def load_json_from_file(file_path: str | Path) -> dict:
     with open(file_path, "rb") as file:
         return orjson.loads(file.read())
 
@@ -1104,7 +1106,7 @@ def load_coinjoin_txids_from_file(target_file, start_date: str = None, stop_date
     return cjtxs
 
 
-def load_coinjoins_from_file(target_load_path: str, false_cjtxs: dict, filter_false_positives: bool, filtered_false_coinjoins: dict=None) -> dict:
+def load_coinjoins_from_file(target_load_path: str | Path, false_cjtxs: dict | None, filter_false_positives: bool, filtered_false_coinjoins: dict=None) -> dict:
     logging.info(f'Loading {target_load_path}/coinjoin_tx_info.json ...')
     data = load_json_from_file(os.path.join(target_load_path, f'coinjoin_tx_info.json'))
 
