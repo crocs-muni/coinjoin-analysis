@@ -2404,7 +2404,7 @@ def discover_coordinators(cjtxs: dict, sorted_cjtxs: list, coord_txs: dict, in_o
 
         if len(input_coords) > 0:
             input_value_counts = Counter(input_coords)
-            input_dominant_coord = input_value_counts.most_common()  # Take sorted list of the most common cooridnators
+            input_dominant_coord = input_value_counts.most_common()  # Take sorted list of the most common coordinators
             if input_dominant_coord[0][0] == UNASSIGNED_COORD:  # Dominant is not assigned
                 if len(input_dominant_coord) > 1 and input_dominant_coord[1][1] / len(input_coords) >= min_coord_fraction:
                     # Take the second most dominant coordinator (after unassigned one which might be zksnacks)
@@ -2678,7 +2678,7 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
 
     print(f'\nTotal passes executed: {pass_step}')
 
-    # Try to merge coordinators
+    # Try to find candidates for merging (no actual merging performed)
     # Idea: Almost all transactions are now assigned to perspective non-small coordinators
     #   Check again if coordinator inferred from inputs and outputs match.
     #   If not, that is candidate for merging of clusters.
@@ -2687,7 +2687,10 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
     UNASSIGNED_COORD = -1
     coord_ids = {cjtx: coord_id for coord_id in coord_txs for cjtx in coord_txs[coord_id]}
     merge_candidates = {coord_id: [] for coord_id in coord_txs.keys()}
-    merge_candidates_dict = {coord_id: [] for coord_id in coord_txs.keys()}
+    merge_candidates_dict = {}
+    merge_candidates_dict["merge_candidates"] = {coord_id: [] for coord_id in coord_txs.keys()}
+    merge_candidates_dict["all_cluster_links"] = {coord_id: [] for coord_id in coord_txs.keys()}
+    merge_candidates_dict["all_cluster_links"][UNASSIGNED_COORD] = []
     for cjtx in sorted_cjtxs:
         if cjtx not in coord_ids or coord_ids[cjtx] == UNASSIGNED_COORD:
             print(f'No coordinator set for {cjtx}')
@@ -2697,9 +2700,19 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
                          if 'spend_by_tx' in cjtxs[cjtx]['outputs'][index].keys()]
         input_value_counts = Counter(input_coords)
         output_value_counts = Counter(output_coords)
+
+        if cjtx in coord_ids:
+            merge_candidates_dict["all_cluster_links"][coord_ids[cjtx]].append(
+                {'txid': cjtx, 'input_coords': input_value_counts, 'output_coords': output_value_counts})
+        else:
+            merge_candidates_dict["all_cluster_links"][UNASSIGNED_COORD].append(
+                {'txid': cjtx, 'input_coords': input_value_counts, 'output_coords': output_value_counts})
+
         if len(input_value_counts) > 0 and len(output_value_counts) > 0:
             input_dominant_coord = input_value_counts.most_common()[0]
             output_dominant_coord = output_value_counts.most_common()[0]
+
+
             if input_dominant_coord[0] != output_dominant_coord[0]:
                 print(f'Dominant coordinator inconsistency detected for {cjtx}: coord={input_dominant_coord[0]}:{input_dominant_coord[1]}x vs. coord={output_dominant_coord[0]}:{output_dominant_coord[1]}x')
                 print(f'  now set as {coord_ids[cjtx]}')
@@ -2709,13 +2722,13 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
                     print(f'    output coordinators: {output_coords}')
                     merge_candidates[input_dominant_coord[0]].append(output_dominant_coord[0])
 
-                    merge_candidates_dict[input_dominant_coord[0]].append({'txid': cjtx, 'output_coord': output_dominant_coord[0], 'input_coords': input_coords, 'output_coords': output_coords})
+                    merge_candidates_dict["merge_candidates"][input_dominant_coord[0]].append({'txid': cjtx, 'output_coord': output_dominant_coord[0], 'input_coords': input_coords, 'output_coords': output_coords})
+
 
     print('Going to print detected candidates for merging. The merging shall be considered when multiple cases '
           'of same merge candidates are shown. '
           'E.g. {0: [1, 1], 1: [3, 3, 3, 3, 10], 2: [], 3: [1, 1, 1, 1], 4: [1], means that 1 and 3 shall be merged, while 1 and 4 likely not.')
     print(merge_candidates)
-    als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_merge_candidates.json'), merge_candidates_dict)
     als.print_coordinators_counts(coord_txs, MIN_COORD_CJTXS)
     als.print_coordinators_counts(coord_txs, 2)
 
@@ -2737,6 +2750,14 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
                 else:
                     assert pair_cluster_index_2_coord_name[cluster_index] == ground_truth_known_coord_txs[txid], \
                         f'Duplicate coordinator pairing detected for cluster {cluster_index}: {pair_cluster_index_2_coord_name[cluster_index]} vs. {ground_truth_known_coord_txs[txid]}'
+
+    merge_candidates_dict["cluster_names"] = pair_cluster_index_2_coord_name
+    for cluster_id in list(merge_candidates_dict["all_cluster_links"].keys()):
+        if cluster_id in merge_candidates_dict["cluster_names"]:
+            merge_candidates_dict["all_cluster_links"][f"{cluster_id}__{merge_candidates_dict['cluster_names'][cluster_id]}"] = merge_candidates_dict["all_cluster_links"].pop(cluster_id)
+
+
+    als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_merge_candidates.json'), merge_candidates_dict)
 
     coord_txs_to_save = coord_txs
 
