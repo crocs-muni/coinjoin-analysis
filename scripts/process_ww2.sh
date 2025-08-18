@@ -22,14 +22,14 @@ for dir in wasabi2 wasabi2_others wasabi2_zksnacks; do
     cp $BASE_PATH/btc/coinjoin-analysis/data/wasabi2/false_cjtxs.json $TMP_DIR/Scanner/$dir/
 done
 
-# Run false positives detection
-python3 -m cj_process.parse_dumplings --cjtype ww2 --action detect_false_positives --target-path $TMP_DIR/ | tee parse_dumplings.py.log
-
 # Run coordinators detection
 for dir in wasabi2 wasabi2_others wasabi2_zksnacks; do
     cp $BASE_PATH/btc/coinjoin-analysis/data/wasabi2/txid_coord.json $TMP_DIR/Scanner/$dir/
 done
 python3 -m cj_process.parse_dumplings --cjtype ww2 --action detect_coordinators --target-path $TMP_DIR/ | tee parse_dumplings.py.log
+
+# Run false positives detection
+python3 -m cj_process.parse_dumplings --cjtype ww2 --action detect_false_positives --target-path $TMP_DIR/ | tee parse_dumplings.py.log
 
 # Run split of post-zksnacks coordinators
 python3 -m cj_process.parse_dumplings --cjtype ww2 --action split_coordinators --target-path $TMP_DIR/ | tee parse_dumplings.py.log

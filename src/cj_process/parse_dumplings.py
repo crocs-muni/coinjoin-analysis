@@ -2778,6 +2778,8 @@ def wasabi_detect_coordinators(mix_id: str, protocol: MIX_PROTOCOL, target_path)
         coord_txs_to_save_sorted[coord_id] = without_date_sorted + with_date_sorted
 
     als.save_json_to_file_pretty(os.path.join(target_path, 'txid_coord_discovered_renamed.json'), coord_txs_to_save_sorted)
+    tx_to_coord_map = {txid:coord for coord in coord_txs_to_save.keys() for txid in coord_txs_to_save[coord]}
+    als.save_json_to_file_pretty(os.path.join(target_path, 'txid_to_coord_discovered_renamed.json'), tx_to_coord_map)
 
     PRINT_FINAL = False
     if PRINT_FINAL:
@@ -3460,7 +3462,18 @@ def main(argv=None):
         if op.CJ_TYPE == CoinjoinType.WW1:
             wasabi_detect_false(os.path.join(target_path, 'wasabi1'), 'coinjoin_tx_info.json')
         if op.CJ_TYPE == CoinjoinType.WW2:
+            # Run false detection
             wasabi_detect_false(os.path.join(target_path, 'wasabi2'), 'coinjoin_tx_info.json')
+            # If available, add extended information about coordinator etc.
+            no_remix_all_ext = als.load_json_from_file(os.path.join(target_path, 'wasabi2', 'no_remix_txs.json'))
+            tx_2_coord_map_path = os.path.join(target_path, 'wasabi2_others', 'txid_to_coord_discovered_renamed.json')
+            if os.path.exists(tx_2_coord_map_path):
+                tx_2_coord_map = als.load_json_from_file(tx_2_coord_map_path)
+                for key in list(no_remix_all_ext.keys()):
+                    for txid in list(no_remix_all_ext[key].keys()):
+                        no_remix_all_ext[key][txid] = f"{no_remix_all_ext[key][txid]}__{tx_2_coord_map.get(txid, 'unknown')}"
+            als.save_json_to_file_pretty(os.path.join(target_path, 'wasabi2', 'no_remix_txs_ext.json'), no_remix_all_ext)
+
         if op.CJ_TYPE == CoinjoinType.JM:
             wasabi_detect_false(os.path.join(target_path, 'joinmarket_all'), 'coinjoin_tx_info.json')
         if op.CJ_TYPE == CoinjoinType.SW:
