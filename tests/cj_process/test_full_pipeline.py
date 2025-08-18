@@ -142,7 +142,7 @@ def test_run_cj_process_ww2():
     # Add metadata for additional coordinators
     coords_all = ["wasabi2_kruw", "wasabi2_gingerwallet", "wasabi2_opencoordinator", "wasabi2_wasabicoordinator",
                   "wasabi2_coinjoin_nl", "wasabi2_wasabist", "wasabi2_dragonordnance", "wasabi2_mega", "wasabi2_btip",
-                  "wasabi2_strange_2025"]
+                  "wasabi2_strange_2025", "wasabi2_unknown_2024"]
     for coord in coords_all:
         target_dir = os.path.join(extract_dir, "Scanner", coord)
         shutil.copy(os.path.join(DATA, "wasabi2", "fee_rates.json"), os.path.join(target_dir, "fee_rates.json"))
