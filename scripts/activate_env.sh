@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 BASE_PATH=$HOME
 TMP_DIR="$BASE_PATH/btc/dumplings_temp2"
 
