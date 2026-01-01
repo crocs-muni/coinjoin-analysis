@@ -2,7 +2,7 @@
 
 The processing and visualization of all coinjoins done by the [```coinjoin-analysis```](https://github.com/crocs-muni/coinjoin-analysis/) tooling are time-consuming and memory-intensive operations and need to be considered before usage. The design decision is to target a computational platform that is powerful, yet still easily accessible in academic settings. 
 
-As of December 2025, the current nightly complete processing is performed on a machine with 128GB RAM and Intel 13th Gen Intel(R) Core(TM) i7-13700KF with 24 cores and finishes in about 2 hours 40 mins with 88GB peak usage. The peak memory usage is required only for short time intervals, with a large majority of computation requiring less than 60GB; therefore, a machine with 64GB RAM and 32GB swap file shall also be applicable (although not optimal for the SSD wear). 
+As of December 2025, the current nightly complete processing is performed on a machine with 128GB RAM and Intel 13th Gen Intel(R) Core(TM) i7-13700KF with 24 cores and finishes in about 2 hours 40 mins with 88GB peak RAM usage (when only 8 cores are used, the processing time is about 3 hours with 80GB RAM). The peak memory usage is required only for short time intervals, with a large majority of computation requiring less than 60GB; therefore, a machine with 64GB RAM and 32GB swap file shall also be applicable (although not optimal for the SSD wear). 
 
 ![memlog.csv_20251231.png](docs/images/memlog.csv_20251231.png)
 
@@ -11,14 +11,20 @@ The custom performance profiling setup is used, combining [```log_perf.sh```](ht
 ## Optimization techniques used
 
 The optimization utilizes the following primary techniques:
+ * Load all data into RAM memory and process there.
  * Decrease peak memory usage by splitting operations into separate Python calls to enforce garbage collection (```del ``` and ```gc.collect()``` do not work).
  * Decrease peak memory usage by compacting/pruning data structures loaded into memory (```PERF_USE_COMPACT_CJTX_STRUCTURE=True```).
  * Decrease processing time by parallelization of tasks over multiple CPU cores (```ProcessPoolExecutor``` used).
  * Decrease processing time by the use of fast access structures (typically HashMap).
 
-**Note 1:** The parallelization over multiple cores typically also increases combined memory usage due to data utilized by every core. The number of real available cores is obtained via ```multiprocessing.cpu_count()```, but limited to the upper bound of ```SAFE_CPU_CORES=24``` to limit peak RAM usage. If both more memory and cores are available, increase the ```SAFE_CPU_CORES``` value in ```cj_consts.py```.  
+**Note:** The memory requirements slowly grow over time as more coinjoins are processed in total. 
 
-**Note 2:** The memory requirements slowly grow over time as more coinjoins are processed in total. 
+### Time-memory tradeoff
+The parallelization over multiple cores shortens the processing time, but also (typically) increases combined memory usage due to data utilized by every core. Empirically, the RAM is primary bottleneck for ```coinjoin-analysis``` processing.   
+
+The number of real available cores is obtained via ```multiprocessing.cpu_count()```, but limited to the upper bound of ```SAFE_CPU_CORES=24``` to limit peak RAM usage (below 90 GB in 12/2025). If both more memory and cores are available, increase the ```SAFE_CPU_CORES``` value in ```cj_consts.py```. If less cores are available, the processing is automatically scalled down to it.  
+
+Example: Processing on 31.12.2025 took 2 hours 40 mins and 88.0 GB peak RAM usage with 24 cores used, while 3 hours and 2 mins and 80.1 GB peak RAM usage if only 8 cores are used (```SAFE_CPU_CORES=8```).
 
 ## Performance snapshot 2025-12-31
  * Total processing time: 2 hours 40 mins, peak RAM usage: 88.0 GB
