@@ -47,8 +47,6 @@ from cj_process.cj_structs import CJ_TX_CHECK, MIX_PROTOCOL, CLUSTER_INDEX, MIX_
 # TODO: Systematic solution requires merging and resolving different cluster ids
 CLUSTER_ID_CHECK_HARD_ASSERT = False
 
-op = None  # Global settings for the experiment
-
 # Configure the logging module
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger_to_disable = logging.getLogger("mathplotlib")
@@ -3029,6 +3027,7 @@ def write_to_file(message: str, log_file: str | Path, mode: str):
         f.write(message)
 
 
+op = DumplingsParseOptions()
 def main(argv=None):
     try:
         multiprocessing.set_start_method("spawn") # Set safer process spawning variant for multiprocessing
@@ -3647,30 +3646,43 @@ def main(argv=None):
             # Force MIX_IDS subset if required
             mix_ids = mix_ids_default if op.MIX_IDS == "" else op.MIX_IDS
             logging.info(f'Going to process following mixes: {mix_ids}')
-            plot_configurations = [(False, False), (False, True), (True, False), (True, True)]  # analyze_values & normalize_values
-            for cfg in plot_configurations:
-                analyze_values = cfg[0]
-                normalize_values = cfg[1]
-                op.set_current_op(f'plot(vals={analyze_values}/norm={normalize_values}')
-                # Parallelize over all mixes
+            if mix_protocol == MIX_PROTOCOL.WHIRLPOOL:
+                # Two cfgs in parallel
+                plot_configurations = [[('nums&notnorm', False, False), ('nums&norm', False, True)], [('values&notnorm', True, False), ('nums&norm', True, True)]]  # Two configurations in parallel
+            elif mix_protocol == MIX_PROTOCOL.WASABI1:
+                # All four cfgs in parallel
+                plot_configurations = [[('nums&notnorm', False, False), ('nums&norm', False, True), ('values&notnorm', True, False), ('nums&norm', True, True)]]  # Two configurations in parallel
+            else:
+                # Default version
+                plot_configurations = [[('nums&notnorm', False, False)], [('nums&norm', False, True)], [('values&notnorm', True, False)], [('nums&norm', True, True)]]  # analyze_values & normalize_values
+
+            # Parallelize over all mixes and (optionally) multiple configurations (plot_configurations)
+            for cfg_group in plot_configurations:
+                futures = {}
                 max_processes = min(multiprocessing.cpu_count(), op.MAX_CPU_CORES)
                 with ProcessPoolExecutor(max_workers=max_processes) as executor:
-                    futures = {
-                        executor.submit(
-                            cjvis.wasabi_plot_remixes_worker, mix_id, mix_protocol, os.path.join(target_path, mix_id),
-                            'coinjoin_tx_info.json', op.SORT_COINJOINS_BY_RELATIVE_ORDER,
-                            analyze_values, normalize_values, None, None,
-                            op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL, op.PLOT_REMIXES_AGGREGATE
-                        ): mix_id for mix_id in mix_ids if os.path.exists(os.path.join(target_path, mix_id))
-                    }
-                    with tqdm(total=len(mix_ids)) as progress:
+                    for mix_id in mix_ids:
+                        mix_dir = os.path.join(target_path, mix_id)
+                        if not os.path.exists(mix_dir):
+                            continue
+
+                        for cfg_name, analyze_values, normalize_values in cfg_group:
+                            fut = executor.submit(
+                                cjvis.wasabi_plot_remixes_worker,
+                                mix_id, mix_protocol, mix_dir,
+                                "coinjoin_tx_info.json", op.SORT_COINJOINS_BY_RELATIVE_ORDER,
+                                analyze_values, normalize_values, None, None,
+                                op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL, op.PLOT_REMIXES_AGGREGATE
+                            )
+                            futures[fut] = (mix_id, cfg_name)
+
+                    with tqdm(total=len(futures)) as progress:
                         for future in as_completed(futures):
                             try:
                                 result = future.result()
                                 progress.update(1)
                             except Exception as e:
                                 logging.error(str(e))
-
 
         if op.CJ_TYPE == CoinjoinType.WW1:
             ww_plot_remixes_helper(['wasabi1_mystery', 'wasabi1_zksnacks', 'wasabi1_others', 'wasabi1'], MIX_PROTOCOL.WASABI1)
