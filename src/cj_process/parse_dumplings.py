@@ -3651,7 +3651,9 @@ def main(argv=None):
                 plot_configurations = [[('nums&notnorm', False, False), ('nums&norm', False, True)], [('values&notnorm', True, False), ('nums&norm', True, True)]]  # Two configurations in parallel
             elif mix_protocol == MIX_PROTOCOL.WASABI1:
                 # All four cfgs in parallel
-                plot_configurations = [[('nums&notnorm', False, False), ('nums&norm', False, True), ('values&notnorm', True, False), ('nums&norm', True, True)]]  # Two configurations in parallel
+                plot_configurations = [
+                [('nums&notnorm', False, False), ('nums&norm', False, True), ('values&notnorm', True, False),
+                 ('nums&norm', True, True)]]  # Two configurations in parallel
             else:
                 # Default version
                 plot_configurations = [[('nums&notnorm', False, False)], [('nums&norm', False, True)], [('values&notnorm', True, False)], [('nums&norm', True, True)]]  # analyze_values & normalize_values
@@ -3790,16 +3792,32 @@ def main(argv=None):
         if op.CJ_TYPE == CoinjoinType.WW2:
             mix_ids = [f'wasabi2_{coord}' for coord in cjc.WASABI2_COORD_NAMES_ALL] if op.MIX_IDS == "" else op.MIX_IDS
             logging.info(f'Going to process following mixes: {mix_ids}')
-            for coord in mix_ids:
-                if coord == 'wasabi2_zksnacks':
-                    predict_matrix = als.load_json_from_file(os.path.join(target_path, 'wallet_estimation_matrix_ww2zksnacks.json'))
-                else:
-                    predict_matrix = als.load_json_from_file(os.path.join(target_path, 'wallet_estimation_matrix_ww2kruw.json'))
 
-                all_data = als.load_coinjoins_from_file(os.path.join(target_path, coord), None, True)
-
-                # Wallet predictions based on outputs
-                cjvis.estimate_wallet_prediction_factor(all_data, target_path, coord, predict_matrix['0.05'], False, True)
+            max_processes = min(multiprocessing.cpu_count(), op.MAX_CPU_CORES)
+            with ProcessPoolExecutor(max_workers=max_processes) as executor:
+                futures = {
+                    executor.submit(cjvis.run_estimate_wallet_prediction_factor,
+                                    target_path, coord, '0.05', False, True
+                    ): coord for coord in mix_ids
+                }
+                with tqdm(total=len(futures)) as progress:
+                    for future in as_completed(futures):
+                        try:
+                            result = future.result()
+                            progress.update(1)
+                        except Exception as e:
+                            logging.error(str(e))
+            #
+            # for coord in mix_ids:
+            #     if coord == 'wasabi2_zksnacks':
+            #         predict_matrix = als.load_json_from_file(os.path.join(target_path, 'wallet_estimation_matrix_ww2zksnacks.json'))
+            #     else:
+            #         predict_matrix = als.load_json_from_file(os.path.join(target_path, 'wallet_estimation_matrix_ww2kruw.json'))
+            #
+            #     all_data = als.load_coinjoins_from_file(os.path.join(target_path, coord), None, True)
+            #
+            #     # Wallet predictions based on outputs
+            #     cjvis.estimate_wallet_prediction_factor(all_data, target_path, coord, predict_matrix['0.05'], False, True)
 
         if op.CJ_TYPE == CoinjoinType.WW1:
             all_data = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi1_zksnacks'), None, True)

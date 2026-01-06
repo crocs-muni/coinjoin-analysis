@@ -974,6 +974,19 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
     return result
 
 
+def run_estimate_wallet_prediction_factor(target_path: str, coord: str, conf_interval: str, plot_inputs_predictions: bool, plot_outputs_predictions: bool):
+    if coord == 'wasabi2_zksnacks':
+        predict_matrix = als.load_json_from_file(
+            os.path.join(target_path, 'wallet_estimation_matrix_ww2zksnacks.json'))
+    else:
+        predict_matrix = als.load_json_from_file(
+            os.path.join(target_path, 'wallet_estimation_matrix_ww2kruw.json'))
+    all_data = als.load_coinjoins_from_file(os.path.join(target_path, coord), None, True)
+
+    cjvis.estimate_wallet_prediction_factor(all_data, target_path, coord, predict_matrix[conf_interval],
+                                            plot_inputs_predictions, plot_outputs_predictions)
+
+
 def estimate_wallet_prediction_factor(all_data: dict, base_path, mix_id, prediction_matrix: dict=None,
                                       plot_inputs_prediction: bool=True, plot_outputs_prediction: bool=True, ax_provided=None, do_plot=True):
     # REFACTOR - mixed analysis and plotting
