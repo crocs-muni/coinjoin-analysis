@@ -91,12 +91,16 @@ def main(csv_path: str = "memlog.csv") -> None:
     fig, ax1 = plt.subplots(figsize=(30, 6))
     ax2 = ax1.twinx()
     mem_max = df["used_MB"].max()
-    ln1 = ax1.plot(df["timestamp_fixed"], df["used_MB"], label=f"used_MB (max. {round(mem_max/1000, 1)}GB)", linewidth=1.6, color='blue')
-    ln2 = ax2.plot(df["timestamp_fixed"], df["cpu_percent"], label="cpu_percent", linewidth=1.6, color='orange')
+    cpu_max = df["cpu_percent"].max()
+    ln1 = ax1.plot(df["timestamp_fixed"], df["used_MB"], label=f"used memory (max. {round(mem_max/1000, 1)}GB)", linewidth=1.6, color='blue')
+    ln2 = ax2.plot(df["timestamp_fixed"], df["cpu_percent"], label=f"cpu load (max. {round(cpu_max, 1)}%)", linewidth=1.6, color='orange')
+    # Plot line for max. memory/cpu
+    ax1.axhline(y=mem_max, linestyle="--", linewidth=1.0, alpha=0.4, color='blue')
+    ax2.axhline(y=cpu_max, linestyle="--", linewidth=1.0, alpha=0.4, color='orange')
 
-    ax1.set_xlabel("timestamp")
-    ax1.set_ylabel("used_MB")
-    ax2.set_ylabel("cpu_percent")
+    #ax1.set_xlabel("timestamp")
+    ax1.set_ylabel("used memory (MB)")
+    ax2.set_ylabel("cpu utilization (%)")
 
     # Operation-change separators (based on row-to-row changes)
     change_idx = df.index[df["operation"].ne(df["operation"].shift(1))].tolist()
