@@ -92,8 +92,10 @@ def main(csv_path: str = "memlog.csv") -> None:
     ax2 = ax1.twinx()
     mem_max = df["used_MB"].max()
     cpu_max = df["cpu_percent"].max()
+    ts = pd.to_datetime(df["timestamp_fixed"])
+    total_minutes = round((ts.max() - ts.min()).total_seconds() / 60, 1)
     ln1 = ax1.plot(df["timestamp_fixed"], df["used_MB"], label=f"used memory (max. {round(mem_max/1000, 1)}GB)", linewidth=1.6, color='blue')
-    ln2 = ax2.plot(df["timestamp_fixed"], df["cpu_percent"], label=f"cpu load (max. {round(cpu_max, 1)}%)", linewidth=1.6, color='orange')
+    ln2 = ax2.plot(df["timestamp_fixed"], df["cpu_percent"], label=f"cpu load (total {total_minutes} mins, max. {round(cpu_max, 1)}%)", linewidth=1.6, color='orange')
     # Plot line for max. memory/cpu
     ax1.axhline(y=mem_max, linestyle="--", linewidth=1.0, alpha=0.4, color='blue')
     ax2.axhline(y=cpu_max, linestyle="--", linewidth=1.0, alpha=0.4, color='orange')
