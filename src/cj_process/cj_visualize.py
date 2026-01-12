@@ -593,8 +593,8 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
     #new_month_indices = [('placeholder', 0, files[0][0:7])]  # Start with the first index
     new_month_indices = []
     next_month_index = 0
-    weeks_dict = defaultdict(dict)
     days_dict = defaultdict(dict)
+    weeks_dict = defaultdict(dict)
     months_dict = defaultdict(dict)
 
     for dir_name in sorted(files):
@@ -733,20 +733,11 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
                 ax.set_title(f'Type of inputs for given cjtx ({"values" if analyze_values else "number"})\n{mix_id} {dir_name}')
             logging.info(f'{target_base_path} inputs analyzed')
 
-            # Compute liquidity inflows (sum of weeks)
-            # Split cjtxs into weeks, then compute sum of MIX_ENTER
-            for key, record in data["coinjoins"].items():
-                # Parse the 'broadcast_time/virtual' string into a datetime object
-                if mix_protocol == MIX_PROTOCOL.WASABI2:
-                    dt = precomp_datetime.strptime(record['broadcast_time_virtual'], '%Y-%m-%d %H:%M:%S.%f')
-                else:
-                    dt = precomp_datetime.strptime(record['broadcast_time'], '%Y-%m-%d %H:%M:%S.%f')
-                year, week_num, _ = dt.isocalendar()
-                weeks_dict[(year, week_num)][key] = record
-                day_key = (dt.year, dt.month, dt.day)
-                days_dict[day_key][key] = record
-                month_key = (dt.year, dt.month)
-                months_dict[month_key][key] = record
+            # Compute liquidity inflows (sum of days/weeks/months)
+            days_dict_interval, weeks_dict_interval, months_dict_interval = als.split_coinjoins_per_interval(data["coinjoins"], mix_protocol)
+            days_dict.update(days_dict_interval)
+            weeks_dict_interval.update(weeks_dict_interval)
+            months_dict_interval.update(months_dict_interval)
 
             # Extend the y-limits to ensure the vertical lines go beyond the plot edges
             if ax:
@@ -763,7 +754,7 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
                          f'{mix_id}_input_types_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
                 fig_single.savefig(f'{save_file}.png', dpi=300)
                 fig_single.savefig(f'{save_file}.pdf', dpi=300)
-                logging.debug(f'Sucesfully saved figure {save_file}')
+                logging.debug(f'Successfully saved figure {save_file}')
                 del ax
                 del fig_single
 
@@ -795,6 +786,7 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
             #interval_to_display = weeks_dict
             interval_to_display = days_dict
 
+            # TODO: replace this function by usage of als.compute_interval_aggregated_values()
             def compute_aggregated_interval_liquidity(interval_to_display):
                 liquidity = [0]
                 for interval in sorted(interval_to_display.keys()):
@@ -817,7 +809,6 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
             ax.set_ylabel(label, color='gray', fontsize='6')
             ax.tick_params(axis='y', colors='gray')
 
-            new_month_liquidity = compute_aggregated_interval_liquidity(months_dict)
             restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 3)}btc'
             save_file = os.path.join(target_path,
                              f'{mix_id}_freshliquidity_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')

@@ -2498,7 +2498,17 @@ def print_remix_stats(target_base_path):
             print(e)
 
 
+def compute_and_save_aggregates(cjtx_coord: dict, mix_id: str, target_path: str | Path, filter_columns: list=None):
+    liq_interval_aggregation = als.compute_interval_aggregates(cjtx_coord["coinjoins"], mix_id)
+    als.save_json_to_file_pretty(os.path.join(target_path, f'intervals_aggregates_{mix_id}.json'), liq_interval_aggregation)
+    # save also as *.csv file (json->csv)
+    for interval_type in liq_interval_aggregation.keys():
+        als.save_json_to_csv_file_filtered(os.path.join(target_path, f'intervals_aggregates_{mix_id}_{interval_type}.csv'), liq_interval_aggregation[interval_type], filter_columns)
+
+
 def analyze_liquidity_summary(mix_protocol, target_path: str):
+    #CSV_FILTER_COLUMNS = ['total_coinjoins', 'total_fresh_inputs_without_nonstandard_outputs_value', 'total_unmoved_outputs_value', 'total_mix_remix_value']
+    CSV_FILTER_COLUMNS = None
     if mix_protocol == CoinjoinType.SW:
         pools_default = WHIRLPOOL_POOL_NAMES_ALL
         # Force MIX_IDS subset if required
@@ -2506,15 +2516,18 @@ def analyze_liquidity_summary(mix_protocol, target_path: str):
         for mix_id in pools:
             data = als.load_coinjoins_from_file(os.path.join(target_path, mix_id), None, True)
             SM.print(f'{mix_id}')
+            # Save aggregates
             liq_sum = als.print_liquidity_summary(data["coinjoins"], mix_id)
             als.save_json_to_file_pretty(os.path.join(target_path, f'liquidity_summary_{mix_id}.json'), liq_sum)
+            compute_and_save_aggregates(data, mix_id, target_path, CSV_FILTER_COLUMNS)
             free_memory(data)
     else:
         coords = []
         if mix_protocol == CoinjoinType.WW2:
             mix_ids = cjc.WASABI2_COORD_NAMES_ALL if op.MIX_IDS == "" else op.MIX_IDS
             coords = [('wasabi2', coord_name) for coord_name in mix_ids]
-            coords.append(('wasabi2', ''))  # Add record or all coordinators together
+            if op.MIX_IDS == "":  # If not custom list, add also all coordinators together
+                coords.append(('wasabi2', ''))
         if mix_protocol == CoinjoinType.WW1:
             coords = [('wasabi1', 'zksnacks'), ('wasabi1', 'others')]
         if mix_protocol == CoinjoinType.JM:
@@ -2523,8 +2536,11 @@ def analyze_liquidity_summary(mix_protocol, target_path: str):
             mix_id = f'{coord[0]}_{coord[1]}' if len(coord[1]) > 0 else f'{coord[0]}'
             cjtx_coord = als.load_coinjoins_from_file(os.path.join(target_path, f'{mix_id}'), None, True)
             SM.print(f'{mix_id}')
+            # Save aggregates
             liq_sum = als.print_liquidity_summary(cjtx_coord["coinjoins"], f'{mix_id}')
             als.save_json_to_file_pretty(os.path.join(target_path, f'liquidity_summary_{mix_id}.json'), liq_sum)
+            compute_and_save_aggregates(cjtx_coord, mix_id, target_path, CSV_FILTER_COLUMNS)
+
             free_memory(cjtx_coord)
 
 

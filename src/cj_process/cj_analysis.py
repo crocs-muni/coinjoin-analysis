@@ -1,4 +1,5 @@
 import copy
+import csv
 import os
 import subprocess
 from collections import Counter, defaultdict
@@ -24,7 +25,7 @@ from bitcoin.core import CTransaction, CMutableTransaction, CTxWitness
 
 from bitcoinlib.transactions import Output
 
-from cj_process.cj_consts import SATS_IN_BTC, VerboseTransactionInfoLineSeparator
+from cj_process.cj_consts import SATS_IN_BTC, MAX_SATS, VerboseTransactionInfoLineSeparator
 from cj_process.cj_structs import MIX_EVENT_TYPE, precomp_datetime, MIX_PROTOCOL, SM, CJ_LOG_TYPES, CJ_ALICE_TYPES
 
 
@@ -57,6 +58,30 @@ def save_json_to_file_pretty(file_path: str, data: dict, sort: bool = False):
             file.write(json.dumps(dict(sorted(data.items())), indent=4))
         else:
             file.write(json.dumps(data, indent=4))
+
+
+def save_json_to_csv_file_filtered(file_path: str | Path, data: dict, filter_columns: list=None):
+    """
+    Creates csv file from provided dictionary with columns specified in wanted_columns
+    :param data:
+    :param file_path:
+    :param filter_columns:
+    :return:
+    """
+    if filter_columns is None:
+        subkeys = set()
+        for inner in data.values():
+            if isinstance(inner, dict):
+                subkeys.update(inner.keys())
+        filter_columns = sorted(subkeys)
+    else:
+        filter_columns = list(filter_columns)
+
+    with open(file_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["key"] + filter_columns)
+        for key, inner in data.items():
+            writer.writerow([key] + [inner.get(x, "") for x in filter_columns])
 
 
 def detect_no_inout_remix_txs(coinjoins):
@@ -309,55 +334,68 @@ def compute_cjtxs_relative_ordering(coinjoins):
     return coinjoins_relative_distance
 
 
-def print_liquidity_summary(coinjoins: dict, mix_id: str):
+def compute_liquidity_summary(coinjoins: dict, prepare_strings: bool):
     if len(coinjoins) == 0:
         return None
 
     total_inputs_len = [len(coinjoins[cjtx]['inputs']) for cjtx in coinjoins.keys()]
-    total_inputs = [coinjoins[cjtx]['inputs'][input]['value'] for cjtx in coinjoins.keys() for input in coinjoins[cjtx]['inputs']]
+    total_inputs = [coinjoins[cjtx]['inputs'][input]['value'] for cjtx in coinjoins.keys() for input in
+                    coinjoins[cjtx]['inputs']]
     total_outputs_len = [len(coinjoins[cjtx]['outputs']) for cjtx in coinjoins.keys()]
     total_inputs_number = len(total_inputs)
     total_inputs_value = sum(total_inputs)
 
-    total_outputs = [coinjoins[cjtx]['outputs'][output]['value'] for cjtx in coinjoins.keys() for output in coinjoins[cjtx]['outputs']]
+    total_outputs = [coinjoins[cjtx]['outputs'][output]['value'] for cjtx in coinjoins.keys() for output in
+                     coinjoins[cjtx]['outputs']]
     total_outputs_number = len(total_outputs)
     total_outputs_value = sum(total_outputs)
 
-    total_mix_entering = [coinjoins[cjtx]['inputs'][input]['value'] for cjtx in coinjoins.keys() for input in coinjoins[cjtx]['inputs']
-                             if coinjoins[cjtx]['inputs'][input]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name]
+    total_mix_entering = [coinjoins[cjtx]['inputs'][input]['value'] for cjtx in coinjoins.keys() for input in
+                          coinjoins[cjtx]['inputs']
+                          if coinjoins[cjtx]['inputs'][input]['mix_event_type'] == MIX_EVENT_TYPE.MIX_ENTER.name]
     total_mix_entering_number = len(total_mix_entering)
     total_mix_entering_value = sum(total_mix_entering)
 
-    total_mix_friends = [coinjoins[cjtx]['inputs'][input]['value'] for cjtx in coinjoins.keys() for input in coinjoins[cjtx]['inputs']
-                             if coinjoins[cjtx]['inputs'][input]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name]
-    total_mix_friends_ww1 = [coinjoins[cjtx]['inputs'][input]['value'] for cjtx in coinjoins.keys() for input in coinjoins[cjtx]['inputs']
-                             if coinjoins[cjtx]['inputs'][input]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name]
+    total_mix_friends = [coinjoins[cjtx]['inputs'][input]['value'] for cjtx in coinjoins.keys() for input in
+                         coinjoins[cjtx]['inputs']
+                         if coinjoins[cjtx]['inputs'][input][
+                             'mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX_FRIENDS_WW1.name]
+    total_mix_friends_ww1 = [coinjoins[cjtx]['inputs'][input]['value'] for cjtx in coinjoins.keys() for input in
+                             coinjoins[cjtx]['inputs']
+                             if coinjoins[cjtx]['inputs'][input][
+                                 'mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX_FRIENDS.name]
     total_mix_friends_number = len(total_mix_friends) + len(total_mix_friends_ww1)
     total_mix_friends_value = sum(total_mix_friends) + sum(total_mix_friends_ww1)
 
-    total_mix_remix = [coinjoins[cjtx]['inputs'][input]['value'] for cjtx in coinjoins.keys() for input in coinjoins[cjtx]['inputs']
-                             if coinjoins[cjtx]['inputs'][input]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name]
+    total_mix_remix = [coinjoins[cjtx]['inputs'][input]['value'] for cjtx in coinjoins.keys() for input in
+                       coinjoins[cjtx]['inputs']
+                       if coinjoins[cjtx]['inputs'][input]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name]
     total_mix_remix_number = len(total_mix_remix)
     total_mix_remix_value = sum(total_mix_remix)
 
-    total_mix_remix_out = [coinjoins[cjtx]['outputs'][input]['value'] for cjtx in coinjoins.keys() for input in coinjoins[cjtx]['outputs']
-                             if coinjoins[cjtx]['outputs'][input]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name]
+    total_mix_remix_out = [coinjoins[cjtx]['outputs'][input]['value'] for cjtx in coinjoins.keys() for input in
+                           coinjoins[cjtx]['outputs']
+                           if coinjoins[cjtx]['outputs'][input]['mix_event_type'] == MIX_EVENT_TYPE.MIX_REMIX.name]
     total_mix_remix_out_number = len(total_mix_remix_out)
     total_mix_remix_out_value = sum(total_mix_remix_out)
 
-    total_mix_leaving = [coinjoins[cjtx]['outputs'][output]['value'] for cjtx in coinjoins.keys() for output in coinjoins[cjtx]['outputs']
-                             if coinjoins[cjtx]['outputs'][output]['mix_event_type'] == MIX_EVENT_TYPE.MIX_LEAVE.name]
+    total_mix_leaving = [coinjoins[cjtx]['outputs'][output]['value'] for cjtx in coinjoins.keys() for output in
+                         coinjoins[cjtx]['outputs']
+                         if coinjoins[cjtx]['outputs'][output]['mix_event_type'] == MIX_EVENT_TYPE.MIX_LEAVE.name]
     total_mix_leaving_number = len(total_mix_leaving)
     total_mix_leaving_value = sum(total_mix_leaving)
 
-    total_mix_leaving_nonstd = [coinjoins[cjtx]['outputs'][output]['value'] for cjtx in coinjoins.keys() for output in coinjoins[cjtx]['outputs']
-                             if coinjoins[cjtx]['outputs'][output]['mix_event_type'] == MIX_EVENT_TYPE.MIX_LEAVE.name and coinjoins[cjtx]['outputs'][output]['is_standard_denom'] == False]
+    total_mix_leaving_nonstd = [coinjoins[cjtx]['outputs'][output]['value'] for cjtx in coinjoins.keys() for output in
+                                coinjoins[cjtx]['outputs']
+                                if coinjoins[cjtx]['outputs'][output][
+                                    'mix_event_type'] == MIX_EVENT_TYPE.MIX_LEAVE.name and
+                                coinjoins[cjtx]['outputs'][output]['is_standard_denom'] == False]
     total_mix_leaving_nonstd_number = len(total_mix_leaving_nonstd)
     total_mix_leaving_nonstd_value = sum(total_mix_leaving_nonstd)
 
-
-    total_mix_staying = [coinjoins[cjtx]['outputs'][output]['value'] for cjtx in coinjoins.keys() for output in coinjoins[cjtx]['outputs']
-                             if coinjoins[cjtx]['outputs'][output]['mix_event_type'] == MIX_EVENT_TYPE.MIX_STAY.name]
+    total_mix_staying = [coinjoins[cjtx]['outputs'][output]['value'] for cjtx in coinjoins.keys() for output in
+                         coinjoins[cjtx]['outputs']
+                         if coinjoins[cjtx]['outputs'][output]['mix_event_type'] == MIX_EVENT_TYPE.MIX_STAY.name]
     total_mix_staying_number = len(total_mix_staying)
     total_mix_staying_value = sum(total_mix_staying)
 
@@ -371,7 +409,6 @@ def print_liquidity_summary(coinjoins: dict, mix_id: str):
     earliest_time = coinjoins[earliest_cjtx]['broadcast_time']
     latest_time = coinjoins[latest_cjtx]['broadcast_time']
 
-    # Prepare return structure
     lr = {}
     lr['earliest_cjtx'] = earliest_cjtx
     lr['earliest_time'] = earliest_time
@@ -386,48 +423,108 @@ def print_liquidity_summary(coinjoins: dict, mix_id: str):
     lr['max_outputs'] = max(total_outputs_len)
     lr['avg_outputs'] = np.average(total_outputs_len)
     lr['median_outputs'] = np.median(total_outputs_len)
-    lr['ratio_fresh_inputs_2_total_inputs'] = get_ratio_string(total_mix_entering_number, total_inputs_number)
-    lr['ratio_friends_inputs_2_total_inputs'] = get_ratio_string(total_mix_friends_number, total_inputs_number)
-    lr['ratio_leaving_outputs_2_total_outputs'] = get_ratio_string(total_mix_leaving_number, total_outputs_number)
-    lr['ratio_staying_outputs_2_total_outputs'] = get_ratio_string(total_mix_staying_number, total_outputs_number)
-    lr['ratio_staying_outputs_2_nonremix_outputs'] = get_ratio_string(total_mix_staying_number, total_outputs_number - total_mix_remix_out_number)
-    lr['ratio_remixed_inputs_2_total_inputs_numbers'] = get_ratio_string(total_mix_remix_number, total_inputs_number)
-    lr['ratio_remixed_inputs_2_total_inputs_values'] = get_ratio_string(total_mix_remix_value / SATS_IN_BTC, total_inputs_value / SATS_IN_BTC)
-    lr['total_fresh_inputs_value'] = total_mix_entering_value / SATS_IN_BTC
-    lr['total_friends_inputs_value'] = total_mix_friends_value / SATS_IN_BTC
-    lr['total_unmoved_outputs_value'] = total_mix_staying_value / SATS_IN_BTC
-    lr['total_leaving_outputs_value'] = total_mix_leaving_value / SATS_IN_BTC
-    lr['total_nonstandard_leaving_outputs_value'] = total_mix_leaving_nonstd_value / SATS_IN_BTC
-    lr['total_fresh_inputs_without_nonstandard_outputs_value'] = (total_mix_entering_value - total_mix_leaving_nonstd_value) / SATS_IN_BTC
-    mix_id_latex = mix_id.replace('_', '\\_' )
-    lr['latex_summary'] = f'\\hline   ' \
-             + f'{mix_id_latex} & {earliest_time}--{latest_time} & ' \
-             + f"{len(coinjoins.keys())} & {total_mix_entering_number} / {round(lr['total_fresh_inputs_without_nonstandard_outputs_value'], 1)}~\\bitcoinSymbol" + "{} & " \
-             + f'{get_ratio(total_mix_remix_value, total_inputs_value)}\\% & ' \
-             + f'{get_ratio(total_mix_staying_number, total_outputs_number - total_mix_remix_out_number)}\\%, {round(total_mix_staying_value / SATS_IN_BTC, 1)}~\\bitcoinSymbol' + '{} & ' \
-             + f'{min(total_inputs_len)} / {round(np.average(total_inputs_len), 1)} / {max(total_inputs_len)} \\\\'
 
-    # Print summary results
-    SM.print(f"  Earliest broadcast: {lr['earliest_time']} from {lr['earliest_cjtx']}")
-    SM.print(f"  Latest broadcast: {lr['latest_time']} from {lr['latest_cjtx']}")
-    SM.print(f"  Total coinjoin transactions: {lr['total_coinjoins']}")
-    SM.print(f"  Number of inputs: min={lr['min_inputs']}, max={lr['max_inputs']}, avg={lr['avg_inputs']}, median={lr['median_inputs']}")
-    SM.print(f"  Number of outputs: min={lr['min_outputs']}, max={lr['max_outputs']}, avg={lr['avg_outputs']}, median={lr['median_outputs']}")
-    SM.print(f"  {lr['ratio_fresh_inputs_2_total_inputs']} Inputs entering mix / total inputs used by mix transactions")
-    SM.print(f"  {lr['ratio_friends_inputs_2_total_inputs']} Friends inputs re-entering mix / total inputs used by mix transactions")
-    SM.print(f"  {lr['ratio_leaving_outputs_2_total_outputs']} Outputs leaving mix / total outputs by mix transactions")
-    SM.print(f"  {lr['ratio_staying_outputs_2_total_outputs']} Outputs staying in mix / total outputs by mix transactions")
-    SM.print(f"  {lr['ratio_staying_outputs_2_nonremix_outputs']} Outputs staying in mix / non-remix outputs")
-    SM.print(f"  {lr['ratio_remixed_inputs_2_total_inputs_numbers']} Inputs remixed / total inputs based on number of inputs")
-    SM.print(f"  {lr['ratio_remixed_inputs_2_total_inputs_values']} Inputs remixed / total inputs based on value of inputs")
-    SM.print(f"  {lr['total_fresh_inputs_value']} btc, total fresh entering mix")
-    SM.print(f"  {lr['total_friends_inputs_value']} btc, total friends entering mix")
-    SM.print(f"  {lr['total_unmoved_outputs_value']} btc, total value staying unmoved in mix")
-    SM.print(f"  {lr['total_leaving_outputs_value']} btc, total value leaving mix")
-    SM.print(f"  {lr['total_nonstandard_leaving_outputs_value']} btc, total non-standard value leaving mix (not mixed)")
-    SM.print(f"  {lr['total_fresh_inputs_without_nonstandard_outputs_value']} btc, total fresh entering mix without non-standard leaving")
+    lr['total_outputs_number'] = total_outputs_number
+    lr['total_mix_entering_number'] = total_mix_entering_number
+    lr['total_mix_staying_number'] = total_mix_staying_number
+    lr['total_mix_remix_out_number'] = total_mix_remix_out_number
 
-    SM.print(f"  {lr['latex_summary']}")
+    lr['total_inputs_value_sats'] = total_inputs_value
+    lr['total_inputs_value'] = lr['total_inputs_value_sats'] / SATS_IN_BTC
+    lr['total_leaving_outputs_value_sats'] = total_mix_leaving_value
+    lr['total_leaving_outputs_value'] = lr['total_leaving_outputs_value_sats'] / SATS_IN_BTC
+
+    lr['total_mix_remix_value_sats'] = total_mix_remix_value
+    lr['total_mix_remix_value'] = lr['total_mix_remix_value_sats'] / SATS_IN_BTC
+    lr['total_unmoved_outputs_value_sats'] = total_mix_staying_value
+    lr['total_unmoved_outputs_value'] = lr['total_unmoved_outputs_value_sats'] / SATS_IN_BTC
+    lr['total_friends_inputs_value_sats'] = total_mix_friends_value
+    lr['total_friends_inputs_value'] = lr['total_friends_inputs_value_sats'] / SATS_IN_BTC
+    lr['total_fresh_inputs_value_sats'] = total_mix_entering_value
+    lr['total_fresh_inputs_value'] = lr['total_fresh_inputs_value_sats'] / SATS_IN_BTC
+    lr['total_nonstandard_leaving_outputs_value_sats'] = total_mix_leaving_nonstd_value
+    lr['total_nonstandard_leaving_outputs_value'] = lr['total_nonstandard_leaving_outputs_value_sats'] / SATS_IN_BTC
+    lr['total_leaving_outputs_without_nonstandard_leaving_outputs_value_sats'] = total_mix_leaving_value - total_mix_leaving_nonstd_value
+    lr['total_leaving_outputs_without_nonstandard_leaving_outputs_value'] = lr['total_leaving_outputs_without_nonstandard_leaving_outputs_value_sats'] / SATS_IN_BTC
+    lr['total_fresh_inputs_without_nonstandard_outputs_value_sats'] = total_mix_entering_value - total_mix_leaving_nonstd_value
+    lr['total_fresh_inputs_without_nonstandard_outputs_value'] = lr['total_fresh_inputs_without_nonstandard_outputs_value_sats'] / SATS_IN_BTC
+    lr['total_fresh_inputs_and_friends_without_nonstandard_outputs_value_sats'] = total_mix_entering_value + total_mix_friends_value - total_mix_leaving_nonstd_value
+    lr['total_fresh_inputs_and_friends_without_nonstandard_outputs_value'] = lr['total_fresh_inputs_and_friends_without_nonstandard_outputs_value_sats'] / SATS_IN_BTC
+
+    #
+    # Shortcuts
+    #
+    # All inputs of coinjoin
+    lr['inputs_value_type1_sats'] = lr['total_inputs_value_sats']
+    lr['inputs_value_type1'] = lr['inputs_value_type1_sats'] / SATS_IN_BTC
+    # All MIX_ENTER inputs of coinjoin (source is outside coinjoins)
+    lr['inputs_value_type2_sats'] = lr['total_fresh_inputs_value_sats']
+    lr['inputs_value_type2'] = lr['inputs_value_type2_sats'] / SATS_IN_BTC
+    # All MIX_ENTER inputs of coinjoin without non-standard outputs (large utxo in, but only part of is mixed)
+    lr['inputs_value_type3_sats'] = lr['total_fresh_inputs_without_nonstandard_outputs_value_sats']
+    lr['inputs_value_type3'] = lr['inputs_value_type3_sats'] / SATS_IN_BTC
+    # All MIX_ENTER + MIX_FRIENDS + MIX_FRIENDS_WW1 (friends are treated as fresh inputs)
+    lr['inputs_value_type4_sats'] = lr['total_fresh_inputs_and_friends_without_nonstandard_outputs_value_sats']
+    lr['inputs_value_type4'] = lr['inputs_value_type4_sats'] / SATS_IN_BTC
+
+    # All outputs of coinjoin
+    lr['outputs_value_type1_sats'] = lr['total_leaving_outputs_value_sats']
+    lr['outputs_value_type1'] = lr['outputs_value_type1_sats'] / SATS_IN_BTC
+    # All MIX_LEAVE outputs of coinjoin (target is outside coinjoins)
+    lr['outputs_value_type2_sats'] = lr['total_leaving_outputs_value_sats']
+    lr['outputs_value_type2'] = lr['outputs_value_type2_sats'] / SATS_IN_BTC
+    # All MIX_LEAVE without non-standard outputs
+    lr['outputs_value_type3_sats'] = lr['total_leaving_outputs_without_nonstandard_leaving_outputs_value_sats']
+    lr['outputs_value_type3'] = lr['outputs_value_type3_sats'] / SATS_IN_BTC
+
+    if prepare_strings:
+        lr['ratio_fresh_inputs_2_total_inputs'] = get_ratio_string(total_mix_entering_number, total_inputs_number)
+        lr['ratio_friends_inputs_2_total_inputs'] = get_ratio_string(total_mix_friends_number, total_inputs_number)
+        lr['ratio_leaving_outputs_2_total_outputs'] = get_ratio_string(total_mix_leaving_number, total_outputs_number)
+        lr['ratio_staying_outputs_2_total_outputs'] = get_ratio_string(total_mix_staying_number, total_outputs_number)
+        lr['ratio_staying_outputs_2_nonremix_outputs'] = get_ratio_string(total_mix_staying_number,
+                                                                          total_outputs_number - total_mix_remix_out_number)
+        lr['ratio_remixed_inputs_2_total_inputs_numbers'] = get_ratio_string(total_mix_remix_number, total_inputs_number)
+        lr['ratio_remixed_inputs_2_total_inputs_values'] = get_ratio_string(total_mix_remix_value / SATS_IN_BTC,
+                                                                            total_inputs_value / SATS_IN_BTC)
+
+    return lr
+
+
+def print_liquidity_summary(coinjoins: dict, mix_id: str):
+    lr = compute_liquidity_summary(coinjoins, True)
+
+    if lr:
+        mix_id_latex = mix_id.replace('_', '\\_' )
+        lr['latex_summary'] = f"\\hline   " \
+                 + f"{mix_id_latex} & {lr['earliest_time']}--{lr['latest_time']} & " \
+                 + f"{lr['total_coinjoins']} & {lr['total_mix_entering_number']} / {round(lr['total_fresh_inputs_without_nonstandard_outputs_value'], 1)}~\\bitcoinSymbol" + "{} & " \
+                 + f"{get_ratio(lr['total_mix_remix_value_sats'], lr['total_inputs_value_sats'])}\\% & " \
+                 + f"{get_ratio(lr['total_mix_staying_number'], lr['total_outputs_number'] - lr['total_mix_remix_out_number'])}\\%, {round(lr['total_unmoved_outputs_value_sats'] / SATS_IN_BTC, 1)}~\\bitcoinSymbol" + "{} & " \
+                 + f"{lr['min_inputs']} / {round(lr['avg_inputs'], 1)} / {lr['max_inputs']} \\\\"
+
+        # Print summary results
+        SM.print(f"  Earliest broadcast: {lr['earliest_time']} from {lr['earliest_cjtx']}")
+        SM.print(f"  Latest broadcast: {lr['latest_time']} from {lr['latest_cjtx']}")
+        SM.print(f"  Total coinjoin transactions: {lr['total_coinjoins']}")
+        SM.print(f"  Number of inputs: min={lr['min_inputs']}, max={lr['max_inputs']}, avg={lr['avg_inputs']}, median={lr['median_inputs']}")
+        SM.print(f"  Number of outputs: min={lr['min_outputs']}, max={lr['max_outputs']}, avg={lr['avg_outputs']}, median={lr['median_outputs']}")
+        SM.print(f"  {lr['ratio_fresh_inputs_2_total_inputs']} Inputs entering mix / total inputs used by mix transactions")
+        SM.print(f"  {lr['ratio_friends_inputs_2_total_inputs']} Friends inputs re-entering mix / total inputs used by mix transactions")
+        SM.print(f"  {lr['ratio_leaving_outputs_2_total_outputs']} Outputs leaving mix / total outputs by mix transactions")
+        SM.print(f"  {lr['ratio_staying_outputs_2_total_outputs']} Outputs staying in mix / total outputs by mix transactions")
+        SM.print(f"  {lr['ratio_staying_outputs_2_nonremix_outputs']} Outputs staying in mix / non-remix outputs")
+        SM.print(f"  {lr['ratio_remixed_inputs_2_total_inputs_numbers']} Inputs remixed / total inputs based on number of inputs")
+        SM.print(f"  {lr['ratio_remixed_inputs_2_total_inputs_values']} Inputs remixed / total inputs based on value of inputs")
+        SM.print(f"  {lr['total_fresh_inputs_value']} btc, total fresh entering mix")
+        SM.print(f"  {lr['total_friends_inputs_value']} btc, total friends entering mix")
+        SM.print(f"  {lr['total_unmoved_outputs_value']} btc, total value staying unmoved in mix")
+        SM.print(f"  {lr['total_leaving_outputs_value']} btc, total value leaving mix")
+        SM.print(f"  {lr['total_nonstandard_leaving_outputs_value']} btc, total non-standard value leaving mix (not mixed)")
+        SM.print(f"  {lr['total_fresh_inputs_without_nonstandard_outputs_value']} btc, total fresh entering mix without non-standard leaving")
+
+        SM.print(f"  {lr['latex_summary']}")
+
     return lr
 
 
@@ -2114,3 +2211,80 @@ def get_missing_cjtxs(cjtxs: dict, mappings: dict, dataset_names: list, target_p
     return missing_cjtxs, missing_crawl
 
 
+def split_coinjoins_per_interval(cjtxs: dict, mix_protocol):
+    # Compute liquidity inflows (sum of days/weeks/months)
+    days_dict = defaultdict(dict)
+    weeks_dict = defaultdict(dict)
+    months_dict = defaultdict(dict)
+    # Split cjtxs into weeks, then compute sum of MIX_ENTER
+    for key, record in cjtxs.items():
+        # Parse the 'broadcast_time/virtual' string into a datetime object
+        if mix_protocol == MIX_PROTOCOL.WASABI2:
+            dt = precomp_datetime.strptime(record['broadcast_time_virtual'], '%Y-%m-%d %H:%M:%S.%f')
+        else:
+            dt = precomp_datetime.strptime(record['broadcast_time'], '%Y-%m-%d %H:%M:%S.%f')
+        year, week_num, _ = dt.isocalendar()
+        weeks_dict[(year, week_num)][key] = record
+        day_key = (dt.year, dt.month, dt.day)
+        days_dict[day_key][key] = record
+        month_key = (dt.year, dt.month)
+        months_dict[month_key][key] = record
+
+    return days_dict, weeks_dict, months_dict
+
+
+def compute_interval_aggregate_custom(interval_to_aggregate: dict, in_out_case: str, mix_events_types: list, limit_bounds: tuple[int, int]=None):
+    """
+    Computes aggregation of values of provide type(s) (mix_events_types) over provided interval
+    :param interval_to_aggregate: conjoin records already separated per desired interval (e.g., daily/weekly/monthly)
+    :param in_out_case: transaction 'inputs' or 'outputs' to consider
+    :param mix_events_types: list of MIX_EVENT_TYPE types which shall be considered
+    :param limit_bounds: upper and lower bound for value (in satoshis) size to consider
+    :return: dictionary of stats for intervals
+    """
+    if limit_bounds is None:  # If not given, set bounds to extreme values
+        limit_bounds = (-1, MAX_SATS)
+
+    aggregated_vals = {}
+    # Aggregate desired property over desired interval
+    for interval in sorted(interval_to_aggregate.keys()):
+        records = interval_to_aggregate[interval]  # Records from single interval to aggregate
+
+        # If 'value' (in sats) is required (use_value_property == True), then read ['value'] property, otherwise just note occurence (=1)
+        interval_items = [records[cjtx][in_out_case][index]['value'] for cjtx in records.keys()
+                          for index in records[cjtx][in_out_case].keys()
+                          if records[cjtx][in_out_case][index]['mix_event_type'] in mix_events_types and
+                          limit_bounds[0] <= records[cjtx][in_out_case][index]['value'] <= limit_bounds[1]]
+        aggregated_vals_sats = sum(interval_items)
+        aggregated_vals_btc = sum(interval_items) / SATS_IN_BTC
+        aggregated_vals_counts = len(interval_items)
+        logging.debug(f"Interval {interval}: {aggregated_vals_btc} btc, {aggregated_vals_sats} sats, {aggregated_vals_counts} cases, num_cjtxs={len(records)}")
+
+        aggregated_vals[interval] = {'interval': interval, 'values_sats': aggregated_vals_sats,
+                                     'values_btc': aggregated_vals_btc, 'counts': aggregated_vals_counts}
+        cfg_used = {'in_out_case': in_out_case, 'mix_events_types': mix_events_types,
+                    'limit_value_min': limit_bounds[0], 'limit_value_max': limit_bounds[1]}
+
+    return aggregated_vals
+
+
+def compute_interval_aggregates(cjtxs: dict, mix_id):
+    aggregates = {}
+
+    # Split provided coinjoins per base intervals
+    days_dict, weeks_dict, months_dict = split_coinjoins_per_interval(cjtxs, mix_id)
+
+    # Compute select aggregated properties
+    for interval_str, interval_data in [('day', days_dict), ('week', weeks_dict), ('month', months_dict)]:
+        aggregated_vals_interval = {}
+        # Aggregate desired property over desired interval
+        for interval in sorted(interval_data.keys()):
+            records = interval_data[interval]  # Records from single interval to aggregate
+            lr = compute_liquidity_summary(records, False)
+
+            interval_string = '_'.join(map(str, interval))
+            aggregated_vals_interval[interval_string] = lr
+
+        aggregates[f'{interval_str}'] = aggregated_vals_interval
+
+    return aggregates
