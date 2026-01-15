@@ -3,6 +3,7 @@ import shutil
 import sys
 from collections import defaultdict
 from itertools import groupby
+from pathlib import Path
 
 import numpy as np
 import plotly.graph_objects as go
@@ -13,12 +14,15 @@ import cj_process.cj_analysis as als
 SATS_IN_BTC = 100000000
 
 
-def build_plot_intercoord_flows_sankey(base_path: str, entity_dict: dict, transaction_outputs: dict, counts: bool, start_date: str = None):
-    build_intercoord_flows_sankey(base_path, entity_dict, transaction_outputs, counts, start_date)
-    plot_intercoord_flows_sankey(base_path, counts, start_date)
+def build_plot_intercoord_flows_sankey(base_path: str, entity_dict: dict, transaction_outputs: dict, counts: bool, start_date: str = None, filter_out: set = None):
+    results_file = build_intercoord_flows_sankey(base_path, entity_dict, transaction_outputs, counts, start_date, filter_out)
+    plot_intercoord_flows_sankey(base_path, results_file, counts, start_date)
 
 
-def build_intercoord_flows_sankey(base_path: str, entity_dict: dict, transaction_outputs: dict, counts: bool, start_date: str = None):
+def build_intercoord_flows_sankey(base_path: str, entity_dict: dict, transaction_outputs: dict, counts: bool, start_date: str = None, filter_out: set = None):
+    if filter_out is None:
+        filter_out = set()
+
     output_file_template = f"coordinator_flows_{'counts' if counts else 'values'}_{start_date[0:10] if start_date else ''}"
     entity_names = list(entity_dict.keys())
     entity_index = {name: i for i, name in enumerate(sorted(entity_names))}
@@ -64,16 +68,33 @@ def build_intercoord_flows_sankey(base_path: str, entity_dict: dict, transaction
     flows_to_save = {}
     for (k1, k2), v in flows_only_inter.items():
         flows_to_save.setdefault(k1, {})[k2] = v
-    save_path = os.path.join(base_path, f"{output_file_template}.json")
+
+    # If required, filter all references specified in filter_out
+    for coord, items in list(flows_to_save.items()):
+        if coord in filter_out:
+            del flows_to_save[coord]
+        else:
+            for item in list(items):
+                if item in filter_out:
+                    del items[item]
+
+    if len(filter_out) > 0:
+        out_file_name = f"{output_file_template}_filtered_{len(filter_out)}.json"
+    else:
+        out_file_name = f"{output_file_template}.json"
+    save_path = os.path.join(base_path, out_file_name)
     als.save_json_to_file_pretty(save_path, flows_to_save, True)
     print(f"Flows saved to {save_path}")
 
+    return out_file_name
 
-def plot_intercoord_flows_sankey(base_path: str, counts: bool, start_date: str = None):
-    output_file_template = f"coordinator_flows_{'counts' if counts else 'values'}_{start_date[0:10] if start_date else ''}"
+
+def plot_intercoord_flows_sankey(base_path: str, out_file_name: str, counts: bool, start_date: str = None):
+    #output_file_template = f"coordinator_flows_{'counts' if counts else 'values'}_{start_date[0:10] if start_date else ''}"
+    output_file_template = Path(out_file_name).with_suffix("")
 
     # Load from file, turn back from dict to tuples (this )
-    flows_loaded = als.load_json_from_file(os.path.join(base_path, f"{output_file_template}.json"))
+    flows_loaded = als.load_json_from_file(os.path.join(base_path, out_file_name))
     # Compute required entity structures
     all_names = set(flows_loaded.keys())
     all_names.update([name for x in flows_loaded.keys() for name in sorted(flows_loaded[x].keys())])
@@ -179,12 +200,18 @@ def visualize_coord_flows(base_path: str):
     # Filter only coordinators with known name (only digits are discarded)
     entities_to_process = {entity: entities[entity] for entity in entities.keys() if not entity.isdigit()}
 
-    build_plot_intercoord_flows_sankey(base_path, entities_to_process, data, True)
-    build_plot_intercoord_flows_sankey(base_path, entities_to_process, data, False)
-    build_plot_intercoord_flows_sankey(base_path, entities_to_process, data, True, "2024-09-01 00:00:00.000")
-    build_plot_intercoord_flows_sankey(base_path, entities_to_process, data, False, "2024-09-01 00:00:00.000")
-    build_plot_intercoord_flows_sankey(base_path, entities_to_process, data, True, "2025-01-01 00:00:00.000")
-    build_plot_intercoord_flows_sankey(base_path, entities_to_process, data, False, "2025-01-01 00:00:00.000")
+    CONFIG_LIST = [{}, {'unattributed'}]
+    # Create filtered results with only selected important coordinators shown
+    # All values, but drop all references to 'unattributed'
+    for to_filter in CONFIG_LIST:
+        build_plot_intercoord_flows_sankey(base_path, entities_to_process, data, True, None, to_filter)
+        build_plot_intercoord_flows_sankey(base_path, entities_to_process, data, False, None, to_filter)
+        build_plot_intercoord_flows_sankey(base_path, entities_to_process, data, True, "2024-09-01 00:00:00.000", to_filter)
+        build_plot_intercoord_flows_sankey(base_path, entities_to_process, data, False, "2024-09-01 00:00:00.000", to_filter)
+        build_plot_intercoord_flows_sankey(base_path, entities_to_process, data, True, "2025-01-01 00:00:00.000", to_filter)
+        build_plot_intercoord_flows_sankey(base_path, entities_to_process, data, False, "2025-01-01 00:00:00.000", to_filter)
+
+
 
 
 def gant_coordinators_plotly(base_path: str):
