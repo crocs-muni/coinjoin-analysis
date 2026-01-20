@@ -736,8 +736,8 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
             # Compute liquidity inflows (sum of days/weeks/months)
             days_dict_interval, weeks_dict_interval, months_dict_interval = als.split_coinjoins_per_interval(data["coinjoins"], mix_protocol)
             days_dict.update(days_dict_interval)
-            weeks_dict_interval.update(weeks_dict_interval)
-            months_dict_interval.update(months_dict_interval)
+            weeks_dict.update(weeks_dict_interval)
+            months_dict.update(months_dict_interval)
 
             # Extend the y-limits to ensure the vertical lines go beyond the plot edges
             if ax:
