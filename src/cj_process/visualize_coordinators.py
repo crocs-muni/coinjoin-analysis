@@ -90,7 +90,6 @@ def build_intercoord_flows_sankey(base_path: str, entity_dict: dict, transaction
 
 
 def plot_intercoord_flows_sankey(base_path: str, out_file_name: str, counts: bool, start_date: str = None):
-    #output_file_template = f"coordinator_flows_{'counts' if counts else 'values'}_{start_date[0:10] if start_date else ''}"
     output_file_template = Path(out_file_name).with_suffix("")
 
     # Load from file, turn back from dict to tuples (this )
@@ -200,7 +199,7 @@ def visualize_coord_flows(base_path: str):
     # Filter only coordinators with known name (only digits are discarded)
     entities_to_process = {entity: entities[entity] for entity in entities.keys() if not entity.isdigit()}
 
-    CONFIG_LIST = [{}, {'unattributed'}]
+    CONFIG_LIST = [set(), {'unattributed'}]
     # Create filtered results with only selected important coordinators shown
     # All values, but drop all references to 'unattributed'
     for to_filter in CONFIG_LIST:
