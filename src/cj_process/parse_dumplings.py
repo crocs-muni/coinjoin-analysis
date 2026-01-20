@@ -3882,13 +3882,15 @@ def main(argv=None):
             ground_truth_known_coord_txs = als.load_coordinator_mapping_from_file(os.path.join(target_path, 'wasabi2_others', 'txid_coord.json'), 'crawl')
             intercoord_ratios = cja.analyze_coordinator_detection(cjtxs, ground_truth_known_coord_txs, cjc.WASABI2_COORD_NAMES_ALL)
             als.save_json_to_file_pretty(os.path.join(target_path, f'crawl_intercoord_mix_ratios.json'), intercoord_ratios)
-            cjvis.plot_intermix_ratios(intercoord_ratios, target_path, 'crawl_')
+            results = cjvis.plot_intermix_ratios(intercoord_ratios, target_path, 'crawl_')
+            als.save_json_to_file_pretty(os.path.join(target_path, f'crawl_all_coordinators_in_out_mix_ratios.json'), results)
 
             tx_list = {'all': als.load_json_from_file(os.path.join(target_path, 'wasabi2_others', 'txid_to_coord_discovered_renamed.json'))}
             assigned_coord_txs = {key: tx_list[sublist][key] for sublist in tx_list.keys() for key in tx_list[sublist].keys()}
             intercoord_ratios = cja.analyze_coordinator_detection(cjtxs, assigned_coord_txs, cjc.WASABI2_COORD_NAMES_ALL)
             als.save_json_to_file_pretty(os.path.join(target_path, f'discovered_intercoord_mix_ratios.json'), intercoord_ratios)
-            cjvis.plot_intermix_ratios(intercoord_ratios, target_path, 'discovered_')
+            results = cjvis.plot_intermix_ratios(intercoord_ratios, target_path, 'discovered_')
+            als.save_json_to_file_pretty(os.path.join(target_path, f'discovered_all_coordinators_in_out_mix_ratios.json'), results)
 
     if op.ANALYZE_DETECT_COORDINATORS_ALG_DETAILED:
         if op.CJ_TYPE == CoinjoinType.WW2:
