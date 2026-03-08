@@ -2236,7 +2236,7 @@ def split_coinjoins_per_interval(cjtxs: dict, mix_protocol):
 def compute_interval_aggregate_custom(interval_to_aggregate: dict, in_out_case: str, mix_events_types: list, limit_bounds: tuple[int, int]=None):
     """
     Computes aggregation of values of provide type(s) (mix_events_types) over provided interval
-    :param interval_to_aggregate: conjoin records already separated per desired interval (e.g., daily/weekly/monthly)
+    :param interval_to_aggregate: coinjoin records already separated per desired interval (e.g., daily/weekly/monthly)
     :param in_out_case: transaction 'inputs' or 'outputs' to consider
     :param mix_events_types: list of MIX_EVENT_TYPE types which shall be considered
     :param limit_bounds: upper and lower bound for value (in satoshis) size to consider
@@ -2262,17 +2262,17 @@ def compute_interval_aggregate_custom(interval_to_aggregate: dict, in_out_case: 
 
         aggregated_vals[interval] = {'interval': interval, 'values_sats': aggregated_vals_sats,
                                      'values_btc': aggregated_vals_btc, 'counts': aggregated_vals_counts}
-        cfg_used = {'in_out_case': in_out_case, 'mix_events_types': mix_events_types,
-                    'limit_value_min': limit_bounds[0], 'limit_value_max': limit_bounds[1]}
+        # cfg_used = {'in_out_case': in_out_case, 'mix_events_types': mix_events_types,
+        #             'limit_value_min': limit_bounds[0], 'limit_value_max': limit_bounds[1]}
 
     return aggregated_vals
 
 
-def compute_interval_aggregates(cjtxs: dict, mix_id):
+def compute_interval_aggregates(cjtxs: dict, mix_protocol):
     aggregates = {}
 
     # Split provided coinjoins per base intervals
-    days_dict, weeks_dict, months_dict = split_coinjoins_per_interval(cjtxs, mix_id)
+    days_dict, weeks_dict, months_dict = split_coinjoins_per_interval(cjtxs, mix_protocol)
 
     # Compute select aggregated properties
     for interval_str, interval_data in [('day', days_dict), ('week', weeks_dict), ('month', months_dict)]:

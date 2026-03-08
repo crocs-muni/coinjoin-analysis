@@ -897,7 +897,7 @@ def process_and_save_coinjoins(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
                                premix_filename: str, start_date: str | None, stop_date: str | None, target_save_path: os.path=None, save_base_files: bool=False):
     if not target_save_path:
         target_save_path = target_path
-    # Process and save full conjoin information
+    # Process and save full coinjoin information
     data, data_extended, cj_relative_order = process_coinjoins(target_path, mix_protocol, mix_filename, postmix_filename, premix_filename, start_date, stop_date)
     als.save_json_to_file_pretty(os.path.join(target_save_path, f'cj_relative_order.json'), cj_relative_order)
 
@@ -3669,10 +3669,10 @@ def main(argv=None):
                 # All four cfgs in parallel
                 plot_configurations = [
                 [('nums&notnorm', False, False), ('nums&norm', False, True), ('values&notnorm', True, False),
-                 ('nums&norm', True, True)]]  # Two configurations in parallel
+                 ('values&norm', True, True)]]  # Two configurations in parallel
             else:
                 # Default version
-                plot_configurations = [[('nums&notnorm', False, False)], [('nums&norm', False, True)], [('values&notnorm', True, False)], [('nums&norm', True, True)]]  # analyze_values & normalize_values
+                plot_configurations = [[('nums&notnorm', False, False)], [('nums&norm', False, True)], [('values&notnorm', True, False)], [('values&norm', True, True)]]  # analyze_values & normalize_values
 
             # Parallelize over all mixes and (optionally) multiple configurations (plot_configurations)
             for cfg_group in plot_configurations:
