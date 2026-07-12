@@ -2275,7 +2275,7 @@ def plot_coord_attribution_stats_aggregated(target_path: Path | str, filename: s
             plot_symlog(x_vals, series_aggregated, join_coord_results, omitt_coords)
 
 
-def plot_mapping_datasets_stats(cjtxs: dict, mappings: dict, dataset_names: list, target_path: str | Path):
+def plot_mapping_datasets_stats(cjtxs: dict, mappings: dict, dataset_names: list, target_path: str | Path, label: str):
     # Plot number of transactions per day from different datasets
     crawl_coord_txs = {txid: None for dataset, txs in mappings.items() if dataset in dataset_names for txid in txs}
 
@@ -2337,6 +2337,7 @@ def plot_mapping_datasets_stats(cjtxs: dict, mappings: dict, dataset_names: list
     plt.legend(loc="upper right", fontsize=14)
     plt.grid(True, linewidth=0.5, alpha=0.4)
     plt.tight_layout()
-    plt.savefig(os.path.join(target_path, 'crawl_datasets.png'), dpi=200, bbox_inches="tight")
-    print(f'Saving {target_path}')
+    fig_name = f'crawl_datasets{label}.png'
+    plt.savefig(os.path.join(target_path, fig_name), dpi=200, bbox_inches="tight")
+    print(f'Saving {target_path}/{fig_name}')
     plt.close()
