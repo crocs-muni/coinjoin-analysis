@@ -14,6 +14,7 @@ import numpy as np
 from datetime import timedelta, datetime, UTC
 import re
 import math
+from decimal import Decimal
 #from  txstore import TxStore, TxStoreMsgPack
 
 from bitcoin.core import CTransaction, CMutableTransaction, CTxWitness
@@ -39,6 +40,11 @@ SORT_COINJOINS_BY_RELATIVE_ORDER = True
 PERF_USE_COMPACT_CJTX_STRUCTURE = False  # If True, more compacted dictionary with coinjoin records is used
 PERF_USE_SHORT_TXID = False
 PERF_TX_SHORT_LEN = 16
+
+
+def btc_to_sats(value: int | float | str) -> int:
+    """Convert a JSON-RPC BTC amount to satoshis without binary float truncation."""
+    return int(Decimal(str(value)) * SATS_IN_BTC)
 
 
 def load_json_from_file(file_path: str | Path) -> dict:
@@ -598,6 +604,11 @@ def analyze_input_out_liquidity(target_path: str, coinjoins, postmix_spend, prem
     total_mix_leaving = 0
     total_mix_staying = []
     total_utxos = 0
+    if not coinjoins:
+        logging.warning("No coinjoins available for liquidity analysis; writing empty tx_reordering_stats.json")
+        save_json_to_file(os.path.join(target_path, 'tx_reordering_stats.json'), {})
+        logging.debug('analyze_input_out_liquidity() finished')
+        return {}
     broadcast_times = {cjtx: precomp_datetime.strptime(coinjoins[cjtx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for cjtx in coinjoins.keys()}
     if postmix_spend:
         broadcast_times.update({tx: precomp_datetime.strptime(postmix_spend[tx]['broadcast_time'], "%Y-%m-%d %H:%M:%S.%f") for tx in postmix_spend.keys()})
@@ -951,24 +962,33 @@ def joinmarket_find_coinjoins(filename):
             lines = file.readlines()
             line_index = 0
             while line_index < len(lines):
-                regex_pattern = "(?P<timestamp>.*) \[INFO\]  obtained tx"
+                regex_pattern = r"(?P<timestamp>.*) \[INFO\]  obtained tx"
                 match = re.search(regex_pattern, lines[line_index])
+                tx_line_index = line_index
                 line_index = line_index + 1
                 if match is None:
                     continue
                 else:
                     cjtx_lines = []
                     # After 'obtained tx', json is pasted in logs. Find its end by '}'
-                    while lines[line_index] != '}\n':
+                    while line_index < len(lines) and lines[line_index] != '}\n':
                         cjtx_lines.append(lines[line_index])
                         line_index = line_index + 1
+                    if line_index >= len(lines):
+                        raise ValueError(f"unterminated transaction json started on line {tx_line_index + 1}")
                     cjtx_lines.append(lines[line_index])
                     # Reconstruct json
                     cjtx_json = json.loads("".join(cjtx_lines))
                     # read next line to extract timestamp
                     line_index = line_index + 1
-                    regex_pattern = "(?P<timestamp>.*) \[INFO\]"
+                    if line_index >= len(lines):
+                        raise ValueError(f"no log line follows the transaction json started on "
+                                         f"line {tx_line_index + 1} to take the timestamp from")
+                    regex_pattern = r"(?P<timestamp>.*) \[INFO\]"
                     match = re.search(regex_pattern, lines[line_index])
+                    if match is None:
+                        raise ValueError(f"line {line_index + 1} carries no timestamp for the "
+                                         f"transaction json started on line {tx_line_index + 1}")
                     # Extract timestamp, replace , by . before fraction of seconds
                     cjtx_json['timestamp'] = match.group('timestamp').strip().replace(',', '.')
 
@@ -984,12 +1004,17 @@ def joinmarket_find_coinjoins(filename):
                     # cjtx_json = json.loads("".join(cjtx_lines))
                     # cjtx_json['timestamp'] = match.group('timestamp').strip()
 
+                    if 'txid' not in cjtx_json:
+                        raise ValueError(f"transaction json started on line {tx_line_index + 1} has no txid")
                     hits[cjtx_json['txid']] = cjtx_json
 
     except FileNotFoundError:
-        print(f"File '{filename}' not found.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+        # A log that vanished is not an experiment without coinjoins either.
+        raise
+    except Exception as exc:
+        # Returning what was parsed so far would make a damaged log indistinguishable
+        # from a run that simply produced no coinjoins.
+        raise ValueError(f"Failed to parse JoinMarket client log '{filename}': {exc}") from exc
 
     return hits
 
@@ -1191,24 +1216,34 @@ def compute_link_between_inputs_and_outputs(coinjoins, sorted_cjs_in_scope):
     # Update 'anon_score' item for inputs from previous outputs where exist
     #
     # Start with outputs - if spent, then fill anon_score
+    missing_output_anon_scores = 0
     for cjtx in coinjoins.keys():
         record = coinjoins[cjtx]
         for index in record['outputs'].keys():
+            output_anon_score = record['outputs'][index].get('anon_score')
+            if output_anon_score is None:
+                missing_output_anon_scores += 1
             if 'spend_by_txid' in record['outputs'][index].keys():
                 txid, tx_index = record['outputs'][index]['spend_by_txid']
                 #tx_index = str(tx_index)
-                if txid in coinjoins.keys():
+                if txid in coinjoins.keys() and output_anon_score is not None:
                     if (txid in coinjoins.keys() and
                             'anon_score' in coinjoins[txid]['inputs'][tx_index].keys()):
-                        assert math.isclose(coinjoins[txid]['inputs'][tx_index]['anon_score'], record['outputs'][index]['anon_score'], rel_tol=1e-9)
+                        assert math.isclose(coinjoins[txid]['inputs'][tx_index]['anon_score'], output_anon_score, rel_tol=1e-9)
                     else:
-                        coinjoins[txid]['inputs'][tx_index]['anon_score'] = record['outputs'][index]['anon_score']
-    # Fill all non-set inputs to anonscore 1.0
+                        coinjoins[txid]['inputs'][tx_index]['anon_score'] = output_anon_score
+    missing_input_anon_scores = 0
     for cjtx in coinjoins.keys():
         record = coinjoins[cjtx]
         for index in record['inputs'].keys():
             if 'anon_score' not in record['inputs'][index].keys():
-                record['inputs'][index]['anon_score'] = 1.0
+                missing_input_anon_scores += 1
+    if missing_output_anon_scores or missing_input_anon_scores:
+        logging.warning(
+            "Missing anon_score values: %s outputs, %s inputs; records were not defaulted",
+            missing_output_anon_scores,
+            missing_input_anon_scores,
+        )
 
 
     return coinjoins
@@ -1546,7 +1581,7 @@ def extract_tx_info(txid: str, raw_txs: dict):
             tx_record['inputs'][str(index)] = {}
             tx_record['inputs'][str(index)]['address'] = in_address
             tx_record['inputs'][str(index)]['txid'] = input['txid']
-            tx_record['inputs'][str(index)]['value'] = int(in_full_info['vout'][input['vout']]['value'] * SATS_IN_BTC)
+            tx_record['inputs'][str(index)]['value'] = btc_to_sats(in_full_info['vout'][input['vout']]['value'])
             tx_record['inputs'][str(index)]['spending_tx'] = get_output_name_string(input['txid'], input['vout'])
             tx_record['inputs'][str(index)]['wallet_name'] = 'real_unknown'
 
@@ -1559,7 +1594,7 @@ def extract_tx_info(txid: str, raw_txs: dict):
             output_addresses[str(index)] = output['scriptPubKey']['address']
             tx_record['outputs'][str(index)] = {}
             tx_record['outputs'][str(index)]['address'] = output['scriptPubKey']['address']
-            tx_record['outputs'][str(index)]['value'] = int(output['value'] * SATS_IN_BTC)
+            tx_record['outputs'][str(index)]['value'] = btc_to_sats(output['value'])
             # tx_record['outputs'][str(index)]['spend_by_tx'] = get_input_name_string(output['txid'], output['vout'])
             tx_record['outputs'][str(index)]['wallet_name'] = 'real_unknown'
 
@@ -2112,5 +2147,4 @@ def get_missing_cjtxs(cjtxs: dict, mappings: dict, dataset_names: list, target_p
                           list(missing_cjtxs.keys()))
 
     return missing_cjtxs, missing_crawl
-
 

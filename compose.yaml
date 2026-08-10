@@ -1,0 +1,23 @@
+name: coinjoin-analysis
+
+services:
+  emulation-process:
+    image: coinjoin-analysis:local
+    build:
+      context: .
+      dockerfile: docker/analysis.Dockerfile
+    working_dir: /opt/coinjoin-analysis
+    environment:
+      PYTHONPATH: /opt/coinjoin-analysis/src
+      MPLBACKEND: Agg
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ${CJ_RUNS:-./runs}:/runs
+      - ./docker/analysis-entrypoint.sh:/opt/coinjoin-analysis/docker/analysis-entrypoint.sh:ro
+    entrypoint: ["bash", "/opt/coinjoin-analysis/docker/analysis-entrypoint.sh"]
+    command:
+      - analyze-emul
+      - --action
+      - collect_docker
+      - --target-path
+      - /runs/emulation/logs

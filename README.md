@@ -20,6 +20,34 @@ Install requirements:
 pip install -r requirements.txt
 ```
 
+### Wallet Wasabi data directory (optional)
+
+Set `WASABI_WALLET_DATA_DIR` to the Wallet Wasabi data directory when the RPC
+helpers should load `Client/Config.json` from that installation:
+
+```
+export WASABI_WALLET_DATA_DIR=/path/to/WalletWasabi
+```
+
+### Bitcoin Core CLI (optional)
+
+The raw-transaction decoding workflow invokes `bitcoin-cli` from `PATH` by
+default. Set `BITCOIN_CLI_PATH` when the executable is installed elsewhere:
+
+```
+export BITCOIN_CLI_PATH=/opt/bitcoin/bin/bitcoin-cli
+```
+
+The `collect_docker` workflow recursively reads already decoded
+`data/btc-node/**/block_*.json` files and does not require `bitcoin-cli`.
+
+### Tests
+
+Install the test dependencies (including the runtime requirements and pytest):
+```
+python -m pip install -r requirements-dev.txt
+PYTHONPATH=src python -m pytest tests
+```
 
 
 ## Supported operations
@@ -165,6 +193,37 @@ To extract all executed coinjoins into a unified json format and perform analysi
 ```
 parse_cj_logs.py --action collect_docker --target-path path_to_experiments
 ```
+
+The same operation is available in the supplied Docker Compose service. Put
+experiments under `runs/emulation/logs/` and run:
+
+```
+docker compose run --rm emulation-process
+```
+
+Set `CJ_RUNS` to mount a different host-side `runs/` directory.
+
+JoinMarket emulator runs may provide round labels in
+`data/joinmarket_round_events.json`. Each accepted event needs a `txid` and a
+timestamp (`broadcast_time`, `timestamp`, or `round_start_time`; the
+transaction's `mine_time` is a fallback). The referenced transaction and its
+inputs must be present in the exported raw transaction database, so this path
+never queries a live Bitcoin node.
+
+For current runs whose `data/coinjoin_label_manifest.json` declares a complete
+JoinMarket capture, that manifest is authoritative. It must name exactly one
+`data/joinmarket_round_events.json` source whose size and SHA-256 match the
+manifest; the analyzer also requires its parsed confirmed-transaction count to match
+`positive_count`. Client logs are ignored as a source of CoinJoin txids on this
+path. When a JoinMarket manifest explicitly declares an incomplete capture, the
+analyzer warns that its round events are not authoritative and falls back to
+usable client logs. A manifest for another or unknown engine does not override
+JoinMarket client-log discovery. Runs from older emulator versions without a
+manifest remain supported: usable
+`data/jcs-*/joinmarket/jmwalletd.log` files take precedence, and extraction falls
+back to the round-event file when those logs are absent or contain no detected
+CoinJoins. The legacy compatibility location
+`joinmarket_round_events.json` directly under the experiment is also accepted.
 
 The extraction process creates the following files: 
   * ```coinjoin_tx_info.json``` ... basic information about all detected coinjoins, mapping of all wallets to their coins, started rounds, etc.. Used for subsequent analysis.

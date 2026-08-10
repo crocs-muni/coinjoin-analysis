@@ -15,7 +15,7 @@ class GlobalConstants():
     distributor_wallet_name = "DistributorWallet"
     version2 = True
 
-    wasabi_wallet_data = ""
+    wasabi_wallet_data = os.environ.get("WASABI_WALLET_DATA_DIR", "")
 
     # time needed in registration phase of round to start scenarion in it
     starting_round_time_required = 60
@@ -35,15 +35,15 @@ class GlobalConstants():
         self.path_to_backend_wabisabi_config = os.path.join(self.path_to_backend, "WabiSabiConfig.json")
         self.path_to_prison = os.path.join(self.path_to_backend, "WabiSabi", "Prison.txt")
 
-        self.config_path = "{}/Client/Config.json".format(self.wasabi_wallet_data)
-        if os.path.exists(self.config_path):
-            with open(self.config_path, "rb") as f:
-                loaded_config = json.load(f)
-                self.rpc_user = loaded_config["JsonRpcUser"]
-                self.rpc_pswd = loaded_config["JsonRpcPassword"]
-        else:
-            print('WARNING: {} not found'.format(self.config_path))
+        self.config_path = os.path.join(self.wasabi_wallet_data, "Client", "Config.json")
+        if self.wasabi_wallet_data:
+            if os.path.exists(self.config_path):
+                with open(self.config_path, "rb") as f:
+                    loaded_config = json.load(f)
+                    self.rpc_user = loaded_config["JsonRpcUser"]
+                    self.rpc_pswd = loaded_config["JsonRpcPassword"]
+            else:
+                print('WARNING: {} not found'.format(self.config_path))
 
 
 GLOBAL_CONSTANTS = GlobalConstants()
-
