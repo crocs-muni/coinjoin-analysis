@@ -14,6 +14,8 @@ PEER_ADDRESSES = (
     "bcrt1qaj48yrls96pz5hggnnf52j4s5u5p43ruvshqkd",
     "bcrt1q6zn5fd2rtfr8r3lrmsugn7ccg9s0whudsngumy",
 )
+MAKER_CJ_ADDRESS = "bcrt1qtsvf744algukqcsufvgl6muenc2vz40gx987dv"
+MAKER_CHANGE_ADDRESS = "bcrt1qkal4qnsxty4l0epx6x78gu5f2a28jpgqzye38z"
 
 WALLET_DISPLAY_LOG = f"""2026-08-04 14:27:01,001 [INFO]  Wallet display
 6d4ede82bbeb0331363ad541994b2f8397065471a06518ee20b7a6682c7e266a:1 - path: m/84'/1'/0'/0/3, address: {OWN_SPENT_ADDRESS} , value: 100000
@@ -68,6 +70,24 @@ def test_wallet_without_recoverable_artifacts_stays_empty(tmp_path):
     wallet_dir = write_joinmarket_wallet(tmp_path, unspent=None, log_text=None)
 
     assert joinmarket_wallet_addresses(str(wallet_dir)) == {}
+
+
+def test_current_exported_maker_log_recovers_its_coinjoin_and_change_outputs(tmp_path):
+    wallet_dir = write_joinmarket_wallet(tmp_path, log_text=None)
+    logs_dir = wallet_dir / "logs"
+    logs_dir.mkdir()
+    (logs_dir / "J58aUMAqe8RpvJxA.log").write_text(
+        "[INFO ]  mycjaddr, mychange = "
+        f"{MAKER_CJ_ADDRESS}, {MAKER_CHANGE_ADDRESS}\\n",
+        encoding="utf-8",
+    )
+
+    addresses = joinmarket_wallet_addresses(str(wallet_dir))
+
+    assert addresses == {
+        MAKER_CJ_ADDRESS: {"address": MAKER_CJ_ADDRESS},
+        MAKER_CHANGE_ADDRESS: {"address": MAKER_CHANGE_ADDRESS},
+    }
 
 
 def test_obtain_wallets_info_attributes_joinmarket_wallets(tmp_path, caplog):
