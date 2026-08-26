@@ -66,7 +66,11 @@ def joinmarket_wallet_addresses(wallet_path: str):
         with open(unspent_file, 'r') as file:
             unspent_coins = json.load(file)
         if isinstance(unspent_coins, dict):
-            for utxo in unspent_coins.get('utxos') or []:
+            unspent_coins = unspent_coins.get('utxos') or []
+        if isinstance(unspent_coins, list):
+            for utxo in unspent_coins:
+                if not isinstance(utxo, dict):
+                    continue
                 address = utxo.get('address')
                 if address:
                     addresses.setdefault(address, {'address': address, 'path': utxo.get('path')})
