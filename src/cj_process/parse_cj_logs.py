@@ -2325,6 +2325,7 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
             target_base_path = os.path.join(base_path_wasabi, file)
             # processs wallets one by one
             if os.path.isdir(target_base_path) and (file.startswith('wasabi-client-') or file.startswith('jcs-')):
+                is_joinmarket_wallet = file.startswith('jcs-')
                 print(f'Processing {target_base_path}')
                 if file.startswith('wasabi-client-'):
                     wallet_name = 'wallet-' + file[len('wasabi-client-'):]
@@ -2395,6 +2396,25 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
                         wallets_info[wallet_name] = recovered_addresses
                     else:
                         wallets_info[wallet_name] = {addr_data['address']: addr_data for addr_data in wallet_keys}
+                        # ``keys.json`` is derived from the UTXO history.  A maker's
+                        # freshly-created or subsequently-spent outputs can therefore
+                        # be absent even though its own daemon log records them.  Merge
+                        # only JoinMarket's self-identifying records; never infer peer
+                        # addresses from a raw transaction or a maker response.
+                        if is_joinmarket_wallet:
+                            recovered_addresses = joinmarket_wallet_addresses(target_base_path)
+                            new_addresses = {
+                                address: address_info
+                                for address, address_info in recovered_addresses.items()
+                                if address not in wallets_info[wallet_name]
+                            }
+                            if new_addresses:
+                                logger.info(
+                                    'Recovered %d additional addresses for %s from JoinMarket wallet logs',
+                                    len(new_addresses),
+                                    wallet_name,
+                                )
+                                wallets_info[wallet_name].update(new_addresses)
 
         # Sometimes, all_tx_db is not complete for all logged coinjoins
         # Create artificial record for some future time

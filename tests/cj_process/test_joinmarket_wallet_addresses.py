@@ -109,3 +109,36 @@ def test_obtain_wallets_info_attributes_joinmarket_wallets(tmp_path, caplog):
 
     assert sorted(wallets_info["wallet-000"].keys()) == sorted([OWN_UNSPENT_ADDRESS, OWN_SPENT_ADDRESS])
     assert "Recovered 2 addresses" in caplog.text
+
+
+def test_obtain_wallets_info_merges_current_maker_log_with_keys_export(tmp_path, caplog):
+    caplog.set_level(logging.INFO)
+    wallet_dir = write_joinmarket_wallet(tmp_path, log_text=None)
+    (wallet_dir / "keys.json").write_text(
+        json.dumps([{"address": OWN_UNSPENT_ADDRESS, "full_key_path": "84'/1'/0'/0/2"}]),
+        encoding="utf-8",
+    )
+    logs_dir = wallet_dir / "logs"
+    logs_dir.mkdir()
+    (logs_dir / "J58aUMAqe8RpvJxA.log").write_text(
+        f"mycjaddr, mychange = {MAKER_CJ_ADDRESS}, {MAKER_CHANGE_ADDRESS}",
+        encoding="utf-8",
+    )
+
+    options = parse_cj_logs.EmulParseOptions()
+    options.READ_ONLY_COINJOIN_TX_INFO = False
+    with (
+        mock.patch.object(parse_cj_logs, "op", options, create=True),
+        mock.patch.object(parse_cj_logs.anonymity_score, "parse_wallet_coins", return_value=[]),
+    ):
+        wallets_info, _ = parse_cj_logs.obtain_wallets_info(
+            str(tmp_path),
+            load_wallet_info_via_rpc=False,
+            load_wallet_from_docker_files=True,
+            all_tx_db={},
+        )
+
+    assert sorted(wallets_info["wallet-000"]) == sorted(
+        [OWN_UNSPENT_ADDRESS, MAKER_CJ_ADDRESS, MAKER_CHANGE_ADDRESS]
+    )
+    assert "Recovered 2 additional addresses" in caplog.text
