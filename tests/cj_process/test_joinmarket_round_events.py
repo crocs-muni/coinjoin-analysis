@@ -283,7 +283,7 @@ def test_unknown_engine_manifest_does_not_override_joinmarket_client_logs(tmp_pa
     parse_events.assert_not_called()
 
 
-def test_joinmarket_round_events_parse_matched_txid(tmp_path):
+def test_joinmarket_round_events_parse_reconciled_destination_match(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     events_file = data_dir / "joinmarket_round_events.json"
@@ -292,13 +292,13 @@ def test_joinmarket_round_events_parse_matched_txid(tmp_path):
             [
                 {
                     "round_id": 1,
+                    "export_round_id": 1,
                     "engine": "joinmarket",
-                    "status": "stopped",
+                    "status": "confirmed",
                     "taker": "jcs-000",
                     "candidate_makers": ["jcs-001", "jcs-002"],
                     "destination_address": "output-a0",
-                    "txid": "txA",
-                    "block_height": 7,
+                    "destination_matches": [{"txid": "txA", "block_height": 7}],
                 }
             ]
         ),
@@ -364,8 +364,14 @@ def test_joinmarket_manifest_accepts_verified_confirmed_events(tmp_path):
     events_file = data_dir / 'joinmarket_round_events.json'
     events_file.write_text(
         json.dumps([
-            {'round_id': 1, 'status': 'confirmed', 'txid': 'txA', 'timestamp': '2026-01-01'},
-            {'round_id': 2, 'status': 'started', 'destination_address': 'unmined'},
+            {
+                'round_id': 1,
+                'export_round_id': 1,
+                'status': 'confirmed',
+                'destination_matches': [{'txid': 'txA', 'block_height': 7}],
+                'timestamp': '2026-01-01',
+            },
+            {'round_id': 2, 'export_round_id': 2, 'status': 'started', 'destination_address': 'unmined'},
         ]),
         encoding='utf-8',
     )
@@ -395,8 +401,18 @@ def test_joinmarket_manifest_rejects_cleanly_truncated_round_events(tmp_path):
     data_dir.mkdir()
     events_file = data_dir / 'joinmarket_round_events.json'
     events = [
-        {'round_id': 1, 'status': 'confirmed', 'txid': 'txA'},
-        {'round_id': 2, 'status': 'confirmed', 'txid': 'txB'},
+        {
+            'round_id': 1,
+            'export_round_id': 1,
+            'status': 'confirmed',
+            'destination_matches': [{'txid': 'txA', 'block_height': 7}],
+        },
+        {
+            'round_id': 2,
+            'export_round_id': 2,
+            'status': 'confirmed',
+            'destination_matches': [{'txid': 'txB', 'block_height': 8}],
+        },
     ]
     events_file.write_text(json.dumps(events), encoding='utf-8')
     write_joinmarket_manifest(tmp_path, events_file, positive_count=2)
@@ -434,7 +450,13 @@ def test_joinmarket_manifest_positive_count_must_match_processed_events(tmp_path
     events_file = data_dir / 'joinmarket_round_events.json'
     events_file.write_text(
         json.dumps([
-            {'round_id': 1, 'status': 'confirmed', 'txid': 'missing', 'timestamp': '2026-01-01'},
+            {
+                'round_id': 1,
+                'export_round_id': 1,
+                'status': 'confirmed',
+                'destination_matches': [{'txid': 'missing', 'block_height': 7}],
+                'timestamp': '2026-01-01',
+            },
         ]),
         encoding='utf-8',
     )
@@ -453,7 +475,13 @@ def test_joinmarket_manifest_positive_count_must_match_its_source(tmp_path):
     events_file = data_dir / 'joinmarket_round_events.json'
     events_file.write_text(
         json.dumps([
-            {'round_id': 1, 'status': 'confirmed', 'txid': 'txA', 'timestamp': '2026-01-01'},
+            {
+                'round_id': 1,
+                'export_round_id': 1,
+                'status': 'confirmed',
+                'destination_matches': [{'txid': 'txA', 'block_height': 7}],
+                'timestamp': '2026-01-01',
+            },
         ]),
         encoding='utf-8',
     )
@@ -486,11 +514,14 @@ def test_dropped_joinmarket_events_do_not_create_rounds(tmp_path):
     events_file.write_text(
         json.dumps(
             [
-                {"round_id": 1, "status": "failed", "txid": None},
+                {"round_id": 1, "export_round_id": 1, "status": "failed"},
                 {
                     "round_id": 2,
+                    "export_round_id": 2,
                     "status": "confirmed",
-                    "txid": "not-in-exported-blocks",
+                    "destination_matches": [
+                        {"txid": "not-in-exported-blocks", "block_height": 7}
+                    ],
                     "timestamp": "2026-06-13 09:10:00.000",
                 },
             ]
@@ -516,7 +547,15 @@ def test_joinmarket_event_timestamp_is_normalized(tmp_path):
     data_dir = tmp_path / 'data'
     data_dir.mkdir()
     (data_dir / 'joinmarket_round_events.json').write_text(
-        json.dumps([{'round_id': 1, 'txid': 'txA', 'timestamp': '2026-01-01T12:34:56Z'}]),
+        json.dumps([
+            {
+                'round_id': 1,
+                'export_round_id': 1,
+                'status': 'confirmed',
+                'destination_matches': [{'txid': 'txA', 'block_height': 7}],
+                'timestamp': '2026-01-01T12:34:56Z',
+            },
+        ]),
         encoding='utf-8',
     )
     raw_tx_db = {'txA': {'txid': 'txA', 'vin': [], 'vout': []}}
@@ -527,14 +566,26 @@ def test_joinmarket_event_timestamp_is_normalized(tmp_path):
     assert rounds['1']['round_start_timestamp'] == '2026-01-01 12:34:56.000'
 
 
-def test_duplicate_round_id_with_different_txids_is_rejected(tmp_path):
+def test_duplicate_export_round_id_with_different_txids_is_rejected(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     events_file = data_dir / "joinmarket_round_events.json"
     events_file.write_text(
         json.dumps([
-            {"round_id": 1, "status": "confirmed", "txid": "txA", "timestamp": "2026-01-01"},
-            {"round_id": 1, "status": "confirmed", "txid": "txB", "timestamp": "2026-01-02"},
+            {
+                "round_id": 3,
+                "export_round_id": 1,
+                "status": "confirmed",
+                "destination_matches": [{"txid": "txA", "block_height": 7}],
+                "timestamp": "2026-01-01",
+            },
+            {
+                "round_id": 3,
+                "export_round_id": 1,
+                "status": "confirmed",
+                "destination_matches": [{"txid": "txB", "block_height": 8}],
+                "timestamp": "2026-01-02",
+            },
         ]),
         encoding="utf-8",
     )
@@ -551,14 +602,62 @@ def test_duplicate_round_id_with_different_txids_is_rejected(tmp_path):
         joinmarket_parse_round_events(str(tmp_path), raw_tx_db)
 
 
+def test_export_round_ids_disambiguate_per_taker_round_ids(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    events_file = data_dir / "joinmarket_round_events.json"
+    events_file.write_text(
+        json.dumps([
+            {
+                "round_id": 3,
+                "export_round_id": 7,
+                "status": "confirmed",
+                "destination_matches": [{"txid": "txA", "block_height": 7}],
+                "timestamp": "2026-01-01",
+            },
+            {
+                "round_id": 3,
+                "export_round_id": 8,
+                "status": "confirmed",
+                "destination_matches": [{"txid": "txB", "block_height": 8}],
+                "timestamp": "2026-01-02",
+            },
+        ]),
+        encoding="utf-8",
+    )
+    write_joinmarket_manifest(tmp_path, events_file, positive_count=2)
+    raw_tx_db = {
+        txid: {"txid": txid, "vin": [], "vout": []}
+        for txid in ("txA", "txB")
+    }
+
+    coinjoins, rounds = joinmarket_parse_round_events(str(tmp_path), raw_tx_db)
+
+    assert coinjoins["txA"]["round_id"] == "7"
+    assert coinjoins["txB"]["round_id"] == "8"
+    assert set(rounds) == {"7", "8"}
+
+
 def test_duplicate_txid_with_different_round_ids_is_rejected(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     events_file = data_dir / "joinmarket_round_events.json"
     events_file.write_text(
         json.dumps([
-            {"round_id": 1, "status": "confirmed", "txid": "txA", "timestamp": "2026-01-01"},
-            {"round_id": 2, "status": "confirmed", "txid": "txA", "timestamp": "2026-01-02"},
+            {
+                "round_id": 1,
+                "export_round_id": 1,
+                "status": "confirmed",
+                "destination_matches": [{"txid": "txA", "block_height": 7}],
+                "timestamp": "2026-01-01",
+            },
+            {
+                "round_id": 2,
+                "export_round_id": 2,
+                "status": "confirmed",
+                "destination_matches": [{"txid": "txA", "block_height": 8}],
+                "timestamp": "2026-01-02",
+            },
         ]),
         encoding="utf-8",
     )

@@ -37,6 +37,18 @@ def find_joinmarket_client_log_files(base_path: str):
     return sorted(path for path in glob.glob(pattern) if os.path.isfile(path))
 
 
+def _round_event_txid(event: dict[str, object]) -> str | None:
+    """Return a transaction ID from an unambiguous, confirmed current event."""
+    matches = event.get('destination_matches')
+    if event.get('status') != 'confirmed' or not isinstance(matches, list) or len(matches) != 1:
+        return None
+    match = matches[0]
+    if not isinstance(match, dict):
+        return None
+    raw_txid = match.get('txid')
+    return str(raw_txid) if raw_txid else None
+
+
 # A derivation path next to an address is proof of ownership: a JoinMarket wallet
 # never knows the path of a counterparty's address, so peer addresses logged during
 # a round (for example in 'Makers responded with') are not matched here.
@@ -187,9 +199,9 @@ def joinmarket_parse_round_events(base_path: str, raw_tx_db: dict):
     producer_positive_txids = None
     if expected_positive_count is not None:
         producer_positive_txids = {
-            str(event['txid'])
+            txid
             for event in round_events
-            if event.get('status') == 'confirmed' and event.get('txid')
+            if (txid := _round_event_txid(event)) is not None
         }
         if len(producer_positive_txids) != expected_positive_count:
             raise ValueError(
@@ -207,15 +219,8 @@ def joinmarket_parse_round_events(base_path: str, raw_tx_db: dict):
     conflicting_round_ids = []
     conflicting_txids = []
     for event in round_events:
-        # The current producer counts only reconciled, confirmed transactions as
-        # positives. Legacy files predate this manifest contract and retain the
-        # previous behavior of accepting any record carrying a txid.
-        if expected_positive_count is not None and event.get('status') != 'confirmed':
-            continue
-        raw_txid = event.get('txid')
-        txid = str(raw_txid) if raw_txid else None
-        event_round_id = event.get('round_id')
-        round_id = str(event_round_id if event_round_id is not None else txid or len(parsed_rounds) + 1)
+        txid = _round_event_txid(event)
+        round_id = str(event['export_round_id'])
         if not txid:
             dropped_missing_txids += 1
             continue
