@@ -198,6 +198,16 @@ def joinmarket_parse_round_events(base_path: str, raw_tx_db: dict):
 
     producer_positive_txids = None
     if expected_positive_count is not None:
+        ambiguous_round_ids: list[str] = [
+            str(event['export_round_id'])
+            for event in round_events
+            if event.get('status') == 'ambiguous'
+        ]
+        if ambiguous_round_ids:
+            raise ValueError(
+                'JoinMarket producer labels contain ambiguous destination matches for rounds: '
+                f"{', '.join(ambiguous_round_ids)}"
+            )
         producer_positive_txids = {
             txid
             for event in round_events

@@ -384,6 +384,30 @@ def test_joinmarket_manifest_accepts_verified_confirmed_events(tmp_path):
     assert list(rounds) == ['1']
 
 
+def test_joinmarket_manifest_rejects_ambiguous_destination_matches(tmp_path):
+    data_dir = tmp_path / 'data'
+    data_dir.mkdir()
+    events_file = data_dir / 'joinmarket_round_events.json'
+    events_file.write_text(
+        json.dumps([
+            {
+                'round_id': 1,
+                'export_round_id': 1,
+                'status': 'ambiguous',
+                'destination_matches': [
+                    {'txid': 'txA', 'block_height': 7},
+                    {'txid': 'txB', 'block_height': 8},
+                ],
+            },
+        ]),
+        encoding='utf-8',
+    )
+    write_joinmarket_manifest(tmp_path, events_file, positive_count=0)
+
+    with pytest.raises(ValueError, match='ambiguous destination matches'):
+        joinmarket_parse_round_events(str(tmp_path), {})
+
+
 def test_joinmarket_manifest_rejects_modified_round_events(tmp_path):
     data_dir = tmp_path / 'data'
     data_dir.mkdir()
