@@ -49,6 +49,15 @@ def _round_event_txid(event: dict[str, object]) -> str | None:
     return str(raw_txid) if raw_txid else None
 
 
+def _legacy_round_event_fields(event: dict[str, object]) -> tuple[str, str] | None:
+    """Return the txid and round ID from a pre-manifest event record."""
+    raw_txid = event.get('txid')
+    round_id = event.get('round_id')
+    if not raw_txid or round_id is None:
+        return None
+    return str(raw_txid), str(round_id)
+
+
 # A derivation path next to an address is proof of ownership: a JoinMarket wallet
 # never knows the path of a counterparty's address, so peer addresses logged during
 # a round (for example in 'Makers responded with') are not matched here.
@@ -229,9 +238,24 @@ def joinmarket_parse_round_events(base_path: str, raw_tx_db: dict):
     conflicting_round_ids = []
     conflicting_txids = []
     for event in round_events:
-        txid = _round_event_txid(event)
-        round_id = str(event['export_round_id'])
-        if not txid:
+        if expected_positive_count is None:
+            # A run without a producer manifest predates the reconciled event
+            # schema. Keep its documented ``txid``/``round_id`` fallback while
+            # continuing to accept newer unmanifested records during migration.
+            legacy_fields = _legacy_round_event_fields(event)
+            current_txid = _round_event_txid(event)
+            if current_txid is not None and event.get('export_round_id') is not None:
+                txid = current_txid
+                round_id = str(event['export_round_id'])
+            elif legacy_fields is not None:
+                txid, round_id = legacy_fields
+            else:
+                txid = None
+                round_id = None
+        else:
+            txid = _round_event_txid(event)
+            round_id = str(event['export_round_id'])
+        if not txid or round_id is None:
             dropped_missing_txids += 1
             continue
 

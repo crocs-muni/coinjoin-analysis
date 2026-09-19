@@ -345,6 +345,40 @@ def test_joinmarket_round_events_parse_reconciled_destination_match(tmp_path):
     assert rounds["1"]["round_start_timestamp"] == "2026-06-13 09:10:00.000"
 
 
+def test_unmanifested_legacy_round_events_keep_txid_round_id_fallback(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    events_file = data_dir / "joinmarket_round_events.json"
+    events_file.write_text(
+        json.dumps(
+            [
+                {
+                    "round_id": 1,
+                    "status": "confirmed",
+                    "txid": "txA",
+                    "block_height": 285,
+                    "match_source": "destination_output",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    raw_tx_db = {
+        "txA": {
+            "txid": "txA",
+            "mine_time": "2026-06-13 09:10:00.000",
+            "vin": [],
+            "vout": [],
+        }
+    }
+
+    coinjoins, rounds = joinmarket_parse_round_events(str(tmp_path), raw_tx_db)
+
+    assert list(coinjoins) == ["txA"]
+    assert coinjoins["txA"]["round_id"] == "1"
+    assert rounds == {"1": {"round_start_timestamp": "2026-06-13 09:10:00.000"}}
+
+
 def test_joinmarket_round_events_allow_empty_label_file(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
