@@ -418,7 +418,13 @@ def test_joinmarket_manifest_accepts_verified_confirmed_events(tmp_path):
     assert list(rounds) == ['1']
 
 
-def test_joinmarket_manifest_rejects_ambiguous_destination_matches(tmp_path):
+@pytest.mark.parametrize(('status', 'txids'), [
+    ('multiple_matches', ['txA', 'txB']),
+    ('duplicate_destination', []),
+    ('duplicate_destination', ['txA']),
+    ('duplicate_destination', ['txA', 'txB']),
+])
+def test_joinmarket_manifest_rejects_destination_conflicts(tmp_path, status, txids):
     data_dir = tmp_path / 'data'
     data_dir.mkdir()
     events_file = data_dir / 'joinmarket_round_events.json'
@@ -427,10 +433,10 @@ def test_joinmarket_manifest_rejects_ambiguous_destination_matches(tmp_path):
             {
                 'round_id': 1,
                 'export_round_id': 1,
-                'status': 'ambiguous',
+                'status': status,
                 'destination_matches': [
-                    {'txid': 'txA', 'block_height': 7},
-                    {'txid': 'txB', 'block_height': 8},
+                    {'txid': txid, 'block_height': height}
+                    for height, txid in enumerate(txids, start=7)
                 ],
             },
         ]),
@@ -438,8 +444,23 @@ def test_joinmarket_manifest_rejects_ambiguous_destination_matches(tmp_path):
     )
     write_joinmarket_manifest(tmp_path, events_file, positive_count=0)
 
-    with pytest.raises(ValueError, match='ambiguous destination matches'):
+    with pytest.raises(ValueError, match=rf'1 \({status}\)'):
         joinmarket_parse_round_events(str(tmp_path), {})
+
+
+@pytest.mark.parametrize('status', ['multiple_matches', 'duplicate_destination'])
+def test_unmanifested_destination_conflicts_are_not_positive(tmp_path, status):
+    data_dir = tmp_path / 'data'
+    data_dir.mkdir()
+    (data_dir / 'joinmarket_round_events.json').write_text(json.dumps([{
+        'export_round_id': 1,
+        'status': status,
+        'destination_matches': [{'txid': 'txA', 'block_height': 7}],
+        'timestamp': '2026-01-01',
+    }]), encoding='utf-8')
+    raw_tx_db = {'txA': {'txid': 'txA', 'vin': [], 'vout': []}}
+
+    assert joinmarket_parse_round_events(str(tmp_path), raw_tx_db) == ({}, {})
 
 
 def test_joinmarket_manifest_rejects_modified_round_events(tmp_path):
