@@ -23,8 +23,6 @@ from bitcoin.core import CTransaction, CMutableTransaction, CTxWitness
 # from bitcoin.core.script import OP_HASH160, OP_EQUAL
 # from bitcoin.wallet import P2WPKHBitcoinAddress, CBitcoinAddressError, P2SHBitcoinAddress, P2WSHBitcoinAddress
 
-from bitcoinlib.transactions import Output
-
 from cj_process.cj_consts import SATS_IN_BTC, MAX_SATS, VerboseTransactionInfoLineSeparator
 from cj_process.cj_structs import MIX_EVENT_TYPE, precomp_datetime, MIX_PROTOCOL, SM, CJ_LOG_TYPES, CJ_ALICE_TYPES
 
@@ -1529,6 +1527,9 @@ def get_address(script_hex: str):
     Create an Output object from the script
     @param script_hex: hex string representation of the script
     """
+    # Address decoding is optional when analyzing already processed JSON data.
+    from bitcoinlib.transactions import Output
+
     output = Output(lock_script=bytes.fromhex(script_hex), value=0)
     address = output.address
 

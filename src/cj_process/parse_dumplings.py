@@ -1069,6 +1069,18 @@ def process_and_save_single_interval(mix_id: str, data: dict, mix_protocol: MIX_
     process_interval(mix_id, data, None, None, target_save_path, start_date, stop_date)
 
 
+def process_joint_interval(mix_origin_name, interval_name, all_data, mix_type, target_path, start_date: str,
+                           end_date: str):
+    """Extract and plot one notable interval using the module's configured op."""
+    process_and_save_single_interval(interval_name, all_data, mix_type, target_path, start_date, end_date)
+    shutil.copyfile(os.path.join(target_path, mix_origin_name, 'fee_rates.json'),
+                    os.path.join(target_path, interval_name, 'fee_rates.json'))
+    shutil.copyfile(os.path.join(target_path, mix_origin_name, 'false_cjtxs.json'),
+                    os.path.join(target_path, interval_name, 'false_cjtxs.json'))
+    wasabi_plot_remixes(interval_name, mix_type, os.path.join(target_path, interval_name),
+                        'coinjoin_tx_info.json', True, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL, op.PLOT_REMIXES_AGGREGATE)
+
+
 def find_whirlpool_tx0_reuse(mix_id: str, target_path: Path, premix_filename: str):
     """
     Detects all address reuse in Whirlpool TX0 transactions
@@ -3083,6 +3095,35 @@ def main(argv=None):
     if op.DEBUG:
         print('DEBUGING TIME!!!')
 
+        target_path = 'c:/!blockchains/CoinJoin/results_202607012/'
+        cjtxs = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi2', '2026-03-01 00-00-00--2026-04-01 00-00-00_unknown-static-100-1utxo'), None, True)
+        for cjtx in cjtxs['coinjoins'].keys():
+            # if len(cjtxs['coinjoins'][cjtx]['inputs']) < 100:
+            #     print(f"SUS tx (#INPUTS): {cjtx}: {cjtxs['coinjoins'][cjtx]['broadcast_time']}: {len(cjtxs['coinjoins'][cjtx]['inputs'])} / {len(cjtxs['coinjoins'][cjtx]['outputs'])}")
+            for index in cjtxs['coinjoins'][cjtx]['inputs'].keys():
+                if cjtxs['coinjoins'][cjtx]['inputs'][index]['value'] > (100 * SATS_IN_BTC):
+                    print(f"SUS tx (VALUE): {cjtx}:{index}: {cjtxs['coinjoins'][cjtx]['broadcast_time']}: {len(cjtxs['coinjoins'][cjtx]['inputs'])} / {len(cjtxs['coinjoins'][cjtx]['outputs'])} : {cjtxs['coinjoins'][cjtx]['inputs'][index]['value']/SATS_IN_BTC}")
+
+        exit(42)
+
+        #target_path = '/home/xsvenda/btc/dumplings_temp2/Scanner'
+        cjtxs = als.load_coinjoins_from_file(os.path.join(target_path, 'wasabi2_zksnacks'), None, True)
+        for cjtx in cjtxs['coinjoins'].keys():
+            if ('2024-01-01' < cjtxs['coinjoins'][cjtx]['broadcast_time'] < '2024-06-03') and (len(cjtxs['coinjoins'][cjtx]['inputs']) < 150 or len(cjtxs['coinjoins'][cjtx]['outputs']) < 150):
+                print(f"SUS tx: {cjtx}: {cjtxs['coinjoins'][cjtx]['broadcast_time']}: {len(cjtxs['coinjoins'][cjtx]['inputs'])} / {len(cjtxs['coinjoins'][cjtx]['outputs'])}")
+
+        exit(42)
+
+        target_path = 'c:/!blockchains/CoinJoin/temp_dumplings/Scanner/'
+        wasabi_plot_remixes('wasabi2_zksnacks', MIX_PROTOCOL.WASABI2, os.path.join(target_path, 'wasabi2_zksnacks'),
+                            'coinjoin_tx_info.json', True, False, None, None,
+                            False, True, False)
+
+        exit(42)
+
+        wasabi_detect_false(os.path.join(target_path, 'wasabi2_btip'), 'coinjoin_tx_info.json')
+        exit(42)
+
         omitt_coords = ['dragonordnance']
 
         #cjviz.plot_coord_attribution_stats_aggregated(target_path, 'all_coord_discovery_analysis_taildrop', True)
@@ -3267,16 +3308,6 @@ def main(argv=None):
         als.save_json_to_file_pretty(os.path.join(target_path, 'bybit_hack-txs.json'), detected_addressed, True)
 
     if op.PROCESS_NOTABLE_INTERVALS:
-        def process_joint_interval(mix_origin_name, interval_name, all_data, mix_type, target_path, start_date: str,
-                                   end_date: str):
-            process_and_save_single_interval(interval_name, all_data, mix_type, target_path, start_date, end_date)
-            shutil.copyfile(os.path.join(target_path, mix_origin_name, 'fee_rates.json'),
-                            os.path.join(target_path, interval_name, 'fee_rates.json'))
-            shutil.copyfile(os.path.join(target_path, mix_origin_name, 'false_cjtxs.json'),
-                            os.path.join(target_path, interval_name, 'false_cjtxs.json'))
-            wasabi_plot_remixes(interval_name, mix_type, os.path.join(target_path, interval_name),
-                                'coinjoin_tx_info.json', True, False, None, None, op.PLOT_REMIXES_MULTIGRAPH, op.PLOT_REMIXES_SINGLE_INTERVAL, op.PLOT_REMIXES_AGGREGATE)
-
         if op.CJ_TYPE == CoinjoinType.WW1:
             target_load_path = os.path.join(target_path, 'wasabi1')
             all_data = als.load_coinjoins_from_file(target_load_path, None, True)
