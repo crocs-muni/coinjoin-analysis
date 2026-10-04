@@ -2,50 +2,46 @@ name: coinjoin-analysis
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  test:
+    # Set the repository variable CI_RUNNER to a JSON array of runner labels
+    # (for example ["self-hosted","x64"]) in repositories with a local runner.
+    # Leave it unset in upstream to use GitHub's hosted Ubuntu runner.
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
 
     steps:
-    - name: Show environment paths
-      run: |
-        echo "HOME: $HOME"
-        echo "PWD: $(pwd)"
-        echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
-
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.11'  # change as needed
+        python-version: '3.11'
 
-    - name: Upgrade pip
-      run: python -m pip install --upgrade pip
-
-    - name: Show pip version
-      run: python -m pip -V
-
-    - name: Install dependencies
-      run: python -m pip install -r requirements.txt
-
-    - name: Install project in editable mode
-      run: python -m pip install -e .
-
-    - name: Install Graphviz
+    - name: Install Graphviz on GitHub-hosted runner
+      if: ${{ runner.environment == 'github-hosted' }}
       run: sudo apt-get update && sudo apt-get install -y graphviz
 
-    - name: Run tests
+    - name: Check Graphviz on self-hosted runner
+      if: ${{ runner.environment == 'self-hosted' }}
+      shell: bash
       run: |
-        python -m pip install pytest  
-        pytest  
+        if ! command -v dot >/dev/null 2>&1; then
+          echo "::error::Graphviz must be installed on the self-hosted runner."
+          exit 1
+        fi
 
-    - name: Show directory structure with tree
-      if: always()
+    - name: Set up test environment
+      shell: bash
       run: |
-        tree -a -L 5 ../temp_dumplings || echo "Directory not found" 
+        python -m venv .venv
+        .venv/bin/python -m pip install --upgrade pip
+        .venv/bin/python -m pip install -r requirements-dev.txt
+        .venv/bin/python -m pip install -e .
+
+    - name: Run tests
+      shell: bash
+      run: .venv/bin/python -m pytest

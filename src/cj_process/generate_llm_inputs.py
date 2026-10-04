@@ -82,7 +82,7 @@ def set_denomination_group_type2(items):
         if value[1] > 1:
             char_mapping[value[0]] = chr(ord('A') + i)
         else:
-            char_mapping[value[0]] = int(value[0] * SATS_IN_BTC)
+            char_mapping[value[0]] = parse_cj_logs.als.btc_to_sats(value[0])
 
     num_different_values = len(value_counts)
     for key, output in items.items():
@@ -99,7 +99,7 @@ def serialize_llm_transaction(cjtx):
         sentence_values_str += '{} '.format(input['coin_counter'])
 
         sentence_denom_groups_str += '{} '.format(input['denomination_group'])
-        sats = int(input['value'] * SATS_IN_BTC)
+        sats = parse_cj_logs.als.btc_to_sats(input['value'])
         sentence_values_str += '{} '.format(sats)
 
         input_values.append((input['coin_counter'], sats))
@@ -116,7 +116,7 @@ def serialize_llm_transaction(cjtx):
         sentence_values_str += '{} '.format(output['coin_counter'])
 
         sentence_denom_groups_str += '{} '.format(output['denomination_group'])
-        sats = -int(output['value'] * SATS_IN_BTC)
+        sats = -parse_cj_logs.als.btc_to_sats(output['value'])
         sentence_values_str += '{} '.format(sats)
 
         output_values.append((output['coin_counter'], sats))
@@ -214,7 +214,9 @@ def get_outputs_leaving_mix(coinjoins_dupl, sorted_cjs_in_scope, root_tx_id):
             output['vout'] = output_index
             if 'wallet_name' in output and output['wallet_name'] in wallets_involved:  # Analyze only wallets which are having some input in the root transaction
                 # Nobody spent this utxo or its anon score already reached the mixing limit (artificial leave of mix for testing)
-                if 'spend_by_txid' not in output.keys() or output['anon_score'] > FORCE_LIMIT_ANON_SCORE:
+                anon_score = output.get('anon_score')
+                if 'spend_by_txid' not in output.keys() or (
+                        anon_score is not None and anon_score > FORCE_LIMIT_ANON_SCORE):
                     # This output is not spent in any of the subsequent mixing transactions
                     wallet_leave_txs[output['wallet_name']].append((cjtx_id, output))
                 else:
@@ -279,10 +281,10 @@ def compute_inputs_leave_distribution_fifo(coinjoins_dupl, sorted_cjs_in_scope, 
 
     for wallet_name in inputs_enter.keys():
         for input in inputs_enter[wallet_name]:
-            input[1]['to_fulfill'] = int(input[1]['value'] * SATS_IN_BTC)
+            input[1]['to_fulfill'] = parse_cj_logs.als.btc_to_sats(input[1]['value'])
     for wallet_name in outputs_leave.keys():
         for output in outputs_leave[wallet_name]:
-            output[1]['remainig_sats'] = int(output[1]['value'] * SATS_IN_BTC)
+            output[1]['remainig_sats'] = parse_cj_logs.als.btc_to_sats(output[1]['value'])
 
     # Iterate over all outputs in FIFO fashion until given input is not fully consumed
     for wallet_name in inputs_enter.keys():
@@ -365,7 +367,9 @@ def compute_inputs_leave_distribution(coinjoins_dupl, sorted_cjs_in_scope, root_
         for output in coinjoins_dupl[cjtx_id]['outputs'].values():
             if 'wallet_name' in output and output['wallet_name'] in wallets_involved:  # Analyze only wallets which are having some input in the root transaction
                 # Nobody spent this utxo or its anon score already reached the mixing limit (artificial leave of mix for testing)
-                if 'spend_by_txid' not in output.keys() or output['anon_score'] > FORCE_LIMIT_ANON_SCORE:
+                anon_score = output.get('anon_score')
+                if 'spend_by_txid' not in output.keys() or (
+                        anon_score is not None and anon_score > FORCE_LIMIT_ANON_SCORE):
                     # This output is not spent in any of the subsequent mixing transactions
                     wallet_leave_txs[output['wallet_name']].append(cjtx_id)
                 else:
