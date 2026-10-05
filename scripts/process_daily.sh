@@ -5,6 +5,9 @@
 BASE_PATH=$HOME
 source $BASE_PATH/btc/coinjoin-analysis/scripts/activate_env.sh
 
+# Update mapping of transactions to coordinators from wabisator
+python3 -m helpers.update_txids_with_wabisator
+
 
 echo -e "\n###############################################" >> $BASE_PATH/btc/summary.log
 
@@ -57,6 +60,7 @@ $BASE_PATH/btc/coinjoin-analysis/scripts/visualize_jm.sh
 $BASE_PATH/btc/coinjoin-analysis/scripts/visualize_ww1.sh
 $BASE_PATH/btc/coinjoin-analysis/scripts/visualize_sw.sh
 
+$BASE_PATH/btc/coinjoin-analysis/scripts/visualize_all.sh
 
 echo -e "\n###############################################" >> $BASE_PATH/btc/summary.log
 
