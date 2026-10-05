@@ -8,3 +8,8 @@ src/coinjoin_analysis.egg-info/
 build/
 
 scripts/upload_results.sh
+
+/heap/
+.vscode/
+
+*.bak

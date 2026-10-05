@@ -2491,13 +2491,12 @@ def load_tx_database_from_btccore(base_tx_path):
     files = list_files(base_tx_path, '.json', 'block_')
     for tx_file in files:  # Each file corresponds to whole block - may be multiple transactions
         print(f'Loading from block file {tx_file}')
-        with (open(tx_file, "r") as file):
+        with open(tx_file, "r") as file:
             block_txs = json.load(file)
             for tx_info in block_txs['tx']:
                 datetime_obj = datetime.fromtimestamp(block_txs['time'], tz=UTC)
                 tx_info['mine_time'] = datetime_obj.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
                 tx_db[tx_info['txid']] = tx_info
-
 
             # # Create a Transaction object from the raw hex
             # tx = Transaction.parse(raw_tx['txRawHex'], False, 'regtest')

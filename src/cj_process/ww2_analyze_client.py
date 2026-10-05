@@ -1191,8 +1191,7 @@ def plot_client_experiments_graphs(all_cjs: dict, all_stats: dict, exp_label: st
     # TODO: Probability of coin selection based on its current anonymity score
 
     # save graph
-    mfig.plt.suptitle(f'as{experiment_target_anonscore}',
-                      fontsize=16)  # Adjust the fontsize and y position as needed
+    mfig.plt.suptitle(f'{Path(target_path).name}, as{experiment_target_anonscore}_{exp_label}', fontsize=16)
     mfig.plt.subplots_adjust(bottom=0.1, wspace=0.5, hspace=0.5)
     save_file = os.path.join(target_path, f'as{experiment_target_anonscore}_{exp_label}_coinjoin_stats')
     mfig.plt.savefig(f'{save_file}.png', dpi=300)
