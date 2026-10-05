@@ -10,4 +10,6 @@ build/
 scripts/upload_results.sh
 
 /heap/
-.vscode/settings.json
+.vscode/
+
+*.bak
