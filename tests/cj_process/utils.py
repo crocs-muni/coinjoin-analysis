@@ -1,3 +1,5 @@
+import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -5,6 +7,27 @@ import zipfile
 from pathlib import Path
 from cj_process.parse_dumplings import main as parse_dumplings_main
 from cj_process.parse_cj_logs import main as parse_cj_logs_main
+
+
+def write_manifest(run_dir, log_path, positive_count=0, complete=True):
+    data_dir = run_dir / "data"
+    manifest = {
+        "schema_version": "1.0",
+        "engine": "wasabi",
+        "complete": complete,
+        "reason": None if complete else "coordinator log capture failed",
+        "positive_count": positive_count,
+        "sources": [{
+            "path": log_path.relative_to(data_dir).as_posix(),
+            "size_bytes": log_path.stat().st_size,
+            "sha256": hashlib.sha256(log_path.read_bytes()).hexdigest(),
+        }],
+    }
+    (data_dir / "coinjoin_label_manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+
 
 def prepare_from_zip_file(extract_dir: Path, source_zip, target_zip):
     if os.path.exists(extract_dir):

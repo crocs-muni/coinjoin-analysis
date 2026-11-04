@@ -11,6 +11,36 @@ import numpy as np
 import matplotlib
 
 from cj_process.cj_structs import SummaryMessages
+from cj_process.emulation_targets import (
+    EmulationTargetError,
+    is_experiment,
+    validate_emulation_targets,
+)
+from cj_process.joinmarket_client import (
+    find_joinmarket_client_log_files,
+    find_joinmarket_round_events_file,
+    joinmarket_parse_coinjoin_logs,
+    joinmarket_parse_round_events,
+    joinmarket_wallet_addresses,
+)
+from cj_process.producer_manifest import (
+    load_producer_label_manifest,
+    producer_label_manifest_engine,
+)
+# Re-exported so process_experiment and tests keep addressing them on this module.
+from cj_process.wasabi_coordinator import (
+    find_wasabi_coordinator_log_files,
+    find_wasabi_prison_file,
+    parse_wasabi_coordinator_coinjoins,
+)
+from cj_process.wallet_attribution import (
+    COORDINATOR_WALLET_STRING,
+    CoordinatorAttributionError,
+    UNKNOWN_WALLET_STRING,
+    UnattributedCoinsError,
+    assert_all_coins_attributed,
+    assert_no_coordinator_for_joinmarket,
+)
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -21,6 +51,7 @@ from enum import Enum
 from cProfile import Profile
 from pstats import SortKey, Stats
 from decimal import Decimal
+from pathlib import Path
 import jsonpickle
 from multiprocessing.pool import ThreadPool
 from tqdm import tqdm
@@ -35,15 +66,14 @@ import cj_process.cj_visualize as cjvis
 
 # Configure the logging module
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger_to_disable = logging.getLogger("mathplotlib")
+logger = logging.getLogger(__name__)
+logger_to_disable = logging.getLogger("matplotlib")
 logger_to_disable.setLevel(logging.WARNING)
 
-BTC_CLI_PATH = 'C:\\bitcoin-25.0\\bin\\bitcoin-cli'
+BTC_CLI_PATH = os.environ.get('BITCOIN_CLI_PATH', 'bitcoin-cli')
 WASABIWALLET_DATA_DIR = ''
 TX_AD_CUT_LEN = 16  # length of displayed address or txid
 WALLET_COLORS = {}
-UNKNOWN_WALLET_STRING = 'UNKNOWN'
-COORDINATOR_WALLET_STRING = 'Coordinator'
 PRINT_COLLATED_COORD_CLIENT_LOGS = False
 INSERT_WALLET_NODES = False
 VERBOSE = False
@@ -54,6 +84,10 @@ MAX_NUM_DISPLAY_UTXO = 1000
 GLOBAL_IMG_SUFFIX = '.3'
 
 
+class MissingBlockDataError(RuntimeError):
+    """Raised when the run directory carries no fullnode block data to time coins by."""
+
+
 # colors used for different wallet clusters. Avoid following colors : 'red' (used for cjtx)
 COLORS = ['darkorange', 'green', 'lightblue', 'gray', 'aquamarine', 'darkorchid1', 'cornsilk3', 'chocolate',
           'deeppink1', 'cadetblue', 'darkgreen', 'burlywood4', 'cyan', 'darkgray', 'darkslateblue', 'dodgerblue4',
@@ -62,6 +96,34 @@ LINE_STYLES = ['-', '--', '-.', ':']
 
 SM = SummaryMessages()
 als.SM = SM
+
+
+def parse_mine_time(mine_time):
+    """Turn any mine_time representation produced by the exporters into a UTC datetime."""
+    if isinstance(mine_time, datetime):
+        datetime_obj = mine_time
+    elif isinstance(mine_time, (int, float)):
+        return datetime.fromtimestamp(mine_time, tz=UTC)
+    elif isinstance(mine_time, str):
+        normalized_time = mine_time.strip()
+        if normalized_time.endswith('Z'):
+            normalized_time = normalized_time[:-1] + '+00:00'
+        try:
+            datetime_obj = datetime.fromisoformat(normalized_time)
+        except ValueError as exc:
+            raise ValueError(f"Unsupported mine_time value: {mine_time!r}") from exc
+    else:
+        raise TypeError(f"Unsupported mine_time type: {type(mine_time).__name__}")
+
+    # Block times are UTC; the exports that omit the zone say nothing else. Stamping it
+    # keeps values from different exporters comparable with each other.
+    if datetime_obj.tzinfo is None:
+        return datetime_obj.replace(tzinfo=UTC)
+    return datetime_obj.astimezone(UTC)
+
+
+def format_mine_time(mine_time):
+    return parse_mine_time(mine_time).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
 
 def float_equals(a, b, tolerance=1e-9):
@@ -151,7 +213,7 @@ def print_round_logs(filename, round_id):
     print('**************************************')
 
 
-def get_input_address(txid, txid_in_out, raw_txs: dict = {}):
+def get_input_address(txid, txid_in_out, raw_txs: dict, allow_rpc: bool = True):
     """
     Returns address which was used in transaction given by 'txid' as 'txid_in_out' output index
     :param txid: transaction id to read input address from
@@ -162,10 +224,14 @@ def get_input_address(txid, txid_in_out, raw_txs: dict = {}):
 
     if len(raw_txs) > 0 and txid in raw_txs.keys():
         tx_info = raw_txs[txid]
-    else:
+    elif allow_rpc:
         result = als.run_command(
             '{} -regtest getrawtransaction {} true'.format(BTC_CLI_PATH, txid), False)
+        if result.returncode != 0:
+            return None, None
         tx_info = json.loads(result.stdout)
+    else:
+        return None, None
 
     try:
         parsed_data = tx_info
@@ -180,11 +246,12 @@ def get_input_address(txid, txid_in_out, raw_txs: dict = {}):
     return None, None
 
 
-def extract_tx_info(txid: str, raw_txs: dict):
+def extract_tx_info(txid: str, raw_txs: dict, allow_rpc: bool):
     """
     Extract input and output addresses
     :param txid: transaction to parse
     :param raw_txs: dictionary with pre-loaded transactions
+    :param allow_rpc: whether a transaction missing from raw_txs may be fetched from the node
     :return: parsed transaction record
     """
 
@@ -193,7 +260,7 @@ def extract_tx_info(txid: str, raw_txs: dict):
     if USE_PRELOADED:
         # Use pre-loaded transactions if available
         tx_info = raw_txs[txid]
-    else:
+    elif allow_rpc:
         # retrieve from fullnode via RPC
         result = als.run_command(
             '{} -regtest getrawtransaction {} true'.format(BTC_CLI_PATH, txid), False)
@@ -201,6 +268,9 @@ def extract_tx_info(txid: str, raw_txs: dict):
             print(f'Cannot retrieve tx info for {txid} with {result.stderr} error')
             return None
         tx_info = json.loads(result.stdout)
+    else:
+        logging.warning('Transaction %s is missing from the exported transaction database', txid)
+        return None
 
     tx_record = {}
     input_addresses = {}
@@ -219,7 +289,16 @@ def extract_tx_info(txid: str, raw_txs: dict):
         index = 0
         for input in inputs:
             # we need to read and parse previous transaction to obtain address and other information
-            in_address, in_full_info = get_input_address(input['txid'], input['vout'], raw_txs)
+            in_address, in_full_info = get_input_address(
+                input['txid'], input['vout'], raw_txs, allow_rpc=allow_rpc
+            )
+            if in_full_info is None:
+                logging.warning(
+                    'Input transaction %s referenced by %s is missing from the exported transaction database',
+                    input['txid'],
+                    txid,
+                )
+                return None
 
             tx_record['inputs'][index] = {}
             # tx_record['inputs'][index]['full_info'] = in_full_info
@@ -653,6 +732,12 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
         cjtx_stats['analysis'] = {}
     cjtx_stats['analysis']['path'] = base_path
 
+    if len(coinjoins) == 0:
+        SM.print('No coinjoin transactions found for this experiment.')
+        analysis_stats['num_coinjoins'] = 0
+        analysis_stats['wallets_participation'] = {}
+        return analysis_stats
+
     # Compute same output size statistics
     for cjtx in coinjoins.keys():
         if 'analysis2' not in coinjoins[cjtx]:
@@ -737,6 +822,8 @@ def analyze_coinjoin_stats(cjtx_stats, base_path, cjplt: CoinJoinPlots, short_ex
                     # get coin destroy time - if not used by any tx, then set to year 9999
                     coin_destroy_time = '9999-01-25 09:44:48.000' if 'destroy_time' not in coin.keys() else coin['destroy_time']
                     # Decide state of the coin in the time of current coinjoin (cjtx_creation_time) - just before cjtx was executed
+                    # Compared as strings, which only orders them because every time here is
+                    # written in the zero-padded canonical form the sentinel above also uses.
                     if coin['create_time'] < cjtx_creation_time:
                         if cjtx_creation_time <= coin_destroy_time:  # Equal is to capture case when coin was consumed by this cjtx
                             # Coin was available for mixing at coinjoin round registration time
@@ -1687,6 +1774,29 @@ def analyze_aggregated_coinjoin_stats(multi_cjtx_stats, base_path):
 
     print("Starting analyze_aggregated_coinjoin_stats() analysis")
 
+    required_analysis_keys = {
+        'wallets_no_input_mixed',
+        'wallets_anonscore_histogram_avg',
+        'coinjoin_number_different_wallets',
+        'coinjoins_finished_all',
+        'utxos_in_prison',
+        'wallets_times_used_as_input',
+        'coinjoin_number_inputs_in_time',
+        'coinjoin_number_outputs_in_time',
+        'coinjoin_utxos_entropy_in_time',
+    }
+    analyzable_stats = {
+        experiment: stats
+        for experiment, stats in multi_cjtx_stats.items()
+        if stats.get('coinjoins') and required_analysis_keys.issubset(stats.get('analysis', {}).keys())
+    }
+    skipped_stats = set(multi_cjtx_stats.keys()) - set(analyzable_stats.keys())
+    for experiment in sorted(skipped_stats):
+        logging.info(f"Skipping aggregated coinjoin plots for {experiment}; no coinjoin-derived analysis datasets are available.")
+    if not analyzable_stats:
+        logging.info("No experiments with coinjoin-derived analysis datasets; skipping aggregated coinjoin statistics plots.")
+        return
+
     # Create four subplots with their own axes
     fig = plt.figure(figsize=(48, 24))
     ax1 = fig.add_subplot(3, 3, 1)
@@ -1708,12 +1818,12 @@ def analyze_aggregated_coinjoin_stats(multi_cjtx_stats, base_path):
     # Weighted results computations FUNCT[item[0] * item[1] for item in data]
     #
     # Average anonscore for different base parameter (number of wallets participating)
-    visualize_scatter_num_wallets_weighted(ax1, multi_cjtx_stats, 'wallets_anonscore_histogram_avg', np.median,
+    visualize_scatter_num_wallets_weighted(ax1, analyzable_stats, 'wallets_anonscore_histogram_avg', np.median,
                                            False, 'Number of wallets in mix', 'Median anonscore',
                                   f"Dependency of {'wallets_anonscore_histogram_avg'} on number of wallets")
 
     # DONE: Histogram of number of wallets participating in coinjoins (normalized)
-    weighted_wallets_participating(ax4, multi_cjtx_stats, 'coinjoin_number_different_wallets', sum,
+    weighted_wallets_participating(ax4, analyzable_stats, 'coinjoin_number_different_wallets', sum,
                                            True, 'Number of wallets in mix', 'Fraction of different wallets in coinjoins',
                                            f"Dependency of {'coinjoin_number_different_wallets'} on number of wallets")
 
@@ -1723,32 +1833,32 @@ def analyze_aggregated_coinjoin_stats(multi_cjtx_stats, base_path):
     #
 
     # DONE: Number of coinjoins finished for different base parameter (number of wallets participating)
-    visualize_scatter_num_wallets(ax2, multi_cjtx_stats, 'coinjoins_finished_all',
+    visualize_scatter_num_wallets(ax2, analyzable_stats, 'coinjoins_finished_all',
                                   1, sum, False, False, 'Number of wallets in mix', 'Number of coinjoins',
                                   f"Dependency of {'coinjoins_finished_all'} on number of wallets")
 
     # DONE: Number of utxos in prison
-    visualize_scatter_num_wallets(ax3, multi_cjtx_stats, 'utxos_in_prison',
+    visualize_scatter_num_wallets(ax3, analyzable_stats, 'utxos_in_prison',
                                   1, sum, False, False, 'Number of wallets in mix', 'Number of utxos in prison',
                                   f"Dependency of {'utxos_in_prison'} on number of wallets")
 
     # Median frequency a wallet was used in mix
-    visualize_scatter_num_wallets(ax5, multi_cjtx_stats, 'wallets_times_used_as_input',
+    visualize_scatter_num_wallets(ax5, analyzable_stats, 'wallets_times_used_as_input',
                                   1, np.median, True, True, 'Number of wallets in mix', 'Fraction of participation',
                                   f"Dependency of {'wallets_times_used_as_input'} on number of wallets")
 
     # Average number of inputs into cjtxs
-    visualize_scatter_num_wallets(ax6, multi_cjtx_stats, 'coinjoin_number_inputs_in_time',
+    visualize_scatter_num_wallets(ax6, analyzable_stats, 'coinjoin_number_inputs_in_time',
                                   1, sum, True, False, 'Number of wallets in mix', 'Number of inputs of cjtx',
                                   f"Dependency of {'coinjoin_number_inputs_in_time'} (average number of inputs) on number of wallets")
 
     # Average number of outputs into cjtxs
-    visualize_scatter_num_wallets(ax7, multi_cjtx_stats, 'coinjoin_number_outputs_in_time',
+    visualize_scatter_num_wallets(ax7, analyzable_stats, 'coinjoin_number_outputs_in_time',
                                   1, sum, True, False, 'Number of wallets in mix', 'Number of outputs of cjtx',
                                   f"Dependency of {'coinjoin_number_outputs_in_time'} (average number of outputs) on number of wallets")
 
     # Average entropy of coinjoins
-    visualize_scatter_num_wallets(ax8, multi_cjtx_stats, 'coinjoin_utxos_entropy_in_time',
+    visualize_scatter_num_wallets(ax8, analyzable_stats, 'coinjoin_utxos_entropy_in_time',
                                   1, sum, True, False, 'Number of wallets in mix', 'Entropy',
                                   f"Dependency of {'coinjoin_utxos_entropy_in_time'} (average entropy of coinjoin round) on number of wallets")
 
@@ -1793,58 +1903,7 @@ def build_address_wallet_mapping(cjtx_stats):
     return address_wallet_mapping
 
 
-def joinmarket_parse_coinjoin_logs(base_path: str, raw_tx_db: dict = {}):
-    """
-    Obtain information about coinjoins from collated logs from all separate clients
-    :param base_path: base path where docker client images are stored
-    :param raw_tx_db: database of all transaction loaded from btc-node
-    :return: cjtx_stats structure with information about all detected coinjoins
-    """
-    print('Parsing coinjoin-relevant data from joinmarket client logs {}...'.format(base_path), end='')
-    # 1. Parse logs for each client separately
-    # 2. Collate client logs into complete view
-
-    clients_paths = []
-    exp_base_path = os.path.join(base_path, 'data')
-    files = os.listdir(exp_base_path) if os.path.exists(exp_base_path) else logging.error(f'Path {exp_base_path} does not exist')
-    for file in files:
-        target_exp_base_path = os.path.join(exp_base_path, file)
-        if os.path.isdir(target_exp_base_path):
-            if os.path.exists(os.path.join(target_exp_base_path, 'joinmarket')):
-                clients_paths.append(target_exp_base_path)
-
-    success_coinjoins = {}
-    for client_path in clients_paths:
-        success_coinjoins[client_path] = als.joinmarket_find_coinjoins(os.path.join(client_path, 'joinmarket', 'jmwalletd.log'))
-
-    all_coinjoins_duplicities = [success_coinjoins[path][txid] for path in success_coinjoins.keys() for txid in success_coinjoins[path].keys()]
-    all_coinjoins = {txid: success_coinjoins[path][txid] for path in success_coinjoins.keys() for txid in success_coinjoins[path].keys()}
-
-    SM.print('Total joinmarket coinjoins detected (with duplicities: {}'.format(len(all_coinjoins_duplicities)))
-    SM.print('Total fully finished joinmarket coinjoins found: {}'.format(len(all_coinjoins)))
-    print('Parsing separate coinjoin transactions ', end='')
-    cjtx_stats = {}
-    for cjtxid in all_coinjoins.keys():
-        # extract input and output addresses
-        tx_record = extract_tx_info(cjtxid, raw_tx_db)
-        if tx_record is not None:
-            tx_record['round_id'] = cjtxid
-            tx_record['round_start_time'] = all_coinjoins[cjtxid]['timestamp']  # BUGBUG: bad round start time, needs to be extracted from logs better
-            tx_record['broadcast_time'] = all_coinjoins[cjtxid]['timestamp']
-            tx_record['is_blame_round'] = False
-            tx_record['is_cjtx'] = True
-            cjtx_stats[cjtxid] = tx_record
-        else:
-            print('ERROR: decoding transaction for tx={}'.format(cjtxid))
-        print('.', end='')
-    print('done')
-
-    SM.print('Total fully finished coinjoins processed: {}'.format(len(cjtx_stats.keys())))
-
-    return cjtx_stats
-
-
-def parse_backend_coinjoin_logs(coord_input_file, raw_tx_db: dict = {}):
+def parse_backend_coinjoin_logs(coord_input_file, raw_tx_db: dict, allow_rpc: bool = True):
     print('Parsing coinjoin-relevant data from coordinator logs {}...'.format(coord_input_file), end='')
     if PRE_2_0_4_VERSION:
         regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Created round with params: MaxSuggestedAmount:'([0-9\.]+)' BTC?"
@@ -1855,7 +1914,7 @@ def parse_backend_coinjoin_logs(coord_input_file, raw_tx_db: dict = {}):
     regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Blame Round \((?P<round_id>.*)\): Blame round created from round '(?P<orig_round_id>.*)'?"
     start_blame_rounds_id = als.find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp'])
     # 2023-10-07 11:04:56.723 [43] INFO	Arena.StepTransactionSigningPhaseAsync (374)	Round (dee277ed8fd5d1af24bf09126818b3cec362f52f9fc4323474c2ec5075454d1a): Successfully broadcast the coinjoin: 345386611e7a4543524a3c7fa27f14d511fbb70b1b8786d777b19fb265e95558.
-    regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Successfully broadcast the coinjoin: (?P<cj_tx_id>[0-9a-f]*)\.?"
+    regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Successfully broadcast the coinjoin: (?P<cj_tx_id>[0-9a-f]{64})\.?"
     success_coinjoin_round_ids = als.find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp', 'cj_tx_id'])
     # round_cjtx_mapping = find_round_cjtx_mapping(coord_input_file, regex_pattern, 'round_id', 'cj_tx_id')
     round_cjtx_mapping = {round_id: success_coinjoin_round_ids[round_id][0]['cj_tx_id'] for round_id in     # take only the first record found
@@ -1880,7 +1939,9 @@ def parse_backend_coinjoin_logs(coord_input_file, raw_tx_db: dict = {}):
     cjtx_stats = {}
     for round_id in full_round_ids:
         # extract input and output addresses
-        tx_record = extract_tx_info(round_cjtx_mapping[round_id], raw_tx_db)
+        tx_record = extract_tx_info(
+            round_cjtx_mapping[round_id], raw_tx_db, allow_rpc=allow_rpc
+        )
         if tx_record is not None:
             # Find coinjoin transaction id and create record if not already
             cjtxid = round_cjtx_mapping[round_id]
@@ -1922,7 +1983,7 @@ def parse_coinjoin_errors(cjtx_stats, coord_input_file):
     # Round-dependent information
     #
     # Round id to coinjoin txid mapping
-    regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Successfully broadcast the coinjoin: (?P<cj_tx_id>[0-9a-f]*)\.?"
+    regex_pattern = r"(?P<timestamp>.*) \[.+(Arena\..*) \(.*Round \((?P<round_id>.*)\): Successfully broadcast the coinjoin: (?P<cj_tx_id>[0-9a-f]{64})\.?"
     success_coinjoin_round_ids = als.find_round_ids(coord_input_file, regex_pattern, ['round_id', 'timestamp', 'cj_tx_id'])
     als.insert_type(success_coinjoin_round_ids, CJ_LOG_TYPES.COINJOIN_BROADCASTED)
     als.insert_by_round_id(rounds_logs, success_coinjoin_round_ids)
@@ -2008,13 +2069,15 @@ def parse_coinjoin_errors(cjtx_stats, coord_input_file):
     regex_pattern = r"(?P<timestamp>.*) .* WARNING.*WabiSabiProtocolException: Input banned.?"
     input_banned = als.find_round_ids(coord_input_file, regex_pattern, ['timestamp'])
     als.insert_type(input_banned, CJ_LOG_TYPES.INPUT_BANNED)
-    rounds_logs['no_round'].append(input_banned)
+    if input_banned:
+        rounds_logs['no_round'].append(input_banned)
 
     # NOT_ENOUGH_FUNDS 2023-09-02 10:18:48.814 [47] WARNING	IdempotencyRequestCache.GetCachedResponseAsync (79)	WalletWasabi.WabiSabi.Backend.Models.WabiSabiProtocolException: Not enough funds
     regex_pattern = r"(?P<timestamp>.*) .* WARNING.*WabiSabiProtocolException: Not enough funds.?"
     not_enough_funds = als.find_round_ids(coord_input_file, regex_pattern, ['timestamp'])
     als.insert_type(not_enough_funds, CJ_LOG_TYPES.NOT_ENOUGH_FUNDS)
-    rounds_logs['no_round'].append(not_enough_funds)
+    if not_enough_funds:
+        rounds_logs['no_round'].append(not_enough_funds)
 
     if 'rounds' not in cjtx_stats.keys():
         cjtx_stats['rounds'] = {}
@@ -2262,6 +2325,7 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
             target_base_path = os.path.join(base_path_wasabi, file)
             # processs wallets one by one
             if os.path.isdir(target_base_path) and (file.startswith('wasabi-client-') or file.startswith('jcs-')):
+                is_joinmarket_wallet = file.startswith('jcs-')
                 print(f'Processing {target_base_path}')
                 if file.startswith('wasabi-client-'):
                     wallet_name = 'wallet-' + file[len('wasabi-client-'):]
@@ -2272,9 +2336,20 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
 
                 # Wallet coins (as obtained by 'listcoins' RPC)
                 with open(os.path.join(target_base_path, 'coins.json'), "r") as file:
-                    wallet_coins = json.load(file)
-                    if isinstance(wallet_coins, str) and (wallet_coins.lower() == 'timeout' or wallet_coins.lower() == 'this method is not available in joinmarket'):
-                        logging.error(f'Loading wallet keys failed with \"{wallet_coins}\" for \"{target_base_path}\"')
+                    try:
+                        wallet_coins = json.load(file)
+                    except json.JSONDecodeError:
+                        logger.warning(
+                            'Empty or invalid coins.json for %s, treating as empty wallet',
+                            target_base_path,
+                        )
+                        wallet_coins = 'timeout'
+                    coins_unavailable = isinstance(wallet_coins, str) and (
+                        wallet_coins.lower() == 'timeout'
+                        or wallet_coins.lower() == 'this method is not available in joinmarket'
+                    )
+                    if coins_unavailable:
+                        logging.error(f'Loading wallet coins failed with \"{wallet_coins}\" for \"{target_base_path}\"')
                         wallets_coins_all[wallet_name] = {}
                     else:
                         for item in wallet_coins:
@@ -2287,43 +2362,103 @@ def obtain_wallets_info(base_path, load_wallet_info_via_rpc, load_wallet_from_do
 
                 # Wallet addresses (as obtained by 'listkeys' RPC) - now extracted from 'keys.json' file
                 with open(os.path.join(target_base_path, 'keys.json'), "r") as file:
-                    wallet_keys = json.load(file)
-                    timout_detected = False
-                    if isinstance(wallet_coins, str) and (wallet_coins.lower() == 'timeout' or wallet_coins.lower() == 'this method is not available in joinmarket'):
-                        timout_detected = True
-                    if isinstance(wallet_keys, str) and (wallet_keys.lower() == 'timeout' or wallet_keys.lower() == 'this method is not available in joinmarket'):
-                        timout_detected = True
+                    try:
+                        wallet_keys = json.load(file)
+                    except json.JSONDecodeError:
+                        logger.warning(
+                            'Empty or invalid keys.json for %s, treating as empty wallet',
+                            target_base_path,
+                        )
+                        wallet_keys = 'timeout'
+                    keys_unavailable = isinstance(wallet_keys, str) and (
+                        wallet_keys.lower() == 'timeout'
+                        or wallet_keys.lower() == 'this method is not available in joinmarket'
+                    )
 
-                    if timout_detected:
-                        logging.error(f'Loading wallet keys failed with \"{wallet_keys}\" for \"{target_base_path}\"')
-                        wallets_info[wallet_name] = {}
+                    if keys_unavailable:
+                        # JoinMarket has no 'listkeys' RPC; recover ownership from the
+                        # wallet's own artifacts instead of leaving it unattributed.
+                        recovered_addresses = joinmarket_wallet_addresses(target_base_path)
+                        if recovered_addresses:
+                            logger.info(
+                                'Recovered %d addresses for %s from JoinMarket wallet artifacts',
+                                len(recovered_addresses),
+                                wallet_name,
+                            )
+                        else:
+                            logger.warning(
+                                'Loading wallet keys failed with %r for %s and no addresses could be '
+                                'recovered. Continuing because the wallet may not participate; CoinJoin '
+                                'coin attribution is validated before analysis.',
+                                wallet_keys,
+                                target_base_path,
+                            )
+                        wallets_info[wallet_name] = recovered_addresses
                     else:
                         wallets_info[wallet_name] = {addr_data['address']: addr_data for addr_data in wallet_keys}
+                        # ``keys.json`` is derived from the UTXO history.  A maker's
+                        # freshly-created or subsequently-spent outputs can therefore
+                        # be absent even though its own daemon log records them.  Merge
+                        # only JoinMarket's self-identifying records; never infer peer
+                        # addresses from a raw transaction or a maker response.
+                        if is_joinmarket_wallet:
+                            recovered_addresses = joinmarket_wallet_addresses(target_base_path)
+                            new_addresses = {
+                                address: address_info
+                                for address, address_info in recovered_addresses.items()
+                                if address not in wallets_info[wallet_name]
+                            }
+                            if new_addresses:
+                                logger.info(
+                                    'Recovered %d additional addresses for %s from JoinMarket wallet logs',
+                                    len(new_addresses),
+                                    wallet_name,
+                                )
+                                wallets_info[wallet_name].update(new_addresses)
 
         # Sometimes, all_tx_db is not complete for all logged coinjoins
         # Create artificial record for some future time
-        highest_known_mine_time = max([all_tx_db[txid]['mine_time'] for txid in all_tx_db.keys()])
-        datetime_obj = datetime.strptime(highest_known_mine_time, "%Y-%m-%d %H:%M:%S.%f")
-        datetime_obj = datetime_obj + timedelta(minutes=10)
-        highest_known_mine_time_next = datetime_obj.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        highest_known_mine_time_next = None
+        if all_tx_db:
+            # Parse before comparing: the stored values are ordered as datetimes, not as
+            # the mix of strings and epoch numbers the exporters are allowed to write.
+            highest_known_mine_time = max(
+                parse_mine_time(tx['mine_time']) for tx in all_tx_db.values()
+            )
+            datetime_obj = highest_known_mine_time + timedelta(minutes=10)
+            highest_known_mine_time_next = format_mine_time(datetime_obj)
+
+        def synthetic_time_for(owner, unmatched_coin):
+            """Time a coin whose block is missing, refusing to guess with no blocks at all."""
+            if highest_known_mine_time_next is None:
+                raise MissingBlockDataError(
+                    f'Wallet "{owner}" holds coin {unmatched_coin.get("txid", "<no txid>")} but '
+                    f'the transaction database is empty, so there is no block time to derive a '
+                    f'synthetic one from. Expected "block_*.json" exports under '
+                    f'"{os.path.join(base_path, "data", "btc-node")}".'
+                )
+            return highest_known_mine_time_next
 
         # Update coins with information about their lifetime information
         for wallet_name in wallets_coins_all.keys():
             for coin in wallets_coins_all[wallet_name]:
                 if coin['txid'] in all_tx_db.keys():
                     coin['block_hash'] = all_tx_db[coin['txid']]['hash']
-                    coin['create_time'] = all_tx_db[coin['txid']]['mine_time']
+                    # Normalized on the way in: these times are later compared as strings
+                    # and re-parsed with a fixed format, so they cannot keep whichever
+                    # representation the exporter happened to write.
+                    coin['create_time'] = format_mine_time(all_tx_db[coin['txid']]['mine_time'])
                 else:
                     # Synthetic block info in case of missing block
                     coin['block_hash'] = 'synthetic_block'
-                    coin['create_time'] = highest_known_mine_time_next
+                    coin['create_time'] = synthetic_time_for(wallet_name, coin)
 
                 if 'spentBy' in coin.keys():
                     if coin['spentBy'] in all_tx_db.keys():
-                        coin['destroy_time'] = all_tx_db[coin['spentBy']]['mine_time']
+                        coin['destroy_time'] = format_mine_time(all_tx_db[coin['spentBy']]['mine_time'])
                     else:
                         # Synthetic destroy time in case of missing block
-                        coin['destroy_time'] = highest_known_mine_time_next
+                        coin['destroy_time'] = synthetic_time_for(wallet_name, coin)
 
 
         # Serialize parsed coins for all wallets into 'serialized_annonymity.json' file
@@ -2385,15 +2520,49 @@ def fix_coordinator_wallet_addresses(cjtx_stats):
     return cjtx_stats
 
 
+def detect_mix_protocol(base_path):
+    """Detect the mixing protocol of an experiment from the raw client artifacts it kept."""
+    manifest_engine = producer_label_manifest_engine(os.path.join(base_path, 'data'))
+    if manifest_engine == 'joinmarket':
+        return MIX_PROTOCOL.JOINMARKET
+    if manifest_engine == 'wasabi':
+        return MIX_PROTOCOL.WASABI2
+
+    if find_joinmarket_client_log_files(base_path) or find_joinmarket_round_events_file(base_path):
+        return MIX_PROTOCOL.JOINMARKET
+    return MIX_PROTOCOL.WASABI2
+
+
+def load_mix_protocol(cjtx_stats, base_path):
+    """Recover the protocol an already parsed experiment was collected with.
+
+    ``coinjoin_tx_info.json`` records it since the raw JoinMarket logs it was detected
+    from need not be kept next to it. Files written before that fall back to detection,
+    which is what they were analyzed with anyway.
+    """
+    stored_protocol = cjtx_stats.get('mix_protocol')
+    if stored_protocol is None:
+        detected_protocol = detect_mix_protocol(base_path)
+        logger.info('No mix_protocol recorded in coinjoin_tx_info.json, detected %s from %s',
+                    detected_protocol.value, base_path)
+        return detected_protocol
+
+    try:
+        return MIX_PROTOCOL(stored_protocol)
+    except ValueError as exc:
+        raise ValueError(
+            f'coinjoin_tx_info.json in {base_path} records an unknown mix_protocol '
+            f'{stored_protocol!r}'
+        ) from exc
+
+
 def load_prison_data(cjtx_stats, base_path):
-    prison_file = os.path.join(base_path, "WalletWasabi", "Backend", "WabiSabi", "Prison.txt")
-    if not os.path.exists(prison_file):
-        prison_file = os.path.join(base_path, "data", "wasabi-backend", "backend", "WabiSabi", "Prison.txt")
+    prison_file = find_wasabi_prison_file(base_path)
     items_in_prison = 0
 
     #detect prison version (<2.0.4 is different than >=2.0.4)
 
-    if os.path.exists(prison_file):
+    if prison_file and os.path.exists(prison_file):
         with open(prison_file, 'r') as csv_file:
             reader = csv.reader(csv_file, delimiter=',')
             for row in reader:
@@ -2415,7 +2584,9 @@ def load_prison_data(cjtx_stats, base_path):
                 else:
                     print('Unknown prison reason {}'.format(prison_log['reason']))
 
-                cjtx_stats['rounds'][prison_log['round_id']]['logs'].append(prison_log)
+                # Prison records can reference rounds the coordinator log never completed,
+                # so the round record is created on demand instead of assumed to exist.
+                als.insert_by_round_id(cjtx_stats.setdefault('rounds', {}), {prison_log['round_id']: [prison_log]})
                 items_in_prison += 1
 
         SM.print('Total {} records found in prison'.format(items_in_prison))
@@ -2487,8 +2658,25 @@ def load_rawtx_database(base_tx_path):
 
 
 def load_tx_database_from_btccore(base_tx_path):
+    """Load every transaction the Bitcoin fullnode exported as ``block_*.json``.
+
+    :raises MissingBlockDataError: if the export directory is absent or holds no blocks
+    """
     tx_db = {}
+    if not os.path.isdir(base_tx_path):
+        raise MissingBlockDataError(
+            f'No Bitcoin fullnode block exports found: "{base_tx_path}" does not exist. '
+            f'The run directory is incomplete - the emulation most likely did not finish '
+            f'exporting btc-node data. Re-run the emulation instead of analyzing this run.'
+        )
     files = list_files(base_tx_path, '.json', 'block_')
+    if not files:
+        raise MissingBlockDataError(
+            f'No Bitcoin fullnode block exports found: "{base_tx_path}" contains no '
+            f'"block_*.json" file. The run directory is incomplete - the emulation most '
+            f'likely did not finish exporting btc-node data. Re-run the emulation instead '
+            f'of analyzing this run.'
+        )
     for tx_file in files:  # Each file corresponds to whole block - may be multiple transactions
         print(f'Loading from block file {tx_file}')
         with (open(tx_file, "r") as file):
@@ -2545,17 +2733,16 @@ def optimize_txvalue_info(cjtx_stats):
             for input in cjtx_stats['coinjoins'][txid]['inputs'].keys():
                 assert type(cjtx_stats['coinjoins'][txid]['inputs'][input]['value']) is float, 'non-float value'
                 cjtx_stats['coinjoins'][txid]['inputs'][input]['value'] \
-                    = int(cjtx_stats['coinjoins'][txid]['inputs'][input]['value'] * SATS_IN_BTC)
+                    = als.btc_to_sats(cjtx_stats['coinjoins'][txid]['inputs'][input]['value'])
             for output in cjtx_stats['coinjoins'][txid]['outputs'].keys():
                 assert type(cjtx_stats['coinjoins'][txid]['outputs'][output]['value']) is float, 'non-float value'
                 cjtx_stats['coinjoins'][txid]['outputs'][output]['value'] \
-                    = int(cjtx_stats['coinjoins'][txid]['outputs'][output]['value'] * SATS_IN_BTC)
+                    = als.btc_to_sats(cjtx_stats['coinjoins'][txid]['outputs'][output]['value'])
 
     return optimized
 
 
 def process_experiment(args):
-    mix_protocol = MIX_PROTOCOL.WASABI2
     base_path = args[0]
     save_figs = args[1]
     WASABIWALLET_DATA_DIR = base_path
@@ -2567,14 +2754,25 @@ def process_experiment(args):
         with open(save_file, "r") as file:
             cjtx_stats = json.load(file)
 
+        # The raw client logs the protocol was detected from are not required by this
+        # action, so the protocol recorded during collection is authoritative here.
+        mix_protocol = load_mix_protocol(cjtx_stats, WASABIWALLET_DATA_DIR)
+        is_joinmarket = mix_protocol == MIX_PROTOCOL.JOINMARKET
+        needs_save = cjtx_stats.get('mix_protocol') != mix_protocol.value
+        cjtx_stats['mix_protocol'] = mix_protocol.value
+
         # Build mapping between address and controlling wallet
         if 'address_wallet_mapping' not in cjtx_stats.keys():
             cjtx_stats['address_wallet_mapping'] = build_address_wallet_mapping(cjtx_stats)
-            if not op.READ_ONLY_COINJOIN_TX_INFO:
-                with open(save_file, "w") as file:
-                    file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
+            needs_save = True
+        if needs_save and not op.READ_ONLY_COINJOIN_TX_INFO:
+            with open(save_file, "w") as file:
+                file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
     else:
+        mix_protocol = detect_mix_protocol(WASABIWALLET_DATA_DIR)
+        is_joinmarket = mix_protocol == MIX_PROTOCOL.JOINMARKET
         # Load transaction info from serialized files
+        RAW_TXS_DB = {}
         if op.LOAD_TXINFO_FROM_DOCKER_FILES:
             # Load tx from logs stored by Bitcoin fullnode - all transactions available
             tx_path = os.path.join(base_path, 'data', 'btc-node')
@@ -2585,24 +2783,80 @@ def process_experiment(args):
             # tx_path = os.path.join(base_path, 'data', 'wasabi-backend', 'WabiSabi', 'CoinJoinTransactions')
             # RAW_TXS_DB = load_rawtx_database(tx_path)
 
+        allow_rpc = not op.LOAD_TXINFO_FROM_DOCKER_FILES
+
         # Load wallets info
         cjtx_stats = {}
+        # Recorded so later analyze_only runs do not have to rediscover the protocol from
+        # raw client logs, which they no longer require to be present.
+        cjtx_stats['mix_protocol'] = mix_protocol.value
         cjtx_stats['wallets_info'], cjtx_stats['wallets_coins'] = (
             obtain_wallets_info(WASABIWALLET_DATA_DIR, op.LOAD_WALLETS_INFO_VIA_RPC, op.LOAD_TXINFO_FROM_DOCKER_FILES, RAW_TXS_DB))
 
         # Parse conjoins from logs
-        # Case 1: Local WalletWasabi folder
-        coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'WalletWasabi/Backend/Logs.txt')
-        if os.path.exists(coord_input_file):
-            cjtx_stats['coinjoins'] = parse_backend_coinjoin_logs(coord_input_file, RAW_TXS_DB)
-        # Case 2: Docker with wasabi client
-        coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'data', 'wasabi-backend', 'backend', 'Logs.txt')
-        if os.path.exists(coord_input_file):
-            cjtx_stats['coinjoins'] = parse_backend_coinjoin_logs(coord_input_file, RAW_TXS_DB)
-        # Case 3: Docker with joinmarket client
-        coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'data', 'jcs-000', 'joinmarket')
-        if os.path.exists(coord_input_file):
-            cjtx_stats['coinjoins'] = joinmarket_parse_coinjoin_logs(WASABIWALLET_DATA_DIR, RAW_TXS_DB)
+        coinjoin_log_files = []
+        joinmarket_log_files = find_joinmarket_client_log_files(WASABIWALLET_DATA_DIR)
+        joinmarket_round_events_file = find_joinmarket_round_events_file(WASABIWALLET_DATA_DIR)
+        producer_manifest = load_producer_label_manifest(
+            os.path.join(WASABIWALLET_DATA_DIR, 'data')
+        )
+        manifest_engine = producer_manifest.get('engine') if producer_manifest is not None else None
+        incomplete_joinmarket_manifest = (
+            is_joinmarket
+            and manifest_engine == 'joinmarket'
+            and producer_manifest.get('complete') is False
+        )
+        if incomplete_joinmarket_manifest:
+            logger.warning(
+                'JoinMarket producer label manifest is incomplete (%s); '
+                'round events are not authoritative, falling back to legacy client logs.',
+                producer_manifest.get('reason') or 'no reason recorded',
+            )
+        if not is_joinmarket:
+            # A producer manifest is authoritative for protocol selection. In
+            # particular, stale JoinMarket artifacts must not override Wasabi.
+            cjtx_stats['coinjoins'], coinjoin_log_files = parse_wasabi_coordinator_coinjoins(
+                WASABIWALLET_DATA_DIR, RAW_TXS_DB, allow_rpc=allow_rpc
+            )
+            if not coinjoin_log_files:
+                cjtx_stats['rounds'] = {'no_round': []}
+        elif manifest_engine == 'joinmarket' and not incomplete_joinmarket_manifest:
+            # Current JoinMarket runs declare one authoritative, integrity-checked
+            # round-event source. Client logs remain only a legacy fallback.
+            cjtx_stats['coinjoins'], cjtx_stats['rounds'] = joinmarket_parse_round_events(
+                WASABIWALLET_DATA_DIR, RAW_TXS_DB
+            )
+        elif incomplete_joinmarket_manifest:
+            # An incomplete producer capture makes its round events unusable.
+            # Client logs are the only permitted fallback on this path.
+            if not joinmarket_log_files:
+                raise ValueError(
+                    'JoinMarket producer label manifest is incomplete and no usable '
+                    'JoinMarket client logs are available'
+                )
+            cjtx_stats['coinjoins'] = joinmarket_parse_coinjoin_logs(
+                WASABIWALLET_DATA_DIR, RAW_TXS_DB, allow_rpc=allow_rpc
+            )
+            cjtx_stats['rounds'] = {'no_round': []}
+        elif joinmarket_log_files:
+            cjtx_stats['coinjoins'] = joinmarket_parse_coinjoin_logs(
+                WASABIWALLET_DATA_DIR, RAW_TXS_DB, allow_rpc=allow_rpc
+            )
+            if (
+                not cjtx_stats['coinjoins']
+                and joinmarket_round_events_file
+                and producer_manifest is None
+            ):
+                logging.info('JoinMarket client logs contained no coinjoins; using round-event labels instead.')
+                cjtx_stats['coinjoins'], cjtx_stats['rounds'] = joinmarket_parse_round_events(WASABIWALLET_DATA_DIR, RAW_TXS_DB)
+            if 'rounds' not in cjtx_stats:
+                cjtx_stats['rounds'] = {'no_round': []}
+        elif joinmarket_round_events_file:
+            cjtx_stats['coinjoins'], cjtx_stats['rounds'] = joinmarket_parse_round_events(WASABIWALLET_DATA_DIR, RAW_TXS_DB)
+        else:
+            raise ValueError(
+                'No usable JoinMarket client logs or round-event labels are available'
+            )
 
         # Build mapping between address and controlling wallet
         cjtx_stats['address_wallet_mapping'] = build_address_wallet_mapping(cjtx_stats)
@@ -2612,11 +2866,16 @@ def process_experiment(args):
             cjtx_stats = fix_coordinator_wallet_addresses(cjtx_stats)
 
         # Analyze error states
-        if op.PARSE_ERRORS:
-            coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'WalletWasabi/Backend/Logs.txt')
-            if not os.path.exists(coord_input_file):  # if not found, try dockerized path
-                coord_input_file = os.path.join(WASABIWALLET_DATA_DIR, 'data', 'wasabi-backend', 'backend', 'Logs.txt')
-            parse_coinjoin_errors(cjtx_stats, coord_input_file)
+        if not is_joinmarket:
+            if op.PARSE_ERRORS and coinjoin_log_files:
+                for coinjoin_log_file in coinjoin_log_files:
+                    parse_coinjoin_errors(cjtx_stats, coinjoin_log_file)
+            elif op.PARSE_ERRORS:
+                if 'rounds' not in cjtx_stats:
+                    cjtx_stats['rounds'] = {'no_round': []}
+                logging.info(
+                    'Skipping Wasabi coordinator error parsing; no completed CoinJoin rounds were found.'
+                )
 
         # Save parsed coinjoin transactions info into json
         if not op.READ_ONLY_COINJOIN_TX_INFO:
@@ -2640,6 +2899,13 @@ def process_experiment(args):
             with open(save_file, "w") as file:
                 file.write(json.dumps(dict(sorted(cjtx_stats.items())), indent=4))
         print('done')
+
+    # Wallet attribution is final here. The coordinator fallback above covers a single
+    # address length, so coins of any other length arrive unattributed; and where it did
+    # apply, it can hide an incomplete address list behind a label JoinMarket cannot have.
+    assert_all_coins_attributed(cjtx_stats['coinjoins'])
+    if is_joinmarket:
+        assert_no_coordinator_for_joinmarket(cjtx_stats['coinjoins'])
 
     if op.LOAD_COMPUTED_TRANSACTION_INFO:
         # if available, use already computed tx entropy analysis
@@ -2667,7 +2933,11 @@ def process_experiment(args):
     #parse_client_coinjoin_logs(cjtx_stats, client_input_path)
     # TODO: load client logs from multiple directories 'wasabi-client-x'
 
-    load_prison_data(cjtx_stats, WASABIWALLET_DATA_DIR)
+    # Prison records are read once, during collection, and are part of the saved round logs
+    # from then on. Reading Prison.txt again would append a second copy of every record,
+    # so each analyze_only run would report more UTXOs in prison than the one before.
+    if not is_joinmarket and not op.LOAD_TXINFO_FROM_FILE:
+        load_prison_data(cjtx_stats, WASABIWALLET_DATA_DIR)
 
     load_anonscore_data(cjtx_stats, WASABIWALLET_DATA_DIR)
 
@@ -2748,10 +3018,8 @@ def get_experiments_base_paths(base_path: str):
     paths_to_process = []
     for file in files:
         target_exp_base_path = os.path.join(base_path, file)
-        if os.path.isdir(target_exp_base_path):
-            if (os.path.exists(os.path.join(target_exp_base_path, 'WalletWasabi'))
-                    or os.path.exists(os.path.join(target_exp_base_path, 'data'))):
-                paths_to_process.append(target_exp_base_path)
+        if is_experiment(Path(target_exp_base_path)):
+            paths_to_process.append(target_exp_base_path)
 
     return paths_to_process
 
@@ -2834,6 +3102,10 @@ def visualize_aggregated_graphs(experiment_paths_sorted, graphs, base_path: str,
             # Load parsed coinjoin transactions again
             with open(data_file, "r") as file:
                 cjtx_stats = json.load(file)
+
+            # This path replots stored results without rebuilding attribution, so a run
+            # parsed by an older version can carry coins no wallet claims
+            assert_all_coins_attributed(cjtx_stats['coinjoins'])
 
             # Set targeted named subplot to next unused axes
             # Case 1: Collating results for same number of wallets (collate_same_num_wallets == True), use every subplot
@@ -3131,9 +3403,13 @@ def parse_arguments(argv):
                         action="store", metavar="ENV_VARS",
                         required=False)
 
-    parser.print_help()
-
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.target_path:
+        try:
+            validate_emulation_targets(args.target_path, args.action)
+        except EmulationTargetError as exc:
+            parser.error(str(exc))
+    return args
 
 
 class AnalysisType(Enum):
@@ -3472,4 +3748,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
-

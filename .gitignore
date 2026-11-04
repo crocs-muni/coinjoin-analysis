@@ -1,6 +1,7 @@
 __pycache__/
 Scripts/__pycache__/
 .idea/
+.vscode/
 
 src/Scripts_untracked/
 src/coinjoin_analysis.egg-info/

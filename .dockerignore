@@ -1,0 +1,27 @@
+.git
+.gitignore
+.pytest_cache
+.mypy_cache
+# Patterns are matched against the path relative to the context root, so the
+# nested caches and artifacts these exclude need the ** prefix to be found.
+**/__pycache__
+**/*.py[cod]
+**/.DS_Store
+venv
+.venv
+runs
+logs
+temp_dumplings
+temp_emul
+**/*.log
+**/*.tmp
+
+# Development, CI, and documentation are not needed by the runtime image.
+.github
+README.md
+PERFORMANCE.md
+docs
+tests
+scripts
+compose.yaml
+requirements-dev.txt
