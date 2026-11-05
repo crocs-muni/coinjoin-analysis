@@ -593,8 +593,8 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
     #new_month_indices = [('placeholder', 0, files[0][0:7])]  # Start with the first index
     new_month_indices = []
     next_month_index = 0
-    weeks_dict = defaultdict(dict)
     days_dict = defaultdict(dict)
+    weeks_dict = defaultdict(dict)
     months_dict = defaultdict(dict)
 
     for dir_name in sorted(files):
@@ -733,20 +733,11 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
                 ax.set_title(f'Type of inputs for given cjtx ({"values" if analyze_values else "number"})\n{mix_id} {dir_name}')
             logging.info(f'{target_base_path} inputs analyzed')
 
-            # Compute liquidity inflows (sum of weeks)
-            # Split cjtxs into weeks, then compute sum of MIX_ENTER
-            for key, record in data["coinjoins"].items():
-                # Parse the 'broadcast_time/virtual' string into a datetime object
-                if mix_protocol == MIX_PROTOCOL.WASABI2:
-                    dt = precomp_datetime.strptime(record['broadcast_time_virtual'], '%Y-%m-%d %H:%M:%S.%f')
-                else:
-                    dt = precomp_datetime.strptime(record['broadcast_time'], '%Y-%m-%d %H:%M:%S.%f')
-                year, week_num, _ = dt.isocalendar()
-                weeks_dict[(year, week_num)][key] = record
-                day_key = (dt.year, dt.month, dt.day)
-                days_dict[day_key][key] = record
-                month_key = (dt.year, dt.month)
-                months_dict[month_key][key] = record
+            # Compute liquidity inflows (sum of days/weeks/months)
+            days_dict_interval, weeks_dict_interval, months_dict_interval = als.split_coinjoins_per_interval(data["coinjoins"], mix_protocol)
+            days_dict.update(days_dict_interval)
+            weeks_dict.update(weeks_dict_interval)
+            months_dict.update(months_dict_interval)
 
             # Extend the y-limits to ensure the vertical lines go beyond the plot edges
             if ax:
@@ -763,7 +754,7 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
                          f'{mix_id}_input_types_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
                 fig_single.savefig(f'{save_file}.png', dpi=300)
                 fig_single.savefig(f'{save_file}.pdf', dpi=300)
-                logging.debug(f'Sucesfully saved figure {save_file}')
+                logging.debug(f'Successfully saved figure {save_file}')
                 del ax
                 del fig_single
 
@@ -817,7 +808,6 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
             ax.set_ylabel(label, color='gray', fontsize='6')
             ax.tick_params(axis='y', colors='gray')
 
-            new_month_liquidity = compute_aggregated_interval_liquidity(months_dict)
             restrict_size_string = "" if restrict_to_in_size is None else f'{round(restrict_to_in_size[1] / SATS_IN_BTC, 3)}btc'
             save_file = os.path.join(target_path,
                              f'{mix_id}_freshliquidity_{"values" if analyze_values else "nums"}_{"norm" if normalize_values else "notnorm"}{restrict_size_string}')
@@ -972,6 +962,19 @@ def wasabi_plot_remixes_worker(mix_id: str, mix_protocol: MIX_PROTOCOL, target_p
     result['all_changing_liquidity_timecutoff'] = changing_liquidity_timecutoff
     result['all_stay_liquidity_timecutoff'] = stay_liquidity_timecutoff
     return result
+
+
+def run_estimate_wallet_prediction_factor(target_path: str, coord: str, conf_interval: str, plot_inputs_predictions: bool, plot_outputs_predictions: bool):
+    if coord == 'wasabi2_zksnacks':
+        predict_matrix = als.load_json_from_file(
+            os.path.join(target_path, 'wallet_estimation_matrix_ww2zksnacks.json'))
+    else:
+        predict_matrix = als.load_json_from_file(
+            os.path.join(target_path, 'wallet_estimation_matrix_ww2kruw.json'))
+    all_data = als.load_coinjoins_from_file(os.path.join(target_path, coord), None, True)
+
+    estimate_wallet_prediction_factor(all_data, target_path, coord, predict_matrix[conf_interval],
+                                            plot_inputs_predictions, plot_outputs_predictions)
 
 
 def estimate_wallet_prediction_factor(all_data: dict, base_path, mix_id, prediction_matrix: dict=None,
@@ -1921,6 +1924,7 @@ def generate_liquidity_summary_html(coords: list, target_path: str):
 
 
 def plot_intermix_ratios(intercoord_ratios: dict, target_path: str | Path, prefix: str):
+    # Plot separate coordinators
     for coordinator, records in intercoord_ratios.items():
         if len(records) == 0:
             continue
@@ -1929,6 +1933,27 @@ def plot_intermix_ratios(intercoord_ratios: dict, target_path: str | Path, prefi
         # Parse timestamps and sort
         df["broadcast_time"] = pd.to_datetime(df["broadcast_time"])
         df = df.sort_values("broadcast_time").reset_index(drop=True)
+
+        # Print
+        s = df["out_ratio"] * 100
+        q1 = s.quantile(0.25)
+        median = s.quantile(0.50)
+        q3 = s.quantile(0.75)
+        iqr = q3 - q1
+        avg = s.mean()
+        lower_whisker = s[s >= q1 - 1.5 * iqr].min()
+        upper_whisker = s[s <= q3 + 1.5 * iqr].max()
+
+        SM.print(f"""
+        Coord.  = {coordinator}
+        Q1      = {q1}
+        Median  = {median}
+        Average = {avg}
+        Q3      = {q3}
+        IQR     = {iqr}
+        Lower W = {lower_whisker}
+        Upper W = {upper_whisker}
+        """)
 
         # Plot
         plt.figure(figsize=(10, 5))
@@ -1950,63 +1975,68 @@ def plot_intermix_ratios(intercoord_ratios: dict, target_path: str | Path, prefi
         #plt.savefig(Path(target_path, f"in_out_ratio_over_time__{coordinator}.pdf"), dpi=200, bbox_inches="tight")
         plt.close()
 
-        coordinators = []
-        in_series = []
-        out_series = []
-        for coordinator, records in intercoord_ratios.items():
-            df = pd.DataFrame.from_dict(records, orient="index")
-            in_vals = pd.to_numeric(df["in_ratio"],
-                                    errors="coerce").dropna().tolist() if "in_ratio" in df.columns else []
-            out_vals = pd.to_numeric(df["out_ratio"],
-                                     errors="coerce").dropna().tolist() if "out_ratio" in df.columns else []
-            if len(in_vals) == 0 and len(out_vals) == 0:
-                continue
-            coordinators.append(coordinator)
-            in_series.append(in_vals if len(in_vals) > 0 else [float("nan")])
-            out_series.append(out_vals if len(out_vals) > 0 else [float("nan")])
+    # Plot all coordinators together
+    coordinators = []
+    in_series = {}
+    out_series = {}
+    for coordinator, records in intercoord_ratios.items():
+        df = pd.DataFrame.from_dict(records, orient="index")
+        in_vals = pd.to_numeric(df["in_ratio"],
+                                errors="coerce").dropna().tolist() if "in_ratio" in df.columns else []
+        out_vals = pd.to_numeric(df["out_ratio"],
+                                 errors="coerce").dropna().tolist() if "out_ratio" in df.columns else []
+        if len(in_vals) == 0 and len(out_vals) == 0:
+            continue
 
-        M = len(coordinators)
-        if M == 0:
-            raise RuntimeError("No coordinators with in_ratio/out_ratio data found.")
+        coordinators.append(coordinator)
+        in_series[coordinator] = in_vals if len(in_vals) > 0 else [float("nan")]
+        out_series[coordinator] = out_vals if len(out_vals) > 0 else [float("nan")]
 
-        base_positions = list(range(M))
-        offset = 0.15
-        in_positions = [bp - offset for bp in base_positions]
-        out_positions = [bp + offset for bp in base_positions]
+    M = len(coordinators)
+    if M == 0:
+        raise RuntimeError("No coordinators with in_ratio/out_ratio data found.")
 
-        plt.figure(figsize=(max(8, M * 0.9), 3))
+    base_positions = list(range(M))
+    offset = 0.15
+    in_positions = [bp - offset for bp in base_positions]
+    out_positions = [bp + offset for bp in base_positions]
 
-        bp_in = plt.boxplot(in_series, whis=(5,95), positions=in_positions, widths=0.25, patch_artist=True, showfliers=False)
-        for patch in bp_in["boxes"]:
-            patch.set(facecolor="#f28e2b")
-        for element in ["whiskers", "caps", "medians"]:
-            for line in bp_in[element]:
-                line.set(color="#6b6b6b", linewidth=1.2)
+    plt.figure(figsize=(max(8, M * 0.9), 3))
 
-        bp_out = plt.boxplot(out_series, whis=(5,95), positions=out_positions, widths=0.25, patch_artist=True, showfliers=False)
-        for patch in bp_out["boxes"]:
-            patch.set(facecolor="#4e79a7")
+    bp_in = plt.boxplot(in_series.values(), labels=in_series.keys(), whis=(5,95), positions=in_positions, widths=0.25, patch_artist=True, showfliers=False)
+    for patch in bp_in["boxes"]:
+        patch.set(facecolor="#f28e2b")
+    for element in ["whiskers", "caps", "medians"]:
+        for line in bp_in[element]:
+            line.set(color="#6b6b6b", linewidth=1.2)
 
-        # Rotate labels 45 degrees
-        plt.xticks(base_positions, coordinators, rotation=15, ha="right")
+    bp_out = plt.boxplot(out_series.values(), labels=out_series.keys(), whis=(5,95), positions=out_positions, widths=0.25, patch_artist=True, showfliers=False)
+    for patch in bp_out["boxes"]:
+        patch.set(facecolor="#4e79a7")
 
-        for element in ["whiskers", "caps", "medians"]:
-            for line in bp_out[element]:
-                line.set(color="#6b6b6b", linewidth=1.2)
+    # Rotate labels 45 degrees
+    plt.xticks(base_positions, coordinators, rotation=15, ha="right")
 
-        plt.xticks(base_positions, coordinators)
-        plt.ylabel("ratio")
-        plt.title("Ratio of intermixed inputs and outputs under same coordinator")
+    for element in ["whiskers", "caps", "medians"]:
+        for line in bp_out[element]:
+            line.set(color="#6b6b6b", linewidth=1.2)
 
-        # Add dashed horizontal line at 0.4
-        plt.axhline(0.4, color="gray", linestyle="--", linewidth=1)
+    plt.xticks(base_positions, coordinators)
+    plt.ylabel("ratio")
+    plt.title("Ratio of intermixed inputs and outputs under same coordinator")
 
-        legend_handles = [bp_in["boxes"][0], bp_out["boxes"][0]]
-        plt.legend(legend_handles, ["inputs", "outputs"], loc="lower left")
+    # Add dashed horizontal line at 0.4
+    plt.axhline(0.4, color="gray", linestyle="--", linewidth=1)
+    #plt.ylim(0, 1)
+    legend_handles = [bp_in["boxes"][0], bp_out["boxes"][0]]
+    plt.legend(legend_handles, ["inputs", "outputs"], loc="lower left")
 
-        plt.tight_layout()
-        plt.savefig(Path(target_path, f"{prefix}all_coordinators_in_out_boxplot.png"), dpi=200, bbox_inches="tight")
-        plt.close()
+    plt.tight_layout()
+    plt.savefig(Path(target_path, f"{prefix}all_coordinators_in_out_boxplot.png"), dpi=200, bbox_inches="tight")
+    plt.close()
+
+    results = {'coordinators': coordinators, 'in_series': in_series, 'out_series': out_series}
+    return results
 
 
 def plot_coord_attribution_stats(main_coordinator: str, num_true_coord_txs: int, results: dict, target_path: str | Path, fp_string: str, fn_string: str, filename: str):
@@ -2245,7 +2275,7 @@ def plot_coord_attribution_stats_aggregated(target_path: Path | str, filename: s
             plot_symlog(x_vals, series_aggregated, join_coord_results, omitt_coords)
 
 
-def plot_mapping_datasets_stats(cjtxs: dict, mappings: dict, dataset_names: list, target_path: str | Path):
+def plot_mapping_datasets_stats(cjtxs: dict, mappings: dict, dataset_names: list, target_path: str | Path, label: str):
     # Plot number of transactions per day from different datasets
     crawl_coord_txs = {txid: None for dataset, txs in mappings.items() if dataset in dataset_names for txid in txs}
 
@@ -2307,6 +2337,7 @@ def plot_mapping_datasets_stats(cjtxs: dict, mappings: dict, dataset_names: list
     plt.legend(loc="upper right", fontsize=14)
     plt.grid(True, linewidth=0.5, alpha=0.4)
     plt.tight_layout()
-    plt.savefig(os.path.join(target_path, 'crawl_datasets.png'), dpi=200, bbox_inches="tight")
-    print(f'Saving {target_path}')
+    fig_name = f'crawl_datasets{label}.png'
+    plt.savefig(os.path.join(target_path, fig_name), dpi=200, bbox_inches="tight")
+    print(f'Saving {target_path}/{fig_name}')
     plt.close()

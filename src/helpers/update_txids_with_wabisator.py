@@ -56,7 +56,7 @@ def main(source_file, result_file):
         json.dump(txid_data, file, indent=4)
 
 
-main("../data/wasabi2/txid_coord.json", "../data/wasabi2/txid_coord_new.json")
+main("../data/wasabi2/txid_coord_new.json", "../data/wasabi2/txid_coord_new.json")
 
 
 

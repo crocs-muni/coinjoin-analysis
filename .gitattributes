@@ -1,0 +1,84 @@
+# Auto-detect text files and normalize to LF in the repo
+* text=auto
+
+# Python source and packaging
+*.py           text eol=lf
+*.pyw          text eol=lf
+*.pyi          text eol=lf
+*.pyx          text eol=lf
+*.pxd          text eol=lf
+*.pxi          text eol=lf
+*.pyproj       text eol=lf
+pyproject.toml text eol=lf
+setup.py       text eol=lf
+setup.cfg      text eol=lf
+requirements*.txt text eol=lf
+constraints*.txt text eol=lf
+Pipfile        text eol=lf
+Pipfile.lock   text eol=lf
+poetry.lock    text eol=lf
+tox.ini        text eol=lf
+pytest.ini     text eol=lf
+mypy.ini       text eol=lf
+ruff.toml      text eol=lf
+.coveragerc    text eol=lf
+.python-version text eol=lf
+
+# Shell / Linux tooling
+*.sh           text eol=lf
+*.bash         text eol=lf
+*.zsh          text eol=lf
+Makefile       text eol=lf
+Dockerfile     text eol=lf
+*.service      text eol=lf
+
+# Config / docs / data
+*.txt          text eol=lf
+*.md           text eol=lf
+*.rst          text eol=lf
+*.toml         text eol=lf
+*.ini          text eol=lf
+*.cfg          text eol=lf
+*.conf         text eol=lf
+*.yaml         text eol=lf
+*.yml          text eol=lf
+*.json         text eol=lf
+*.csv          text eol=lf
+*.tsv          text eol=lf
+*.xml          text eol=lf
+*.html         text eol=lf
+*.css          text eol=lf
+*.js           text eol=lf
+*.ts           text eol=lf
+*.sql          text eol=lf
+
+# Windows-only scripts
+*.bat          text eol=crlf
+*.cmd          text eol=crlf
+*.ps1          text eol=crlf
+
+# Jupyter notebooks: usually leave as text so diffs work
+*.ipynb        text eol=lf
+
+# Common binary files
+*.png          binary
+*.jpg          binary
+*.jpeg         binary
+*.gif          binary
+*.webp         binary
+*.ico          binary
+*.pdf          binary
+*.zip          binary
+*.gz           binary
+*.bz2          binary
+*.xz           binary
+*.7z           binary
+*.tar          binary
+*.whl          binary
+*.so           binary
+*.dll          binary
+*.dylib        binary
+*.exe          binary
+*.woff         binary
+*.woff2        binary
+*.ttf          binary

@@ -1,5 +1,6 @@
 
 SATS_IN_BTC = 100000000
+MAX_SATS = 21000000*SATS_IN_BTC
 
 VerboseTransactionInfoLineSeparator = ':::'
 VerboseInOutInfoInLineSeparator = '}'
